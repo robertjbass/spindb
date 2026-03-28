@@ -33,6 +33,7 @@ import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
 import { paths } from '../../config/paths'
+import { parseSurrealDBResult } from '../../core/query-parser'
 
 const ENGINE = Engine.SurrealDB
 const DATABASE = 'test' // SurrealDB namespace/database
@@ -108,16 +109,10 @@ async function getSurrealDBRowCount(
       proc.stdin.end()
     })
 
-    // Parse JSON output - SurrealDB returns array of results
-    // Format: [[{"count":5}]]
-    const results = JSON.parse(stdout)
-    if (
-      Array.isArray(results) &&
-      results[0] &&
-      Array.isArray(results[0]) &&
-      results[0][0]?.count !== undefined
-    ) {
-      return results[0][0].count
+    const results = parseSurrealDBResult(stdout)
+    const count = results.rows[0]?.count
+    if (typeof count === 'number') {
+      return count
     }
     return 0
   } catch (error) {
@@ -691,6 +686,177 @@ describe('SurrealDB Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated saved local root credentials', async () => {
+    console.log(
+      `\n🔐 Testing auth-aware SurrealDB backup/restore on local containers...`,
+    )
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.surrealdb.base + 40,
+    )
+    const sourceName = generateTestName('surrealdb-auth-test-source')
+    const targetName = generateTestName('surrealdb-auth-test-target')
+    const { tmpdir } = await import('os')
+    const { mkdir, readFile, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `surrealdb-auth-backup-${Date.now()}.surql`,
+    )
+    const engine = getEngine(ENGINE)
+    const buildSavedRootCredentials = (
+      containerName: string,
+      port: number,
+    ) => ({
+      username: 'root',
+      password: 'root',
+      connectionString: `surrealdb://root:root@127.0.0.1:${port}/${containerName.replace(/-/g, '_')}/${DATABASE}?authLevel=root`,
+      database: DATABASE,
+    })
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      credentials: {
+        username: string
+        password: string
+        connectionString: string
+        database?: string
+      },
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const parsedUrl = new URL(credentials.connectionString)
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          `DB_USER=${credentials.username}`,
+          `DB_PASSWORD=${credentials.password}`,
+          `DB_HOST=${parsedUrl.hostname || '127.0.0.1'}`,
+          `DB_PORT=${parsedUrl.port || '8000'}`,
+          `DB_NAME=${credentials.database || DATABASE}`,
+          `DB_URL=${credentials.connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+
+      let sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(
+        await waitForReady(ENGINE, sourcePort, 60000),
+        'Source should be ready',
+      )
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+      const sourceCredentials = buildSavedRootCredentials(sourceName, sourcePort)
+      await writeDefaultCredentialFile(sourceName, sourceCredentials)
+
+      sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source auth config should exist')
+      const sourceRows = await engine.executeQuery(
+        sourceConfig!,
+        'SELECT * FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+        },
+      )
+      assertEqual(
+        sourceRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Auth-enabled source should still be queryable',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+
+      let targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(
+        await waitForReady(ENGINE, targetPort, 60000),
+        'Target should be ready',
+      )
+      const targetCredentials = buildSavedRootCredentials(targetName, targetPort)
+      await writeDefaultCredentialFile(targetName, targetCredentials)
+
+      const backupResult = await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+      })
+      assertEqual(
+        backupResult.format,
+        'surql',
+        'Backup should use SurrealQL format',
+      )
+      const backupContent = await readFile(backupPath, 'utf-8')
+      assert(
+        !/DEFINE\s+(USER|ACCESS)\b/i.test(backupContent),
+        'SurrealDB backups should not include auth definitions',
+      )
+
+      targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target auth config should exist')
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+      const restoredRows = await engine.executeQuery(
+        targetConfig!,
+        'SELECT * FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+        },
+      )
+      assertEqual(
+        restoredRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Restore should succeed against an auth-enabled target',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      for (const containerName of [sourceName, targetName]) {
+        const config = await containerManager.getConfig(containerName)
+        if (config) {
+          const running = await processManager
+            .isRunning(containerName, {
+              engine: ENGINE,
+            })
+            .catch(() => false)
+          if (running) {
+            await engine.stop(config).catch(() => {})
+            await containerManager
+              .updateConfig(containerName, { status: 'stopped' })
+              .catch(() => {})
+          }
+        }
+        await containerManager
+          .delete(containerName, { force: true })
+          .catch(() => {})
+      }
+    }
+
+    console.log(
+      '   ✓ Backup and restore work with password-authenticated SurrealDB',
+    )
   })
 
   it('should have no test containers remaining', async (t) => {

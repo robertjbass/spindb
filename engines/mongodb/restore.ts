@@ -8,8 +8,21 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
+
+function buildMongoUri(
+  port: number,
+  database: string,
+  auth: { username: string; password: string; authDatabase: string },
+): string {
+  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
+  const params = new URLSearchParams({
+    authSource: auth.authDatabase,
+  })
+  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
+}
 
 // Detect the format of a MongoDB backup
 export async function detectBackupFormat(
@@ -86,6 +99,7 @@ export async function detectBackupFormat(
 
 // Restore options
 export type RestoreOptions = {
+  containerName?: string
   port: number
   database: string
   drop?: boolean // Drop existing data before restore
@@ -141,7 +155,24 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  const args: string[] = ['--host', '127.0.0.1', '--port', String(port)]
+  const savedCreds = options.containerName
+    ? await loadCredentials(
+        options.containerName,
+        Engine.MongoDB,
+        getDefaultUsername(Engine.MongoDB),
+      )
+    : null
+
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, database, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }),
+      ]
+    : ['--host', '127.0.0.1', '--port', String(port)]
 
   if (drop) {
     args.push('--drop')

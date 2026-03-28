@@ -166,7 +166,10 @@ Downloaded binaries are re-signed with ad-hoc signature (`codesign -s -`) due to
 mongodb://127.0.0.1:{port}/{database}
 ```
 
-No authentication required with `--no-auth` flag.
+When `authEnabled` is false (default), FerretDB v2 runs with `--no-auth` and no
+credentials are required. When `authEnabled` is true, local tooling loads the
+saved `.env.spindb` credential file and connects with a MongoDB URI that
+includes `authSource`.
 
 ## Backup & Restore
 
@@ -174,18 +177,19 @@ No authentication required with `--no-auth` flag.
 
 | Format | Extension | Tool | Notes |
 |--------|-----------|------|-------|
-| sql | `.sql` | pg_dump (DocumentDB) | Plain text SQL |
-| custom | `.dump` | pg_dump -Fc (DocumentDB) | Binary, parallel restore |
+| bson | directory | mongodump | BSON files per collection |
+| archive | `.archive` | mongodump --archive --gzip | Single compressed file |
 
-### Restore Limitations
+### Restore Behavior
 
-**Warning**: pg_dump/pg_restore between FerretDB containers has issues because DocumentDB creates internal metadata tables (e.g., `job`) that conflict during restore.
+Current SpinDB FerretDB backups and restores use the MongoDB wire protocol
+through the FerretDB proxy (`mongodump` / `mongorestore`). This avoids the old
+DocumentDB metadata conflicts from `pg_dump` / `pg_restore` and works with
+auth-enabled local containers when `.env.spindb` exists.
 
-Restore may fail with: `duplicate key value violates unique constraint`
-
-**Workaround**: Use `--clean --if-exists` flags, but some data loss may occur.
-
-**For production**: Consider mongodump/mongorestore on the MongoDB protocol side.
+Legacy PostgreSQL-based `.dump` and `.sql` backups are still restorable for
+backwards compatibility, but new backups should use the Mongo-compatible
+formats above.
 
 ## Engine Dependency Management
 

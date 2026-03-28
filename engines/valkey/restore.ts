@@ -11,8 +11,28 @@ import { existsSync, statSync, createReadStream } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import { logDebug } from '../../core/error-handler'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { getValkeyCliPath, VALKEY_CLI_NOT_FOUND_ERROR } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
+
+type ValkeyCliAuth = {
+  username?: string
+  password?: string
+}
+
+function shouldPassValkeyCliUsername(
+  username?: string,
+): username is string {
+  if (!username) {
+    return false
+  }
+
+  const trimmed = username.trim()
+  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
+}
 
 /**
  * Common Valkey commands used to detect text-based backup files
@@ -226,6 +246,7 @@ async function restoreTextBackup(
   backupPath: string,
   port: number,
   database: string,
+  auth?: ValkeyCliAuth,
   flush: boolean = false,
 ): Promise<RestoreResult> {
   const valkeyCli = await getValkeyCliPath()
@@ -235,8 +256,14 @@ async function restoreTextBackup(
 
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = ['-h', '127.0.0.1', '-p', String(port), '-n', database]
+    if (shouldPassValkeyCliUsername(auth?.username)) {
+      args.push('--user', auth.username)
+    }
     const proc = spawn(valkeyCli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: auth?.password
+        ? { ...process.env, REDISCLI_AUTH: auth.password }
+        : process.env,
     })
 
     let stdout = ''
@@ -349,6 +376,14 @@ export async function restoreBackup(
     database = '0',
     flush = false,
   } = options
+  const creds = await loadCredentials(
+    containerName,
+    Engine.Valkey,
+    getDefaultUsername(Engine.Valkey),
+  )
+  const auth = creds
+    ? { username: creds.username, password: creds.password }
+    : undefined
 
   if (!existsSync(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)
@@ -365,7 +400,7 @@ export async function restoreBackup(
         'Port is required for restoring .valkey text files. Valkey must be running.',
       )
     }
-    return restoreTextBackup(backupPath, port, database, flush)
+    return restoreTextBackup(backupPath, port, database, auth, flush)
   }
 
   if (format.format === 'rdb') {

@@ -20,10 +20,15 @@ import { paths } from '../../config/paths'
 import { normalizeVersion } from './version-maps'
 import {
   Platform,
+  Engine,
   type ContainerConfig,
   type BackupOptions,
   type BackupResult,
 } from '../../types'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 
 const engineDef = getEngineDefaults('mariadb')
 
@@ -69,15 +74,28 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port } = container
+  const { name, port } = container
   const { database, format } = options
 
   const dumpPath = await getDumpPath(container)
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.MariaDB,
+    getDefaultUsername(Engine.MariaDB),
+  )
+  const user = savedCreds?.username || engineDef.superuser
+  const password = savedCreds?.password
 
   if (format === 'sql') {
-    return createSqlBackup(dumpPath, port, database, outputPath)
+    return createSqlBackup(dumpPath, port, database, outputPath, {
+      user,
+      password,
+    })
   } else {
-    return createCompressedBackup(dumpPath, port, database, outputPath)
+    return createCompressedBackup(dumpPath, port, database, outputPath, {
+      user,
+      password,
+    })
   }
 }
 
@@ -87,6 +105,7 @@ async function createSqlBackup(
   port: number,
   database: string,
   outputPath: string,
+  auth: { user: string; password?: string },
 ): Promise<BackupResult> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -109,7 +128,7 @@ async function createSqlBackup(
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       '--result-file',
       outputPath,
       database,
@@ -117,6 +136,9 @@ async function createSqlBackup(
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: auth.password
+        ? { ...process.env, MYSQL_PWD: auth.password }
+        : process.env,
       ...getWindowsSpawnOptions(),
     }
 
@@ -163,6 +185,7 @@ async function createCompressedBackup(
   port: number,
   database: string,
   outputPath: string,
+  auth: { user: string; password?: string },
 ): Promise<BackupResult> {
   const args = [
     '-h',
@@ -170,12 +193,15 @@ async function createCompressedBackup(
     '-P',
     String(port),
     '-u',
-    engineDef.superuser,
+    auth.user,
     database,
   ]
 
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: auth.password
+      ? { ...process.env, MYSQL_PWD: auth.password }
+      : process.env,
     ...getWindowsSpawnOptions(),
   }
 

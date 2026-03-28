@@ -10,13 +10,22 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { configManager } from '../../core/config-manager'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   getWindowsSpawnOptions,
   platformService,
 } from '../../core/platform-service'
 import { defaults } from '../../config/defaults'
 import { paths } from '../../config/paths'
 import { normalizeVersion } from './version-maps'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 /**
  * Get pg_dump path for a specific PostgreSQL version.
@@ -93,10 +102,16 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port, version } = container
+  const { name, port, version } = container
   const { database, format } = options
 
   const pgDumpPath = await getPgDumpPath(version)
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.PostgreSQL,
+    getDefaultUsername(Engine.PostgreSQL),
+  )
+  const user = savedCreds?.username || defaults.superuser
 
   // -Fp = plain SQL format, -Fc = custom format
   const formatFlag = format === 'sql' ? '-Fp' : '-Fc'
@@ -108,7 +123,7 @@ export async function createBackup(
       '-p',
       String(port),
       '-U',
-      defaults.superuser,
+      user,
       '-d',
       database,
       formatFlag,
@@ -118,6 +133,9 @@ export async function createBackup(
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: savedCreds?.password
+        ? { ...process.env, PGPASSWORD: savedCreds.password }
+        : process.env,
       ...getWindowsSpawnOptions(),
     }
 

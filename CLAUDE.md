@@ -136,6 +136,30 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 **Redis/Valkey local query auth:** `spindb query` for local server containers does **not** use ad-hoc env vars from the caller. In `cli/commands/query.ts`, the local-server path loads credentials from `credential-manager.loadCredentials(containerName, engineName, getDefaultUsername(engineName))`. For Redis/Valkey, that means the filename stays `.env.spindb`, but the file contents can still be `DB_USER=default` and `DB_PASSWORD=...`. If cloud or desktop query auth breaks, inspect the saved credential file path and contents before changing CLI flags.
 
+**Local backup/restore auth uses the same default credential file:** As of March 28, 2026, PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB local backup/restore paths load server credentials from `loadCredentials(containerName, engine, getDefaultUsername(engine))`. That feeds the engine-native auth mechanism instead of assuming localhost trust:
+- PostgreSQL: `PGPASSWORD` for `pg_dump` / `psql` / `pg_restore`
+- MySQL / MariaDB: `MYSQL_PWD` for dump, restore, readiness, shutdown, and local admin commands
+- MongoDB: `--uri mongodb://...?...authSource=...` for `mongodump`, `mongorestore`, and local `mongosh` query/admin paths
+- FerretDB: local `mongosh`, `mongodump`, and `mongorestore` now go through the MongoDB wire protocol with saved `.env.spindb` credentials; legacy PostgreSQL `.dump` / `.sql` restores are still supported as a fallback
+- Redis / Valkey: `REDISCLI_AUTH` for backup, text restore, readiness, and graceful shutdown
+- CouchDB: saved admin credentials for REST backup/restore and local admin API calls
+- SurrealDB: local query/backup/restore commands load `.env.spindb`, infer `authLevel` from the saved `DB_URL`, and pass `--auth-level` to `surreal sql` / `export` / `import`; server startup still uses stable bootstrap root creds instead of replaying saved client creds
+If a password-protected local backup or restart fails, inspect `.env.spindb` before changing engine flags.
+
+**Focused auth-backed backup/restore coverage now exists for the main password-protected engines:** PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB now have focused integration coverage that:
+- enables real local auth
+- writes `.env.spindb`
+- restarts the container through the normal engine lifecycle
+- verifies backup and restore against an auth-enabled target
+The focused March 28, 2026 auth sweep passed sequentially for all of the engines above. MariaDB still has unrelated broader-suite initialization flakiness on this machine, so treat that as a test-harness/platform issue rather than an auth backup/restore gap.
+
+**SurrealDB auth nuance:** `surreal import` still needs root-level permissions. Namespace-scoped users can query and export, but the focused restore path only passed once the saved default credential file used root creds with `authLevel=root`. Keep that distinction in mind:
+- server start: bootstrap with stable root creds
+- client query/export/import: load `.env.spindb` and pass `--auth-level`
+- restore/import: do not assume namespace/database users are allowed to import
+
+**SurrealDB CLI JSON output is noisy:** `surreal sql --json` can emit prompt text before or after the JSON payload (for example `surrealdb_namespace/db>`). `parseSurrealDBResult()` now extracts the first complete JSON document instead of assuming stdout is pure JSON. If Surreal query parsing regresses, inspect raw stdout before blaming auth or query semantics.
+
 **Redis `default` user vs `--user` flag:** Managed Redis/Valkey setups that use `requirepass` often expect the implicit default user and fail when `redis-cli --user default` is passed explicitly. The fix was to omit `--user` when the resolved username is literally `default`, while still passing `--user` for explicit ACL usernames. This logic must stay aligned in both Redis query paths:
 - remote connection-string query path (`dumpFromConnectionString`)
 - local/linked query execution path (`executeQuery`)

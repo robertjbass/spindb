@@ -7,6 +7,7 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -27,8 +28,13 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
-import { couchdbApiRequest, DEFAULT_ADMIN_USER } from './api-client'
 import {
+  couchdbApiRequest,
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_ADMIN_USER,
+} from './api-client'
+import {
+  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -49,6 +55,11 @@ import { parseRESTAPIResult } from '../../core/query-parser'
 const ENGINE = 'couchdb'
 const engineDef = getEngineDefaults(ENGINE)
 
+type LocalCouchDBAuth = {
+  username: string
+  password: string
+}
+
 /**
  * Get the correct extension for CouchDB binary.
  * On Windows, CouchDB uses a .cmd batch file, not .exe
@@ -66,8 +77,12 @@ function generateCouchDBConfig(options: {
   dataDir: string
   logDir: string
   bindAddress?: string
+  adminUsername?: string
+  adminPassword?: string
 }): string {
   const bindAddress = options.bindAddress || '127.0.0.1'
+  const adminUsername = options.adminUsername || DEFAULT_ADMIN_USER
+  const adminPassword = options.adminPassword || DEFAULT_ADMIN_PASSWORD
 
   return `; SpinDB generated CouchDB configuration
 [couchdb]
@@ -89,14 +104,19 @@ file = ${options.logDir}/couchdb.log
 level = info
 
 [admins]
-; CouchDB 3.x requires admin account - credentials available if needed: admin/admin
-admin = admin
+; CouchDB 3.x requires admin account for privileged API operations
+${adminUsername} = ${adminPassword}
 `
 }
 
 function patchCouchDBConfig(
   existingConfig: string,
-  options: { port: number; bindAddress?: string },
+  options: {
+    port: number
+    bindAddress?: string
+    adminUsername: string
+    adminPassword: string
+  },
 ): string {
   let config = existingConfig
   config = config.replace(/^port = \d+/m, `port = ${options.port}`)
@@ -105,6 +125,12 @@ function patchCouchDBConfig(
       /^bind_address = .+/m,
       `bind_address = ${options.bindAddress}`,
     )
+  }
+  const adminsSection = `[admins]\n${options.adminUsername} = ${options.adminPassword}`
+  if (/\[admins\][\s\S]*?(?=\n\[|$)/m.test(config)) {
+    config = config.replace(/\[admins\][\s\S]*?(?=\n\[|$)/m, adminsSection)
+  } else {
+    config = `${config.trimEnd()}\n\n${adminsSection}\n`
   }
   return config
 }
@@ -459,6 +485,39 @@ export class CouchDBEngine extends BaseEngine {
     )
   }
 
+  private async getLocalAdminAuth(
+    containerName: string,
+  ): Promise<LocalCouchDBAuth> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.CouchDB,
+      getDefaultUsername(Engine.CouchDB),
+    )
+
+    return {
+      username: savedCreds?.username || DEFAULT_ADMIN_USER,
+      password: savedCreds?.password || DEFAULT_ADMIN_PASSWORD,
+    }
+  }
+
+  private async requestLocal(
+    container: ContainerConfig,
+    method: string,
+    path: string,
+    body?: Record<string, unknown>,
+    timeoutMs?: number,
+    auth?: LocalCouchDBAuth | null,
+  ): Promise<{ status: number; data: unknown }> {
+    return couchdbApiRequest(
+      container.port,
+      method,
+      path,
+      body,
+      timeoutMs,
+      auth === null ? null : auth ?? (await this.getLocalAdminAuth(container.name)),
+    )
+  }
+
   /**
    * Start CouchDB server
    */
@@ -467,6 +526,7 @@ export class CouchDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
+    const localAuth = await this.getLocalAdminAuth(name)
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
@@ -537,6 +597,8 @@ export class CouchDBEngine extends BaseEngine {
       const patchedConfig = patchCouchDBConfig(existingConfig, {
         port,
         bindAddress,
+        adminUsername: localAuth.username,
+        adminPassword: localAuth.password,
       })
       await writeFile(configPath, patchedConfig)
     } else {
@@ -545,6 +607,8 @@ export class CouchDBEngine extends BaseEngine {
         dataDir,
         logDir,
         bindAddress,
+        adminUsername: localAuth.username,
+        adminPassword: localAuth.password,
       })
       await writeFile(configPath, configContent)
     }
@@ -946,10 +1010,9 @@ export class CouchDBEngine extends BaseEngine {
     backupPath: string,
     options: { database?: string; flush?: boolean } = {},
   ): Promise<RestoreResult> {
-    const { port } = container
-
     return restoreBackup(backupPath, {
-      port,
+      containerName: container.name,
+      port: container.port,
       database: options.database,
       flush: options.flush,
     })
@@ -985,10 +1048,8 @@ export class CouchDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port } = container
-
-    const response = await couchdbApiRequest(
-      port,
+    const response = await this.requestLocal(
+      container,
       'PUT',
       `/${encodeURIComponent(database)}`,
     )
@@ -1010,10 +1071,8 @@ export class CouchDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port } = container
-
-    const response = await couchdbApiRequest(
-      port,
+    const response = await this.requestLocal(
+      container,
       'DELETE',
       `/${encodeURIComponent(database)}`,
     )
@@ -1034,11 +1093,9 @@ export class CouchDBEngine extends BaseEngine {
    * Get the size of the CouchDB instance
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port } = container
-
     try {
       // CouchDB doesn't directly expose total size, but we can sum up database sizes
-      const dbsResponse = await couchdbApiRequest(port, 'GET', '/_all_dbs')
+      const dbsResponse = await this.requestLocal(container, 'GET', '/_all_dbs')
       if (dbsResponse.status !== 200) {
         return null
       }
@@ -1048,8 +1105,8 @@ export class CouchDBEngine extends BaseEngine {
 
       for (const db of dbs) {
         if (db.startsWith('_')) continue // Skip system dbs
-        const infoResponse = await couchdbApiRequest(
-          port,
+        const infoResponse = await this.requestLocal(
+          container,
           'GET',
           `/${encodeURIComponent(db)}`,
         )
@@ -1201,7 +1258,7 @@ export class CouchDBEngine extends BaseEngine {
       const command = options.sql.trim().toUpperCase()
 
       if (command === 'LIST DATABASES' || command === 'SHOW DATABASES') {
-        const response = await couchdbApiRequest(port, 'GET', '/_all_dbs')
+        const response = await this.requestLocal(container, 'GET', '/_all_dbs')
         console.log(JSON.stringify(response.data, null, 2))
         return
       }
@@ -1298,7 +1355,7 @@ export class CouchDBEngine extends BaseEngine {
           username: options.username || DEFAULT_ADMIN_USER,
           password: options.password,
         }
-      : undefined
+      : await this.getLocalAdminAuth(container.name)
 
     const response = await couchdbApiRequest(
       port,
@@ -1322,9 +1379,7 @@ export class CouchDBEngine extends BaseEngine {
    * List all user databases, excluding system databases (_users, _replicator, _global_changes).
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
-
-    const response = await couchdbApiRequest(port, 'GET', '/_all_dbs')
+    const response = await this.requestLocal(container, 'GET', '/_all_dbs')
 
     if (response.status >= 400) {
       throw new Error(
@@ -1356,7 +1411,7 @@ export class CouchDBEngine extends BaseEngine {
     }
 
     // Ensure _users system database exists (CouchDB 3.x doesn't auto-create it)
-    const usersDbResponse = await couchdbApiRequest(port, 'PUT', '/_users')
+    const usersDbResponse = await this.requestLocal(container, 'PUT', '/_users')
     if (usersDbResponse.status !== 201 && usersDbResponse.status !== 412) {
       throw new Error(
         `Failed to ensure _users database exists: ${JSON.stringify(usersDbResponse.data)}`,
@@ -1372,8 +1427,8 @@ export class CouchDBEngine extends BaseEngine {
       password,
     }
 
-    const createResponse = await couchdbApiRequest(
-      port,
+    const createResponse = await this.requestLocal(
+      container,
       'PUT',
       `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
       userDoc as unknown as Record<string, unknown>,
@@ -1387,8 +1442,8 @@ export class CouchDBEngine extends BaseEngine {
 
     if (createResponse.status === 409) {
       // User exists — fetch current doc revision and update password
-      const getResponse = await couchdbApiRequest(
-        port,
+      const getResponse = await this.requestLocal(
+        container,
         'GET',
         `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
       )
@@ -1406,8 +1461,8 @@ export class CouchDBEngine extends BaseEngine {
           `User "${username}" already exists but document has no _rev field: ${JSON.stringify(getResponse.data)}`,
         )
       }
-      const updateResponse = await couchdbApiRequest(
-        port,
+      const updateResponse = await this.requestLocal(
+        container,
         'PUT',
         `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
         { ...existingDoc, password, _rev: rev },
@@ -1420,8 +1475,8 @@ export class CouchDBEngine extends BaseEngine {
     }
 
     // Ensure the target database exists before setting security
-    const dbCreateResponse = await couchdbApiRequest(
-      port,
+    const dbCreateResponse = await this.requestLocal(
+      container,
       'PUT',
       `/${encodeURIComponent(db)}`,
     )
@@ -1433,8 +1488,8 @@ export class CouchDBEngine extends BaseEngine {
     }
 
     // Grant access to the target database via _security document
-    const secResponse = await couchdbApiRequest(
-      port,
+    const secResponse = await this.requestLocal(
+      container,
       'GET',
       `/${encodeURIComponent(db)}/_security`,
     )
@@ -1453,8 +1508,8 @@ export class CouchDBEngine extends BaseEngine {
       names.push(username)
     }
 
-    const secPutResponse = await couchdbApiRequest(
-      port,
+    const secPutResponse = await this.requestLocal(
+      container,
       'PUT',
       `/${encodeURIComponent(db)}/_security`,
       {

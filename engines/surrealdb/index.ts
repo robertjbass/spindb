@@ -22,6 +22,7 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -41,8 +42,17 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import {
+  addSurrealAuthArgs,
+  buildSurrealUserConnectionString,
+  getBootstrapSurrealAuth,
+  inferSurrealAuthLevel,
+  parseSurrealConnectionString,
+  type LocalSurrealAuth,
+} from './auth'
 import { validateSurrealIdentifier, escapeSurrealIdentifier } from './cli-utils'
 import {
+  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -189,6 +199,30 @@ export class SurrealDBEngine extends BaseEngine {
     )
   }
 
+  private async getLocalAuth(
+    containerName: string,
+  ): Promise<LocalSurrealAuth> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.SurrealDB,
+      getDefaultUsername(Engine.SurrealDB),
+    )
+
+    if (!savedCreds) {
+      return getBootstrapSurrealAuth()
+    }
+
+    return {
+      username: savedCreds.username,
+      password: savedCreds.password,
+      authLevel: inferSurrealAuthLevel({
+        username: savedCreds.username,
+        database: savedCreds.database,
+        connectionString: savedCreds.connectionString,
+      }),
+    }
+  }
+
   /**
    * Start SurrealDB server
    */
@@ -197,6 +231,7 @@ export class SurrealDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
+    const startupAuth = getBootstrapSurrealAuth()
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
@@ -250,12 +285,12 @@ export class SurrealDBEngine extends BaseEngine {
       `surrealkv://${dataDir}`,
       '--bind',
       `${container.bindAddress ?? '127.0.0.1'}:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
       '--log',
       'warn',
+      '--user',
+      startupAuth.username,
+      '--pass',
+      startupAuth.password,
     ]
 
     // Spawn the server process
@@ -381,7 +416,7 @@ export class SurrealDBEngine extends BaseEngine {
 
     // Wait for server to be ready
     logDebug(`Waiting for SurrealDB server to be ready on port ${port}...`)
-    const ready = await this.waitForReady(port, version)
+    const ready = await this.waitForReady(container, version)
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
@@ -398,10 +433,11 @@ export class SurrealDBEngine extends BaseEngine {
 
   // Wait for SurrealDB to be ready using surreal isready
   private async waitForReady(
-    port: number,
+    container: ContainerConfig,
     version: string,
     timeoutMs = 60000,
   ): Promise<boolean> {
+    const { port } = container
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()
     const checkInterval = 500
@@ -573,7 +609,6 @@ export class SurrealDBEngine extends BaseEngine {
     options: { database?: string } = {},
   ): Promise<RestoreResult> {
     const { name, port, version } = container
-
     return restoreBackup(backupPath, {
       containerName: name,
       port,
@@ -597,6 +632,7 @@ export class SurrealDBEngine extends BaseEngine {
     const { port, version, name } = container
     const db = database || container.database || 'default'
     const namespace = name.replace(/-/g, '_')
+    const localAuth = await this.getLocalAuth(name)
 
     const surreal = await this.getSurrealPath(version)
 
@@ -609,24 +645,12 @@ export class SurrealDBEngine extends BaseEngine {
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        surreal,
-        [
-          'sql',
-          '--endpoint',
-          `ws://127.0.0.1:${port}`,
-          '--user',
-          'root',
-          '--pass',
-          'root',
-          '--ns',
-          namespace,
-          '--db',
-          db,
-          '--pretty',
-        ],
-        spawnOptions,
+      const args = addSurrealAuthArgs(
+        ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+        localAuth,
       )
+      args.push('--ns', namespace, '--db', db, '--pretty')
+      const proc = spawn(surreal, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())
@@ -644,6 +668,7 @@ export class SurrealDBEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version, name } = container
     const namespace = name.replace(/-/g, '_')
+    const localAuth = getBootstrapSurrealAuth()
 
     // Validate database identifier to prevent injection
     validateSurrealIdentifier(database, 'database')
@@ -654,20 +679,11 @@ export class SurrealDBEngine extends BaseEngine {
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
     // SurrealDB creates databases implicitly, but we'll use USE to ensure it exists
-    const args = [
-      'sql',
-      '--endpoint',
-      `ws://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--db',
-      database,
-      '--hide-welcome',
-    ]
+    const args = addSurrealAuthArgs(
+      ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+      localAuth,
+    )
+    args.push('--ns', namespace, '--db', database, '--hide-welcome')
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(surreal, args, {
@@ -705,6 +721,7 @@ export class SurrealDBEngine extends BaseEngine {
   ): Promise<void> {
     const { port, version, name } = container
     const namespace = name.replace(/-/g, '_')
+    const localAuth = getBootstrapSurrealAuth()
 
     // Don't allow dropping default database
     if (database === 'default') {
@@ -720,18 +737,11 @@ export class SurrealDBEngine extends BaseEngine {
     // Use container directory as cwd so history.txt is written there, not user's cwd
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
-    const args = [
-      'sql',
-      '--endpoint',
-      `ws://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--hide-welcome',
-    ]
+    const args = addSurrealAuthArgs(
+      ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+      localAuth,
+    )
+    args.push('--ns', namespace, '--hide-welcome')
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(surreal, args, {
@@ -808,10 +818,9 @@ export class SurrealDBEngine extends BaseEngine {
     connectionString: string,
     outputPath: string,
   ): Promise<DumpResult> {
-    // Parse connection string
-    let url: URL
+    let parsed
     try {
-      url = new URL(connectionString)
+      parsed = parseSurrealConnectionString(connectionString)
     } catch {
       // Sanitize connection string to avoid leaking credentials in error messages
       const sanitized = connectionString.replace(
@@ -824,18 +833,11 @@ export class SurrealDBEngine extends BaseEngine {
       )
     }
 
-    const host = url.hostname || '127.0.0.1'
-    const port = parseInt(url.port, 10) || 8000
-    const user = url.username || 'root'
-    const password = url.password || 'root'
-
-    // Parse namespace/database from path
-    const pathParts = url.pathname.split('/').filter(Boolean)
-    const namespace = pathParts[0] || 'test'
-    const database = pathParts[1] || 'test'
+    const { host, port, username, password, namespace, database, authLevel } =
+      parsed
 
     logDebug(
-      `Connecting to remote SurrealDB at ${host}:${port} (ns: ${namespace}, db: ${database})`,
+      `Connecting to remote SurrealDB at ${host}:${port} (ns: ${namespace}, db: ${database}, authLevel: ${authLevel})`,
     )
 
     // For remote dump, we need a local surreal binary
@@ -853,20 +855,23 @@ export class SurrealDBEngine extends BaseEngine {
     }
 
     return new Promise<DumpResult>((resolve, reject) => {
-      const args = [
-        'export',
-        '--endpoint',
-        `http://${host}:${port}`,
-        '--user',
-        user,
-        '--pass',
-        password,
-        '--ns',
-        namespace,
-        '--db',
-        database,
-        outputPath,
-      ]
+      const args = addSurrealAuthArgs(
+        [
+          'export',
+          '--endpoint',
+          `http://${host}:${port}`,
+          '--ns',
+          namespace,
+          '--db',
+          database,
+          outputPath,
+        ],
+        {
+          username,
+          password,
+          authLevel,
+        },
+      )
 
       const proc = spawn(surreal, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -915,6 +920,7 @@ export class SurrealDBEngine extends BaseEngine {
     const { port, version, name } = container
     const db = options.database || container.database || 'default'
     const namespace = name.replace(/-/g, '_')
+    const localAuth = getBootstrapSurrealAuth()
 
     const surreal = await this.getSurrealPath(version)
 
@@ -923,20 +929,11 @@ export class SurrealDBEngine extends BaseEngine {
 
     if (options.file) {
       // Run SurrealQL file using import
-      const args = [
-        'import',
-        '--endpoint',
-        `http://127.0.0.1:${port}`,
-        '--user',
-        'root',
-        '--pass',
-        'root',
-        '--ns',
-        namespace,
-        '--db',
-        db,
-        options.file,
-      ]
+      const args = addSurrealAuthArgs(
+        ['import', '--endpoint', `http://127.0.0.1:${port}`],
+        localAuth,
+      )
+      args.push('--ns', namespace, '--db', db, options.file)
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(surreal, args, {
@@ -954,20 +951,11 @@ export class SurrealDBEngine extends BaseEngine {
       })
     } else if (options.sql) {
       // Run inline SurrealQL via stdin
-      const args = [
-        'sql',
-        '--endpoint',
-        `ws://127.0.0.1:${port}`,
-        '--user',
-        'root',
-        '--pass',
-        'root',
-        '--ns',
-        namespace,
-        '--db',
-        db,
-        '--hide-welcome',
-      ]
+      const args = addSurrealAuthArgs(
+        ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+        localAuth,
+      )
+      args.push('--ns', namespace, '--db', db, '--hide-welcome')
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(surreal, args, {
@@ -1006,26 +994,27 @@ export class SurrealDBEngine extends BaseEngine {
     const { port, version, name } = container
     const db = options?.database || container.database || 'default'
     const namespace = name.replace(/-/g, '_')
+    const localAuth =
+      options?.username && options?.password
+        ? {
+            username: options.username,
+            password: options.password,
+            authLevel: inferSurrealAuthLevel({
+              username: options.username,
+              database: db,
+            }),
+          }
+        : await this.getLocalAuth(name)
 
     const surreal = await this.getSurrealPath(version)
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
 
     return new Promise((resolve, reject) => {
-      const args = [
-        'sql',
-        '--endpoint',
-        `ws://127.0.0.1:${port}`,
-        '--user',
-        options?.username || 'root',
-        '--pass',
-        options?.password || 'root',
-        '--ns',
-        namespace,
-        '--db',
-        db,
-        '--hide-welcome',
-        '--json',
-      ]
+      const args = addSurrealAuthArgs(
+        ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+        localAuth,
+      )
+      args.push('--ns', namespace, '--db', db, '--hide-welcome', '--json')
 
       const proc = spawn(surreal, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -1085,23 +1074,21 @@ export class SurrealDBEngine extends BaseEngine {
     const { port, version, name } = container
     const surreal = await this.getSurrealPath(version)
     const namespace = name.replace(/-/g, '_')
+    const localAuth = getBootstrapSurrealAuth()
 
     return new Promise((resolve, reject) => {
-      const args = [
-        'sql',
-        '--endpoint',
-        `ws://127.0.0.1:${port}`,
-        '--user',
-        'root',
-        '--pass',
-        'root',
+      const args = addSurrealAuthArgs(
+        ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+        localAuth,
+      )
+      args.push(
         '--ns',
         namespace,
         '--db',
         container.database,
         '--hide-welcome',
         '--json',
-      ]
+      )
 
       const proc = spawn(surreal, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -1157,6 +1144,7 @@ export class SurrealDBEngine extends BaseEngine {
     const { port, version, name } = container
     const namespace = name.replace(/-/g, '_')
     const db = database || container.database || 'default'
+    const localAuth = await this.getLocalAuth(name)
 
     const surreal = await this.getSurrealPath(version)
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
@@ -1170,20 +1158,11 @@ export class SurrealDBEngine extends BaseEngine {
       : 'ON NAMESPACE'
     const sql = `DEFINE USER OVERWRITE ${escapeSurrealIdentifier(username)} ${scopeClause} PASSWORD '${escapedPass}' ROLES EDITOR;`
 
-    const args = [
-      'sql',
-      '--endpoint',
-      `ws://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--db',
-      db,
-      '--hide-welcome',
-    ]
+    const args = addSurrealAuthArgs(
+      ['sql', '--endpoint', `ws://127.0.0.1:${port}`],
+      localAuth,
+    )
+    args.push('--ns', namespace, '--db', db, '--hide-welcome')
 
     const timeoutMs = 15000
     await new Promise<void>((resolve, reject) => {
@@ -1230,7 +1209,15 @@ export class SurrealDBEngine extends BaseEngine {
       })
     })
 
-    const connectionString = `ws://127.0.0.1:${port}/rpc`
+    const authLevel = database ? 'database' : 'namespace'
+    const connectionString = buildSurrealUserConnectionString({
+      username,
+      password,
+      port,
+      namespace,
+      database: db,
+      authLevel,
+    })
 
     return {
       username,

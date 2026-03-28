@@ -12,11 +12,15 @@ import { createGunzip } from 'zlib'
 import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
 import { configManager } from '../../core/config-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { normalizeVersion } from './version-maps'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
 
@@ -145,9 +149,11 @@ export function assertCompatibleFormat(format: BackupFormat): void {
 // =============================================================================
 
 export type RestoreOptions = {
+  containerName?: string
   port: number
   database: string
   user?: string
+  password?: string
   createDatabase?: boolean
   validateVersion?: boolean
   binPath?: string // Optional path to MySQL binaries directory
@@ -265,11 +271,13 @@ function doRestore(
   port: number,
   database: string,
   user: string,
+  password: string | undefined,
   format: BackupFormat,
   withCompatSettings: boolean,
 ): Promise<RestoreResult & { rawStderr?: string }> {
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
   }
 
   return new Promise((resolve, reject) => {
@@ -386,9 +394,11 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const {
+    containerName,
     port,
     database,
-    user = engineDef.superuser,
+    user: requestedUser = engineDef.superuser,
+    password: requestedPassword,
     validateVersion = true,
     binPath,
     containerVersion,
@@ -410,6 +420,18 @@ export async function restoreBackup(
   }
 
   const mysql = await getMysqlClientPath(binPath, containerVersion)
+  const savedCreds =
+    containerName &&
+    !requestedPassword &&
+    requestedUser === engineDef.superuser
+      ? await loadCredentials(
+          containerName,
+          Engine.MySQL,
+          getDefaultUsername(Engine.MySQL),
+        )
+      : null
+  const user = savedCreds?.username || requestedUser
+  const password = requestedPassword ?? savedCreds?.password
 
   // Detect format and check for wrong engine
   const format = await detectBackupFormat(backupPath)
@@ -423,6 +445,7 @@ export async function restoreBackup(
     port,
     database,
     user,
+    password,
     format,
     false,
   )
@@ -448,6 +471,7 @@ export async function restoreBackup(
       port,
       database,
       user,
+      password,
       format,
       true,
     )

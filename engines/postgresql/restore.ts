@@ -126,6 +126,7 @@ export type RestoreOptions = {
   port: number
   database: string
   user?: string
+  password?: string
   format?: string
   pgRestorePath?: string
   containerVersion?: string
@@ -271,10 +272,15 @@ export async function restoreBackup(
     port,
     database,
     user = 'postgres',
+    password,
     format,
     pgRestorePath,
     containerVersion,
   } = options
+  const execOptions = {
+    maxBuffer: 50 * 1024 * 1024,
+    env: password ? { ...process.env, PGPASSWORD: password } : process.env,
+  }
 
   // Detect format and check for wrong engine
   const detectedBackupFormat = await detectBackupFormat(backupPath)
@@ -300,7 +306,7 @@ export async function restoreBackup(
 
     const result = await execAsync(
       `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} -f "${backupPath}"`,
-      { maxBuffer: 50 * 1024 * 1024 }, // 50MB buffer for large dumps
+      execOptions,
     )
 
     return {
@@ -321,7 +327,7 @@ export async function restoreBackup(
             : ''
       const result = await execAsync(
         `"${restorePath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} --no-owner --no-privileges ${formatFlag} "${backupPath}"`,
-        { maxBuffer: 50 * 1024 * 1024 },
+        execOptions,
       )
 
       return {

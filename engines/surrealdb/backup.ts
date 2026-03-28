@@ -7,12 +7,29 @@
  */
 
 import { spawn } from 'child_process'
-import { stat, mkdir } from 'fs/promises'
+import { readFile, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  addSurrealAuthArgs,
+  getBootstrapSurrealAuth,
+  inferSurrealAuthLevel,
+} from './auth'
 import { requireSurrealPath } from './cli-utils'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+
+function sanitizeBackupContent(content: string): string {
+  return content
+    .replace(
+      /(^|\n)\s*DEFINE\s+(USER|ACCESS)\b[\s\S]*?;\s*(?=\n|$)/gi,
+      '\n',
+    )
+    .replace(/(^|\n)\s*OPTION\s+IMPORT\s*;\s*(?=\n|$)/gi, '\n')
+    .replace(/(^|\n)\s*USE\s+NS\b[\s\S]*?;\s*(?=\n|$)/gi, '\n')
+    .replace(/(^|\n)\s*USE\s+DB\b[\s\S]*?;\s*(?=\n|$)/gi, '\n')
+}
 
 /**
  * Create a SurrealQL backup using surreal export
@@ -22,9 +39,25 @@ async function createSurqlBackup(
   outputPath: string,
   database: string,
 ): Promise<BackupResult> {
-  const { port, version } = container
+  const { name, port, version } = container
   // SurrealDB uses namespace/database hierarchy - use container name as namespace
   const namespace = container.name.replace(/-/g, '_')
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.SurrealDB,
+    getDefaultUsername(Engine.SurrealDB),
+  )
+  const auth = savedCreds
+    ? {
+        username: savedCreds.username,
+        password: savedCreds.password,
+        authLevel: inferSurrealAuthLevel({
+          username: savedCreds.username,
+          database: savedCreds.database,
+          connectionString: savedCreds.connectionString,
+        }),
+      }
+    : getBootstrapSurrealAuth()
 
   const surrealPath = await requireSurrealPath(version)
 
@@ -36,20 +69,19 @@ async function createSurqlBackup(
 
   return new Promise<BackupResult>((resolve, reject) => {
     // surreal export command
-    const args = [
-      'export',
-      '--endpoint',
-      `http://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--db',
-      database,
-      outputPath,
-    ]
+    const args = addSurrealAuthArgs(
+      [
+        'export',
+        '--endpoint',
+        `http://127.0.0.1:${port}`,
+        '--ns',
+        namespace,
+        '--db',
+        database,
+        outputPath,
+      ],
+      auth,
+    )
 
     logDebug(`Running: surreal ${args.join(' ')}`)
 
@@ -72,6 +104,10 @@ async function createSurqlBackup(
     proc.on('close', async (code) => {
       if (code === 0) {
         try {
+          const sanitized = sanitizeBackupContent(
+            await readFile(outputPath, 'utf-8'),
+          )
+          await writeFile(outputPath, sanitized, 'utf-8')
           const stats = await stat(outputPath)
           resolve({
             path: outputPath,

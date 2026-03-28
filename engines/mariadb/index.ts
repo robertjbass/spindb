@@ -18,6 +18,10 @@ import {
 } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   logDebug,
   logWarning,
   ErrorCodes,
@@ -36,6 +40,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
+  Engine,
   Platform,
   type Arch,
   type ContainerConfig,
@@ -58,6 +63,15 @@ const execAsync = promisify(exec)
 
 const ENGINE = 'mariadb'
 const engineDef = getEngineDefaults(ENGINE)
+
+type LocalMariaDbAuth = {
+  user: string
+  password?: string
+}
+
+function buildMariaDbEnv(password?: string): NodeJS.ProcessEnv {
+  return password ? { ...process.env, MYSQL_PWD: password } : process.env
+}
 
 // Build a Windows-safe mariadb command string for either a file or inline SQL.
 export function buildWindowsMariadbCommand(
@@ -107,6 +121,21 @@ export class MariaDBEngine extends BaseEngine {
   displayName = 'MariaDB'
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
+
+  private async getLocalAdminAuth(
+    containerName: string,
+  ): Promise<LocalMariaDbAuth> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.MariaDB,
+      getDefaultUsername(Engine.MariaDB),
+    )
+
+    return {
+      user: savedCreds?.username || engineDef.superuser,
+      password: savedCreds?.password,
+    }
+  }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
@@ -463,8 +492,12 @@ export class MariaDBEngine extends BaseEngine {
           attempts++
           try {
             const mysqladmin = await this.getMysqladminPath()
+            const auth = await this.getLocalAdminAuth(container.name)
             await execAsync(
-              `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
+              `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u ${auth.user} ping`,
+              {
+                env: buildMariaDbEnv(auth.password),
+              },
             )
             if (settled) return
             settled = true
@@ -524,6 +557,7 @@ export class MariaDBEngine extends BaseEngine {
   async stop(container: ContainerConfig): Promise<void> {
     const { name, port } = container
     const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
+    const auth = await this.getLocalAdminAuth(name)
 
     logDebug(`Stopping MariaDB container "${name}" on port ${port}`)
 
@@ -533,18 +567,21 @@ export class MariaDBEngine extends BaseEngine {
       try {
         const mysqladmin = await this.getMysqladminPath()
         await execAsync(
-          `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
-          { timeout: 2000 },
+          `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u ${auth.user} ping`,
+          {
+            timeout: 2000,
+            env: buildMariaDbEnv(auth.password),
+          },
         )
         logWarning(`MariaDB responding on port ${port} but no valid PID file`)
-        await this.gracefulShutdown(port)
+        await this.gracefulShutdown(port, auth)
       } catch {
         logDebug('MariaDB not responding, nothing to stop')
       }
       return
     }
 
-    const gracefulSuccess = await this.gracefulShutdown(port, pid)
+    const gracefulSuccess = await this.gracefulShutdown(port, auth, pid)
     if (gracefulSuccess) {
       await this.cleanupPidFile(pidFile)
       logDebug('MariaDB stopped gracefully')
@@ -589,6 +626,7 @@ export class MariaDBEngine extends BaseEngine {
 
   private async gracefulShutdown(
     port: number,
+    auth: LocalMariaDbAuth,
     pid?: number,
     timeoutMs = 10000,
   ): Promise<boolean> {
@@ -596,8 +634,11 @@ export class MariaDBEngine extends BaseEngine {
       const mysqladmin = await this.getMysqladminPath()
       logDebug('Attempting mysqladmin shutdown')
       await execAsync(
-        `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root shutdown`,
-        { timeout: 5000 },
+        `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u ${auth.user} shutdown`,
+        {
+          timeout: 5000,
+          env: buildMariaDbEnv(auth.password),
+        },
       )
     } catch (error) {
       const e = error as Error
@@ -708,7 +749,13 @@ export class MariaDBEngine extends BaseEngine {
 
     try {
       const mysqladmin = await this.getMysqladminPath()
-      await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
+      const auth = await this.getLocalAdminAuth(name)
+      await execAsync(
+        `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u ${auth.user} ping`,
+        {
+          env: buildMariaDbEnv(auth.password),
+        },
+      )
       return { running: true, message: 'MariaDB is running' }
     } catch {
       return { running: false, message: 'MariaDB is not responding' }
@@ -724,18 +771,21 @@ export class MariaDBEngine extends BaseEngine {
     backupPath: string,
     options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    const { port, version } = container
+    const { name, port, version } = container
     const database = (options.database as string) || container.database
     const binPath = this.getBinaryPath(version)
+    const auth = await this.getLocalAdminAuth(name)
 
     if (options.createDatabase !== false) {
       await this.createDatabase(container, database)
     }
 
     return restoreBackup(backupPath, {
+      containerName: name,
       port,
       database,
-      user: engineDef.superuser,
+      user: auth.user,
+      password: auth.password,
       createDatabase: false,
       validateVersion: options.validateVersion !== false,
       binPath,
@@ -769,20 +819,22 @@ export class MariaDBEngine extends BaseEngine {
   }
 
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port } = container
+    const { name, port } = container
     const db = database || container.database || 'mysql'
 
     const mysql = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
+      env: buildMariaDbEnv(auth.password),
       ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(
         mysql,
-        ['-h', '127.0.0.1', '-P', String(port), '-u', engineDef.superuser, db],
+        ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, db],
         spawnOptions,
       )
 
@@ -796,18 +848,21 @@ export class MariaDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
 
     const mysql = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     try {
       const cmd = buildMariadbInlineCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         `CREATE DATABASE IF NOT EXISTS \`${database}\``,
       )
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: buildMariaDbEnv(auth.password),
+      })
     } catch (error) {
       const err = error as Error
       if (!err.message.includes('database exists')) {
@@ -821,18 +876,21 @@ export class MariaDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
 
     const mysql = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     try {
       const cmd = buildMariadbInlineCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         `DROP DATABASE IF EXISTS \`${database}\``,
       )
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: buildMariaDbEnv(auth.password),
+      })
     } catch (error) {
       const err = error as Error
       if (!err.message.includes("database doesn't exist")) {
@@ -842,16 +900,20 @@ export class MariaDBEngine extends BaseEngine {
   }
 
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, database } = container
+    const { name, port, database } = container
     const db = database || 'mysql'
 
     assertValidDatabaseName(db)
 
     try {
       const mysql = await this.getMariadbClientPath()
+      const auth = await this.getLocalAdminAuth(name)
 
       const { stdout } = await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
+        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
+        {
+          env: buildMariaDbEnv(auth.password),
+        },
       )
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
@@ -961,20 +1023,23 @@ export class MariaDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
     const mysql = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Get all connection IDs for the target database and kill them
     // We need to do this in two steps since MariaDB doesn't support subqueries in KILL
     const getIdsCmd = buildMariadbInlineCommand(
       mysql,
       port,
-      engineDef.superuser,
+      auth.user,
       `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
     )
 
     try {
-      const { stdout } = await execAsync(getIdsCmd)
+      const { stdout } = await execAsync(getIdsCmd, {
+        env: buildMariaDbEnv(auth.password),
+      })
       const lines = stdout
         .trim()
         .split('\n')
@@ -989,11 +1054,13 @@ export class MariaDBEngine extends BaseEngine {
         const killCmd = buildMariadbInlineCommand(
           mysql,
           port,
-          engineDef.superuser,
+          auth.user,
           `KILL CONNECTION ${id}`,
         )
         try {
-          await execAsync(killCmd)
+          await execAsync(killCmd, {
+            env: buildMariaDbEnv(auth.password),
+          })
         } catch {
           // Connection may already be gone
         }
@@ -1007,22 +1074,25 @@ export class MariaDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port } = container
+    const { name, port } = container
     const db = options.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
     const mysql = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     if (isWindows()) {
       const cmd = buildWindowsMariadbCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         db,
         options,
       )
       try {
-        const { stdout, stderr } = await execAsync(cmd)
+        const { stdout, stderr } = await execAsync(cmd, {
+          env: buildMariaDbEnv(auth.password),
+        })
         if (stdout) process.stdout.write(stdout)
         if (stderr) process.stderr.write(stderr)
         return
@@ -1038,7 +1108,7 @@ export class MariaDBEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       db,
     ]
 
@@ -1047,6 +1117,7 @@ export class MariaDBEngine extends BaseEngine {
 
       const spawnOptions: SpawnOptions = {
         stdio: 'inherit',
+        env: buildMariaDbEnv(auth.password),
       }
 
       return new Promise((resolve, reject) => {
@@ -1064,6 +1135,7 @@ export class MariaDBEngine extends BaseEngine {
     } else if (options.file) {
       const spawnOptions: SpawnOptions = {
         stdio: ['pipe', 'inherit', 'inherit'],
+        env: buildMariaDbEnv(auth.password),
       }
 
       return new Promise((resolve, reject) => {
@@ -1096,13 +1168,19 @@ export class MariaDBEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port } = container
+    const { name, port } = container
     const db = options?.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
     const mariadb = await this.getMariadbClientPath()
     const host = options?.host ?? '127.0.0.1'
-    const user = options?.username || engineDef.superuser
+    const localAuth =
+      !options?.username &&
+      !options?.password &&
+      (host === '127.0.0.1' || host === 'localhost')
+        ? await this.getLocalAdminAuth(name)
+        : null
+    const user = options?.username || localAuth?.user || engineDef.superuser
 
     // Use -B (batch mode) for tab-separated output
     const args = [
@@ -1123,9 +1201,7 @@ export class MariaDBEngine extends BaseEngine {
     }
 
     // Pass password via env to avoid exposing it in process listings
-    const env = options?.password
-      ? { ...process.env, MYSQL_PWD: options.password }
-      : process.env
+    const env = buildMariaDbEnv(options?.password ?? localAuth?.password)
 
     return new Promise((resolve, reject) => {
       const proc = spawn(mariadb, args, {
@@ -1160,8 +1236,9 @@ export class MariaDBEngine extends BaseEngine {
    * (information_schema, mysql, performance_schema, sys).
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
+    const { name, port } = container
     const mariadb = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Query for all non-system databases
     const sql = `SHOW DATABASES WHERE \`Database\` NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`
@@ -1172,7 +1249,7 @@ export class MariaDBEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       '-N', // Skip column names
       '-B', // Batch mode (no formatting)
       '-e',
@@ -1182,6 +1259,7 @@ export class MariaDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(mariadb, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildMariaDbEnv(auth.password),
       })
 
       let stdout = ''
@@ -1217,10 +1295,11 @@ export class MariaDBEngine extends BaseEngine {
   ): Promise<UserCredentials> {
     const { username, password, database } = options
     assertValidUsername(username)
-    const { port } = container
+    const { name, port } = container
     const db = database || container.database || 'mysql'
     assertValidDatabaseName(db)
     const mariadb = await this.getMariadbClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Check if NO_BACKSLASH_ESCAPES is enabled — if so, only escape single quotes
     let noBackslashEscapes = false
@@ -1231,7 +1310,7 @@ export class MariaDBEngine extends BaseEngine {
         '-P',
         String(port),
         '-u',
-        engineDef.superuser,
+        auth.user,
         '-N',
         '-B',
         '-e',
@@ -1240,6 +1319,7 @@ export class MariaDBEngine extends BaseEngine {
       const modeResult = await new Promise<string>((resolve, reject) => {
         const proc = spawn(mariadb, modeArgs, {
           stdio: ['pipe', 'pipe', 'pipe'],
+          env: buildMariaDbEnv(auth.password),
         })
         let stdout = ''
         proc.stdout?.on('data', (data: Buffer) => {
@@ -1268,12 +1348,13 @@ export class MariaDBEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
     ]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(mariadb, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildMariaDbEnv(auth.password),
       })
 
       let stderr = ''

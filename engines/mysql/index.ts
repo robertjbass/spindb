@@ -18,6 +18,10 @@ import {
 } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   logDebug,
   logWarning,
   ErrorCodes,
@@ -40,6 +44,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
+  Engine,
   Platform,
   type Arch,
   type ContainerConfig,
@@ -61,6 +66,15 @@ const execAsync = promisify(exec)
 
 const ENGINE = 'mysql'
 const engineDef = getEngineDefaults(ENGINE)
+
+type LocalMySqlAuth = {
+  user: string
+  password?: string
+}
+
+function buildMysqlEnv(password?: string): NodeJS.ProcessEnv {
+  return password ? { ...process.env, MYSQL_PWD: password } : process.env
+}
 
 /**
  * Build a Windows-safe mysql command string for either a file or inline SQL.
@@ -122,6 +136,52 @@ export class MySQLEngine extends BaseEngine {
   displayName = 'MySQL'
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
+
+  private async getLocalAdminAuth(
+    containerName: string,
+  ): Promise<LocalMySqlAuth> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.MySQL,
+      getDefaultUsername(Engine.MySQL),
+    )
+
+    return {
+      user: savedCreds?.username || engineDef.superuser,
+      password: savedCreds?.password,
+    }
+  }
+
+  private async pingLocalAdmin(
+    containerName: string,
+    port: number,
+  ): Promise<void> {
+    const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(containerName)
+
+    await execAsync(
+      `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SELECT 1"`,
+      {
+        env: buildMysqlEnv(auth.password),
+      },
+    )
+  }
+
+  private async shutdownLocalAdmin(
+    containerName: string,
+    port: number,
+  ): Promise<void> {
+    const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(containerName)
+
+    await execAsync(
+      `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SHUTDOWN"`,
+      {
+        env: buildMysqlEnv(auth.password),
+        timeout: 5000,
+      },
+    )
+  }
 
   async fetchAvailableVersions(): Promise<Record<string, string[]>> {
     return fetchAvailableVersions()
@@ -526,10 +586,7 @@ export class MySQLEngine extends BaseEngine {
           if (settled) return
           attempts++
           try {
-            const mysqladmin = await this.getMysqladminPath()
-            await execAsync(
-              `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
-            )
+            await this.pingLocalAdmin(container.name, port)
             if (settled) return
             settled = true
             if (proc) {
@@ -583,20 +640,16 @@ export class MySQLEngine extends BaseEngine {
     if (pid === null) {
       logDebug('No valid PID, checking if MySQL is responding on port')
       try {
-        const mysqladmin = await this.getMysqladminPath()
-        await execAsync(
-          `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`,
-          { timeout: 2000 },
-        )
+        await this.pingLocalAdmin(name, port)
         logWarning(`MySQL responding on port ${port} but no valid PID file`)
-        await this.gracefulShutdown(port)
+        await this.gracefulShutdown(name, port)
       } catch {
         logDebug('MySQL not responding, nothing to stop')
       }
       return
     }
 
-    const gracefulSuccess = await this.gracefulShutdown(port, pid)
+    const gracefulSuccess = await this.gracefulShutdown(name, port, pid)
     if (gracefulSuccess) {
       await this.cleanupPidFile(pidFile)
       logDebug('MySQL stopped gracefully')
@@ -640,20 +693,17 @@ export class MySQLEngine extends BaseEngine {
   }
 
   private async gracefulShutdown(
+    containerName: string,
     port: number,
     pid?: number,
     timeoutMs = 10000,
   ): Promise<boolean> {
     try {
-      const mysqladmin = await this.getMysqladminPath()
-      logDebug('Attempting mysqladmin shutdown')
-      await execAsync(
-        `"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root shutdown`,
-        { timeout: 5000 },
-      )
+      logDebug('Attempting authenticated MySQL shutdown')
+      await this.shutdownLocalAdmin(containerName, port)
     } catch (error) {
       const e = error as Error
-      logDebug(`mysqladmin shutdown failed: ${e.message}`)
+      logDebug(`Authenticated shutdown failed: ${e.message}`)
       if (pid) {
         try {
           await platformService.terminateProcess(pid, false)
@@ -766,8 +816,7 @@ export class MySQLEngine extends BaseEngine {
     }
 
     try {
-      const mysqladmin = await this.getMysqladminPath()
-      await execAsync(`"${mysqladmin}" -h 127.0.0.1 -P ${port} -u root ping`)
+      await this.pingLocalAdmin(name, port)
       return { running: true, message: 'MySQL is running' }
     } catch {
       return { running: false, message: 'MySQL is not responding' }
@@ -783,18 +832,21 @@ export class MySQLEngine extends BaseEngine {
     backupPath: string,
     options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    const { port, version } = container
+    const { name, port, version } = container
     const database = (options.database as string) || container.database
     const binPath = this.getBinaryPath(version)
+    const auth = await this.getLocalAdminAuth(name)
 
     if (options.createDatabase !== false) {
       await this.createDatabase(container, database)
     }
 
     return restoreBackup(backupPath, {
+      containerName: name,
       port,
       database,
-      user: engineDef.superuser,
+      user: auth.user,
+      password: auth.password,
       createDatabase: false,
       validateVersion: options.validateVersion !== false,
       binPath,
@@ -829,20 +881,22 @@ export class MySQLEngine extends BaseEngine {
   }
 
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port } = container
+    const { name, port } = container
     const db = database || container.database || 'mysql'
 
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
+      env: buildMysqlEnv(auth.password),
       ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(
         mysql,
-        ['-h', '127.0.0.1', '-P', String(port), '-u', engineDef.superuser, db],
+        ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, db],
         spawnOptions,
       )
 
@@ -856,18 +910,21 @@ export class MySQLEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
 
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     try {
       const cmd = buildMysqlInlineCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         `CREATE DATABASE IF NOT EXISTS \`${database}\``,
       )
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: buildMysqlEnv(auth.password),
+      })
     } catch (error) {
       const err = error as Error
       if (!err.message.includes('database exists')) {
@@ -881,18 +938,21 @@ export class MySQLEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
 
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     try {
       const cmd = buildMysqlInlineCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         `DROP DATABASE IF EXISTS \`${database}\``,
       )
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: buildMysqlEnv(auth.password),
+      })
     } catch (error) {
       const err = error as Error
       if (!err.message.includes("database doesn't exist")) {
@@ -902,16 +962,20 @@ export class MySQLEngine extends BaseEngine {
   }
 
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, database } = container
+    const { name, port, database } = container
     const db = database || 'mysql'
 
     assertValidDatabaseName(db)
 
     try {
       const mysql = await this.getMysqlClientPath()
+      const auth = await this.getLocalAdminAuth(name)
 
       const { stdout } = await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${engineDef.superuser} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
+        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
+        {
+          env: buildMysqlEnv(auth.password),
+        },
       )
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
@@ -1021,20 +1085,23 @@ export class MySQLEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
+    const { name, port } = container
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Get all connection IDs for the target database and kill them
     // We need to do this in two steps since MySQL doesn't support subqueries in KILL
     const getIdsCmd = buildMysqlInlineCommand(
       mysql,
       port,
-      engineDef.superuser,
+      auth.user,
       `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
     )
 
     try {
-      const { stdout } = await execAsync(getIdsCmd)
+      const { stdout } = await execAsync(getIdsCmd, {
+        env: buildMysqlEnv(auth.password),
+      })
       const lines = stdout
         .trim()
         .split('\n')
@@ -1049,11 +1116,13 @@ export class MySQLEngine extends BaseEngine {
         const killCmd = buildMysqlInlineCommand(
           mysql,
           port,
-          engineDef.superuser,
+          auth.user,
           `KILL CONNECTION ${id}`,
         )
         try {
-          await execAsync(killCmd)
+          await execAsync(killCmd, {
+            env: buildMysqlEnv(auth.password),
+          })
         } catch {
           // Connection may already be gone
         }
@@ -1067,22 +1136,25 @@ export class MySQLEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port } = container
+    const { name, port } = container
     const db = options.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     if (isWindows()) {
       const cmd = buildWindowsMysqlCommand(
         mysql,
         port,
-        engineDef.superuser,
+        auth.user,
         db,
         options,
       )
       try {
-        const { stdout, stderr } = await execAsync(cmd)
+        const { stdout, stderr } = await execAsync(cmd, {
+          env: buildMysqlEnv(auth.password),
+        })
         if (stdout) process.stdout.write(stdout)
         if (stderr) process.stderr.write(stderr)
         return
@@ -1098,7 +1170,7 @@ export class MySQLEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       db,
     ]
 
@@ -1107,6 +1179,7 @@ export class MySQLEngine extends BaseEngine {
 
       const spawnOptions: SpawnOptions = {
         stdio: 'inherit',
+        env: buildMysqlEnv(auth.password),
       }
 
       return new Promise((resolve, reject) => {
@@ -1124,6 +1197,7 @@ export class MySQLEngine extends BaseEngine {
     } else if (options.file) {
       const spawnOptions: SpawnOptions = {
         stdio: ['pipe', 'inherit', 'inherit'],
+        env: buildMysqlEnv(auth.password),
       }
 
       return new Promise((resolve, reject) => {
@@ -1156,13 +1230,19 @@ export class MySQLEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port } = container
+    const { name, port } = container
     const db = options?.database || container.database || 'mysql'
     assertValidDatabaseName(db)
 
     const mysql = await this.getMysqlClientPath()
     const host = options?.host ?? '127.0.0.1'
-    const user = options?.username || engineDef.superuser
+    const localAuth =
+      !options?.username &&
+      !options?.password &&
+      (host === '127.0.0.1' || host === 'localhost')
+        ? await this.getLocalAdminAuth(name)
+        : null
+    const user = options?.username || localAuth?.user || engineDef.superuser
 
     // Use -B (batch mode) for tab-separated output
     const args = [
@@ -1183,9 +1263,7 @@ export class MySQLEngine extends BaseEngine {
     }
 
     // Pass password via env to avoid exposing it in process listings
-    const env = options?.password
-      ? { ...process.env, MYSQL_PWD: options.password }
-      : process.env
+    const env = buildMysqlEnv(options?.password ?? localAuth?.password)
 
     return new Promise((resolve, reject) => {
       const proc = spawn(mysql, args, {
@@ -1220,8 +1298,9 @@ export class MySQLEngine extends BaseEngine {
    * (information_schema, mysql, performance_schema, sys).
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
+    const { name, port } = container
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Query for all non-system databases
     const sql = `SHOW DATABASES WHERE \`Database\` NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`
@@ -1232,7 +1311,7 @@ export class MySQLEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       '-N', // Skip column names
       '-B', // Batch mode (no formatting)
       '-e',
@@ -1242,6 +1321,7 @@ export class MySQLEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(mysql, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildMysqlEnv(auth.password),
       })
 
       let stdout = ''
@@ -1277,7 +1357,7 @@ export class MySQLEngine extends BaseEngine {
   ): Promise<UserCredentials> {
     const { username, password, database } = options
     assertValidUsername(username)
-    const { port } = container
+    const { name, port } = container
     const db = database || container.database
     if (!db) {
       throw new Error(
@@ -1286,6 +1366,7 @@ export class MySQLEngine extends BaseEngine {
     }
     assertValidDatabaseName(db)
     const mysql = await this.getMysqlClientPath()
+    const auth = await this.getLocalAdminAuth(name)
 
     // Check if NO_BACKSLASH_ESCAPES is enabled — if so, only escape single quotes
     let noBackslashEscapes = false
@@ -1296,7 +1377,7 @@ export class MySQLEngine extends BaseEngine {
         '-P',
         String(port),
         '-u',
-        engineDef.superuser,
+        auth.user,
         '-N',
         '-B',
         '-e',
@@ -1305,6 +1386,7 @@ export class MySQLEngine extends BaseEngine {
       const modeResult = await new Promise<string>((resolve, reject) => {
         const proc = spawn(mysql, modeArgs, {
           stdio: ['pipe', 'pipe', 'pipe'],
+          env: buildMysqlEnv(auth.password),
         })
         let stdout = ''
         proc.stdout?.on('data', (data: Buffer) => {
@@ -1337,12 +1419,13 @@ export class MySQLEngine extends BaseEngine {
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
     ]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(mysql, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildMysqlEnv(auth.password),
       })
 
       let stderr = ''

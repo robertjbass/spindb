@@ -9,8 +9,21 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+
+function buildMongoUri(
+  port: number,
+  database: string,
+  auth: { username: string; password: string; authDatabase: string },
+): string {
+  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
+  const params = new URLSearchParams({
+    authSource: auth.authDatabase,
+  })
+  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
+}
 
 /**
  * Create a backup of a MongoDB database using mongodump
@@ -24,7 +37,7 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port, database, version } = container
+  const { name, port, database, version } = container
   const db = options.database || database
 
   const mongodump = await getMongodumpPath(version)
@@ -38,14 +51,31 @@ export async function createBackup(
     await mkdir(outputDir, { recursive: true })
   }
 
-  const args: string[] = [
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(port),
-    '--db',
-    db,
-  ]
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.MongoDB,
+    getDefaultUsername(Engine.MongoDB),
+  )
+
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, db, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }),
+        '--db',
+        db,
+      ]
+    : [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--db',
+        db,
+      ]
 
   // Determine output format (default to 'archive' as per backup-formats.ts)
   const format = options.format ?? 'archive'

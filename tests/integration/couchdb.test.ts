@@ -10,6 +10,7 @@
  */
 
 import { describe, it, before, after } from 'node:test'
+import { join } from 'path'
 
 import {
   TEST_PORTS,
@@ -30,6 +31,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { paths } from '../../config/paths'
 
 const ENGINE = Engine.CouchDB
 const DATABASE = 'test_db'
@@ -366,6 +368,193 @@ describe('CouchDB Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated local admin credentials', async () => {
+    console.log(
+      `\n🔐 Testing auth-aware CouchDB backup/restore on local containers...`,
+    )
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.couchdb.base + 40,
+    )
+    const sourceName = generateTestName('couchdb-auth-test-source')
+    const targetName = generateTestName('couchdb-auth-test-target')
+    const sourceAdmin = { username: 'sourceadmin', password: 'sourcepass123' }
+    const targetAdmin = { username: 'targetadmin', password: 'targetpass456' }
+    const documents = [
+      { _id: 'user1', name: 'Alice', age: 30 },
+      { _id: 'user2', name: 'Bob', age: 25 },
+      { _id: 'user3', name: 'Charlie', age: 35 },
+      { _id: 'user4', name: 'Diana', age: 28 },
+      { _id: 'user5', name: 'Eve', age: 32 },
+    ]
+    const { tmpdir } = await import('os')
+    const { mkdir, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `couchdb-auth-backup-${Date.now()}.json`,
+    )
+    const engine = getEngine(ENGINE)
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      port: number,
+      username: string,
+      password: string,
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const connectionString = `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/`
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          `DB_USER=${username}`,
+          `DB_PASSWORD=${password}`,
+          'DB_HOST=127.0.0.1',
+          `DB_PORT=${port}`,
+          `DB_NAME=${DATABASE}`,
+          `DB_URL=${connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    const restartWithAdminAuth = async (
+      containerName: string,
+      port: number,
+      auth: { username: string; password: string },
+    ) => {
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist')
+
+      await writeDefaultCredentialFile(
+        containerName,
+        port,
+        auth.username,
+        auth.password,
+      )
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
+
+      const stopped = await waitForStopped(containerName, ENGINE, 60000)
+      assert(stopped, 'Container should stop before auth restart')
+
+      const restartedConfig = await containerManager.getConfig(containerName)
+      assert(restartedConfig !== null, 'Restarted config should exist')
+      await engine.start(restartedConfig!)
+      await containerManager.updateConfig(containerName, { status: 'running' })
+      assert(await waitForReady(ENGINE, port), 'Auth-enabled container should be ready')
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, {
+        port: sourcePort,
+      })
+
+      let sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(await waitForReady(ENGINE, sourcePort), 'Source should be ready')
+      assert(
+        await createCouchDBDatabase(sourcePort, DATABASE),
+        'Should create source database',
+      )
+      assert(
+        await insertCouchDBDocuments(sourcePort, DATABASE, documents),
+        'Should insert source documents',
+      )
+      await restartWithAdminAuth(sourceName, sourcePort, sourceAdmin)
+
+      sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source auth config should exist')
+      const sourceRows = await engine.executeQuery(
+        sourceConfig!,
+        `GET /${DATABASE}/_all_docs?include_docs=true`,
+      )
+      assertEqual(
+        sourceRows.rowCount,
+        documents.length,
+        'Auth-enabled source should still be queryable',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, {
+        port: targetPort,
+      })
+
+      let targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(await waitForReady(ENGINE, targetPort), 'Target should be ready')
+      await restartWithAdminAuth(targetName, targetPort, targetAdmin)
+
+      const backupResult = await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+      })
+      assertEqual(backupResult.format, 'json', 'Backup should use JSON format')
+
+      targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target auth config should exist')
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+        flush: true,
+      })
+
+      const restoredRows = await engine.executeQuery(
+        targetConfig!,
+        `GET /${DATABASE}/_all_docs?include_docs=true`,
+      )
+      assertEqual(
+        restoredRows.rowCount,
+        documents.length,
+        'Restore should succeed against an auth-enabled target',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      for (const containerName of [sourceName, targetName]) {
+        const config = await containerManager.getConfig(containerName)
+        if (config) {
+          const running = await processManager
+            .isRunning(containerName, {
+              engine: ENGINE,
+            })
+            .catch(() => false)
+          if (running) {
+            await engine.stop(config).catch(() => {})
+            await containerManager
+              .updateConfig(containerName, { status: 'stopped' })
+              .catch(() => {})
+          }
+        }
+        await containerManager
+          .delete(containerName, { force: true })
+          .catch(() => {})
+      }
+    }
+
+    console.log(
+      '   ✓ Backup and restore work with password-authenticated CouchDB',
+    )
   })
 
   it('should have no test containers remaining', async () => {

@@ -389,6 +389,30 @@ describe('Query Parser', () => {
 
       assertEqual(result.rowCount, 0, 'Row count should be 0')
     })
+
+    it('should ignore SurrealDB prompt lines before JSON output', () => {
+      const json = [
+        'surrealdb_test/test> SELECT * FROM test_user;',
+        JSON.stringify([
+          [{ id: 'test_user:1', name: 'Alice' }],
+        ]),
+      ].join('\n')
+      const result = parseSurrealDBResult(json)
+
+      assertEqual(result.rowCount, 1, 'Should parse the JSON payload')
+      assertEqual(result.rows[0].name, 'Alice', 'Row data should survive')
+    })
+
+    it('should ignore SurrealDB prompt text after JSON output', () => {
+      const json = [
+        JSON.stringify([[{ id: 'test_user:1', name: 'Alice' }]]),
+        'surrealdb_test/test> ',
+      ].join('\n')
+      const result = parseSurrealDBResult(json)
+
+      assertEqual(result.rowCount, 1, 'Should parse the first JSON document')
+      assertEqual(result.rows[0].name, 'Alice', 'Trailing prompt should be ignored')
+    })
   })
 
   describe('parseMongoDBResult', () => {

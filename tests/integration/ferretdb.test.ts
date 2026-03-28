@@ -241,13 +241,10 @@ describe('FerretDB Integration Tests', () => {
     console.log('   ✓ Re-created user with new password (idempotent)')
   })
 
-  it('should create a new container from connection string (dump/restore)', async () => {
+  it('should clone a container via backup/restore', async () => {
     console.log(
-      `\n📋 Creating container "${clonedContainerName}" from connection string...`,
+      `\n📋 Creating container "${clonedContainerName}" via backup/restore...`,
     )
-
-    // Note: FerretDB uses PostgreSQL backend for backup/restore, not MongoDB connection strings.
-    // We don't use the MongoDB connection string directly since pg_dump/pg_restore works on the backend.
 
     // Create container
     await containerManager.create(clonedContainerName, {
@@ -273,59 +270,32 @@ describe('FerretDB Integration Tests', () => {
     const ready = await waitForReady(ENGINE, testPorts[1])
     assert(ready, 'Cloned FerretDB should be ready')
 
-    // FerretDB backup/restore uses PostgreSQL pg_dump/pg_restore on the backend
-    // Get the source container's backend port for dumping
     const sourceConfig = await containerManager.getConfig(containerName)
     assert(sourceConfig !== null, 'Source config should exist')
 
     const { tmpdir } = await import('os')
     const { rm } = await import('fs/promises')
-    const dumpPath = join(tmpdir(), `ferretdb-test-dump-${Date.now()}.dump`)
+    const dumpPath = join(tmpdir(), `ferretdb-test-dump-${Date.now()}.archive`)
 
-    // Use 'custom' format which supports --clean for proper restore
     await engine.backup(sourceConfig!, dumpPath, {
-      database: 'ferretdb', // FerretDB stores all data in the 'ferretdb' PostgreSQL database
-      format: 'custom',
+      database: DATABASE,
+      format: 'archive',
     })
 
-    // Re-read config after start to get the backendPort
-    const updatedConfig = await containerManager.getConfig(clonedContainerName)
-    assert(
-      updatedConfig !== null,
-      'Updated cloned container config should exist',
-    )
-
     try {
-      await engine.restore(updatedConfig!, dumpPath, {
-        database: 'ferretdb',
+      await engine.restore(config!, dumpPath, {
+        database: DATABASE,
       })
     } finally {
       // Clean up dump file regardless of restore success/failure
       await rm(dumpPath, { force: true })
     }
 
-    console.log('   ✓ Container created from connection string')
+    console.log('   ✓ Container cloned via backup/restore')
   })
 
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
-
-    // TODO(backlog): Replace pg_dump/pg_restore with mongodump/mongorestore for FerretDB
-    // Tracked: https://github.com/anthropics/spindb/issues/TBD (update when ticket created)
-    // Status: known-limitation
-    //
-    // Current limitation: FerretDB backup/restore through PostgreSQL has issues due to
-    // DocumentDB extension internal state. The restore may fail to fully restore
-    // MongoDB collections because DocumentDB creates internal metadata tables
-    // that conflict during restore.
-    //
-    // Proposed fix:
-    // 1. Use mongodump/mongorestore on the MongoDB protocol side (port 27017)
-    //    instead of pg_dump/pg_restore on the PostgreSQL backend
-    // 2. Or add a direct MongoDB client verification using mongosh to query
-    //    the restored data through the FerretDB MongoDB protocol
-    //
-    // Until fixed, the test accepts rowCount === 0 as a known limitation.
     const rowCount = await getRowCount(
       ENGINE,
       testPorts[1],
@@ -333,20 +303,12 @@ describe('FerretDB Integration Tests', () => {
       'test_user',
     )
 
-    // Accept 0 or EXPECTED_ROW_COUNT as success due to DocumentDB restore limitations
-    // See TODO above for tracking this technical debt
-    if (rowCount === 0) {
-      console.log(
-        `   ⚠ Restore has known limitations with DocumentDB extension (got ${rowCount} documents)`,
-      )
-    } else {
-      assertEqual(
-        rowCount,
-        EXPECTED_ROW_COUNT,
-        'Restored data should have same document count',
-      )
-      console.log(`   ✓ Verified ${rowCount} documents in restored container`)
-    }
+    assertEqual(
+      rowCount,
+      EXPECTED_ROW_COUNT,
+      'Restored data should have same document count',
+    )
+    console.log(`   ✓ Verified ${rowCount} documents in restored container`)
   })
 
   it('should stop and delete the restored container', async () => {
@@ -723,6 +685,222 @@ describe('FerretDB Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   ✓ Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated local root credentials', async () => {
+    console.log(
+      `\n🔐 Testing auth-aware FerretDB backup/restore on local containers...`,
+    )
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.ferretdb.base + 40,
+    )
+    const sourceName = generateTestName('ferretdb-auth-test-source')
+    const targetName = generateTestName('ferretdb-auth-test-target')
+    const sourcePassword = 'sourcepass123'
+    const targetPassword = 'targetpass456'
+    const { tmpdir } = await import('os')
+    const { mkdir, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `ferretdb-auth-backup-${Date.now()}.archive`,
+    )
+    const engine = getEngine(ENGINE)
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const connectionString = `mongodb://root:${encodeURIComponent(password)}@127.0.0.1:${port}/admin?authSource=admin`
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          'DB_USER=root',
+          `DB_PASSWORD=${password}`,
+          'DB_HOST=127.0.0.1',
+          `DB_PORT=${port}`,
+          'DB_NAME=admin',
+          `DB_URL=${connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    const waitForAuthedReady = async (
+      containerName: string,
+      timeoutMs = 30000,
+    ): Promise<{ ready: boolean; lastError: string | null }> => {
+      const startTime = Date.now()
+      let lastError: string | null = null
+      while (Date.now() - startTime < timeoutMs) {
+        try {
+          const config = await containerManager.getConfig(containerName)
+          if (config) {
+            const result = await engine.executeQuery(
+              config,
+              'db.runCommand({ ping: 1 })',
+              {
+                database: 'admin',
+              },
+            )
+            if (result.rowCount === 1) {
+              return { ready: true, lastError: null }
+            }
+          }
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error.message : 'unknown auth-ready error'
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      return { ready: false, lastError }
+    }
+
+    const enablePasswordAuth = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist')
+
+      await runScriptJS(
+        containerName,
+        `db.getSiblingDB('admin').createUser({ user: 'root', pwd: ${JSON.stringify(password)}, roles: [{ role: 'root', db: 'admin' }] })`,
+        'admin',
+      )
+      await writeDefaultCredentialFile(containerName, port, password)
+
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, {
+        status: 'stopped',
+        authEnabled: true,
+      })
+      const stopped = await waitForStopped(containerName, ENGINE)
+      assert(stopped, 'Container should be fully stopped before auth restart')
+
+      const updatedConfig = await containerManager.getConfig(containerName)
+      assert(updatedConfig !== null, 'Updated container config should exist')
+      await engine.start(updatedConfig!)
+      await containerManager.updateConfig(containerName, {
+        status: 'running',
+      })
+
+      const authReady = await waitForAuthedReady(containerName)
+      assert(
+        authReady.ready,
+        `Auth-enabled FerretDB should be ready (${authReady.lastError ?? 'no error'})`,
+      )
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+
+      await engine.initDataDir(sourceName, TEST_VERSION, {})
+      await engine.initDataDir(targetName, TEST_VERSION, {})
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      assert(targetConfig !== null, 'Target config should exist')
+
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+
+      const sourceReady = await waitForReady(ENGINE, sourcePort)
+      const targetReady = await waitForReady(ENGINE, targetPort)
+      assert(sourceReady, 'Source FerretDB should be ready before auth')
+      assert(targetReady, 'Target FerretDB should be ready before auth')
+
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+      const seededCount = await getRowCount(
+        ENGINE,
+        sourcePort,
+        DATABASE,
+        'test_user',
+      )
+      assertEqual(
+        seededCount,
+        EXPECTED_ROW_COUNT,
+        'Seeded source should contain the expected documents before auth',
+      )
+
+      await enablePasswordAuth(sourceName, sourcePort, sourcePassword)
+      await enablePasswordAuth(targetName, targetPort, targetPassword)
+
+      const authedSourceConfig = await containerManager.getConfig(sourceName)
+      const authedTargetConfig = await containerManager.getConfig(targetName)
+      assert(authedSourceConfig !== null, 'Auth source config should exist')
+      assert(authedTargetConfig !== null, 'Auth target config should exist')
+
+      await engine.backup(authedSourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'archive',
+      })
+
+      await engine.restore(authedTargetConfig!, backupPath, {
+        database: DATABASE,
+        sourceDatabase: DATABASE,
+      })
+
+      const restoredResult = await executeQuery(
+        targetName,
+        'db.test_user.find({}).sort({id: 1})',
+        DATABASE,
+      )
+      assertEqual(
+        restoredResult.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Restored FerretDB should contain the expected documents',
+      )
+      assertEqual(
+        restoredResult.rows[0].name,
+        'Alice Johnson',
+        'First restored document should match source data',
+      )
+
+      console.log(
+        '   ✓ Backup and restore work with password-authenticated FerretDB',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      for (const containerName of [sourceName, targetName]) {
+        const config = await containerManager.getConfig(containerName)
+        if (config) {
+          const running = await processManager.isRunning(containerName, {
+            engine: ENGINE,
+          })
+          if (running) {
+            await engine.stop(config).catch(() => {})
+          }
+          await containerManager
+            .delete(containerName, { force: true })
+            .catch(() => {})
+        }
+      }
+    }
   })
 
   it('should have no test containers remaining', async () => {

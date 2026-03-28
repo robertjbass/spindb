@@ -11,8 +11,9 @@ import { mkdir, stat, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { couchdbApiRequest } from './api-client'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
 // Backup operations may take longer than the default timeout
 const BACKUP_TIMEOUT_MS = 600000 // 10 minutes
@@ -34,8 +35,19 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port } = container
+  const { name, port } = container
   const targetDatabase = options.database
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.CouchDB,
+    getDefaultUsername(Engine.CouchDB),
+  )
+  const auth = savedCreds
+    ? {
+        username: savedCreds.username,
+        password: savedCreds.password,
+      }
+    : undefined
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -44,7 +56,14 @@ export async function createBackup(
   }
 
   // Get CouchDB version info
-  const infoResponse = await couchdbApiRequest(port, 'GET', '/')
+  const infoResponse = await couchdbApiRequest(
+    port,
+    'GET',
+    '/',
+    undefined,
+    undefined,
+    auth,
+  )
   const serverInfo = infoResponse.data as { version?: string }
   const serverVersion = serverInfo?.version || 'unknown'
 
@@ -56,7 +75,14 @@ export async function createBackup(
     databasesToBackup = [targetDatabase]
   } else {
     // Backup all user databases (excluding system databases)
-    const dbsResponse = await couchdbApiRequest(port, 'GET', '/_all_dbs')
+    const dbsResponse = await couchdbApiRequest(
+      port,
+      'GET',
+      '/_all_dbs',
+      undefined,
+      undefined,
+      auth,
+    )
     if (dbsResponse.status !== 200) {
       throw new Error(
         `Failed to list databases: ${JSON.stringify(dbsResponse.data)}`,
@@ -85,6 +111,7 @@ export async function createBackup(
       `/${encodeURIComponent(dbName)}/_all_docs?include_docs=true`,
       undefined,
       BACKUP_TIMEOUT_MS,
+      auth,
     )
 
     if (docsResponse.status !== 200) {

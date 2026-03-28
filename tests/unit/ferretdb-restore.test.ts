@@ -109,8 +109,8 @@ describe('FerretDB Backup Format Detection', () => {
         `Description should mention unknown: ${format.description}`,
       )
       assert(
-        format.restoreCommand.includes('pg_restore'),
-        'Should fallback to pg_restore for unknown formats',
+        format.restoreCommand.includes('mongorestore'),
+        'Should fallback to mongorestore for unknown formats',
       )
     })
   })

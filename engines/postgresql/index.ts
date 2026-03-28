@@ -29,12 +29,17 @@ import {
 } from './version-validator'
 import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   assertValidDatabaseName,
   assertValidUsername,
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
 import { parseCSVToQueryResult } from '../../core/query-parser'
+import { Engine } from '../../types'
 import type {
   Platform,
   Arch,
@@ -492,6 +497,11 @@ export class PostgreSQLEngine extends BaseEngine {
     const { version, port } = container
     const binPath = this.getBinaryPath(version)
     const database = (options.database as string) || container.name
+    const savedCreds = await loadCredentials(
+      container.name,
+      Engine.PostgreSQL,
+      getDefaultUsername(Engine.PostgreSQL),
+    )
 
     // First create the database if it doesn't exist
     if (options.createDatabase !== false) {
@@ -501,7 +511,8 @@ export class PostgreSQLEngine extends BaseEngine {
     return restoreBackup(binPath, backupPath, {
       port,
       database,
-      user: defaults.superuser,
+      user: savedCreds?.username || defaults.superuser,
+      password: savedCreds?.password,
       pgRestorePath: options.pgRestorePath as string, // Use custom path if provided
       containerVersion: version, // Pass container version for version-matched binary lookup
       ...(options as { format?: string }),

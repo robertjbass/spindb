@@ -34,6 +34,7 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import {
   logDebug,
@@ -60,6 +61,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
+  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -81,6 +83,24 @@ const execAsync = promisify(exec)
 
 const ENGINE = 'ferretdb'
 const engineDef = getEngineDefaults(ENGINE)
+
+type LocalFerretAuth = {
+  username: string
+  password: string
+  authDatabase: string
+}
+
+function buildMongoUri(
+  port: number,
+  database: string,
+  auth: LocalFerretAuth,
+): string {
+  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
+  const params = new URLSearchParams({
+    authSource: auth.authDatabase,
+  })
+  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
+}
 
 // Default internal PostgreSQL port range for FerretDB backends
 const BACKEND_PORT_START = 54320
@@ -1239,6 +1259,99 @@ export class FerretDBEngine extends BaseEngine {
     }
   }
 
+  private async getLocalAuth(
+    containerName: string,
+  ): Promise<LocalFerretAuth | null> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.FerretDB,
+      getDefaultUsername(Engine.FerretDB),
+    )
+    if (!savedCreds) {
+      return null
+    }
+
+    return {
+      username: savedCreds.username,
+      password: savedCreds.password,
+      authDatabase: savedCreds.database || 'admin',
+    }
+  }
+
+  private async buildLocalMongoshArgs(
+    container: ContainerConfig,
+    database: string,
+    options?: { quiet?: boolean },
+  ): Promise<string[]> {
+    const savedCreds = await this.getLocalAuth(container.name)
+    const args = savedCreds
+      ? [buildMongoUri(container.port, database, savedCreds)]
+      : ['--host', '127.0.0.1', '--port', String(container.port), database]
+
+    if (options?.quiet) {
+      args.push('--quiet')
+    }
+
+    return args
+  }
+
+  private async runLocalMongosh(
+    container: ContainerConfig,
+    database: string,
+    options: { eval?: string; file?: string; quiet?: boolean; timeoutMs?: number },
+  ): Promise<{ stdout: string; stderr: string }> {
+    const mongosh = await this.getMongoshPath()
+    const args = await this.buildLocalMongoshArgs(container, database, {
+      quiet: options.quiet,
+    })
+
+    if (options.eval) {
+      args.push('--eval', options.eval)
+    }
+    if (options.file) {
+      args.push('--file', options.file)
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mongosh, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(
+          new Error(
+            `${options.file ? 'mongosh file execution' : 'mongosh command'} timed out after ${(options.timeoutMs ?? 10000) / 1000} seconds`,
+          ),
+        )
+      }, options.timeoutMs ?? 10000)
+
+      proc.on('error', (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (code !== 0) {
+          reject(new Error(stderr || `mongosh exited with code ${code}`))
+          return
+        }
+        resolve({ stdout, stderr })
+      })
+    })
+  }
+
   // Get FerretDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { name, port } = container
@@ -1298,58 +1411,25 @@ export class FerretDBEngine extends BaseEngine {
     backupPath: string,
     options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    const { backendPort } = container
-    const database = (options.database as string) || 'ferretdb'
-
-    if (!backendPort) {
-      throw new Error('Backend port not set - start the container first')
-    }
+    const database = (options.database as string) || container.database || 'test'
 
     // Validate database name before restore (defense-in-depth)
     assertValidDatabaseName(database)
 
-    const result = await restoreBackup(container, backupPath, {
+    return restoreBackup(container, backupPath, {
+      containerName: container.name,
+      port: container.port,
       database,
       drop: options.drop !== false,
+      sourceDatabase: options.sourceDatabase as string | undefined,
+      containerVersion: container.version,
     })
-
-    // Restart FerretDB proxy so it picks up the restored data.
-    // pg_restore writes directly to PostgreSQL, but FerretDB's proxy
-    // caches schema/collection metadata in memory and won't see
-    // the restored collections until restarted.
-    const containerDir = paths.getContainerPath(container.name, {
-      engine: ENGINE,
-    })
-    try {
-      await this.stopFerretDBProcess(containerDir)
-      // start() detects PG is already running and only launches the proxy
-      await this.start(container)
-    } catch (error) {
-      const err = error as Error
-      logWarning(
-        `Failed to restart FerretDB proxy after restore: ${err.message}`,
-      )
-      // Retry once — transient issues (port race, slow PG) can resolve on second attempt
-      try {
-        await this.stopFerretDBProcess(containerDir).catch(() => {})
-        await this.start(container)
-      } catch {
-        throw new Error(
-          `Restore succeeded but FerretDB proxy failed to restart. ` +
-            `Data is safely in PostgreSQL. Run 'spindb start ${container.name}' to restart manually. ` +
-            `Original error: ${err.message}`,
-        )
-      }
-    }
-
-    return result
   }
 
   // Get connection string (MongoDB-compatible)
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { port } = container
     const db = database || container.database || 'test'
-    // No authentication required - FerretDB runs with --no-auth for local dev
     return `mongodb://127.0.0.1:${port}/${db}`
   }
 
@@ -1388,21 +1468,17 @@ export class FerretDBEngine extends BaseEngine {
 
   // Open mongosh interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port } = container
-    const db = database || 'test'
+    const db = database || container.database || 'test'
 
     const mongosh = await this.getMongoshPath()
+    const args = await this.buildLocalMongoshArgs(container, db)
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        mongosh,
-        ['--host', '127.0.0.1', '--port', String(port), db],
-        spawnOptions,
-      )
+      const proc = spawn(mongosh, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())
@@ -1420,22 +1496,17 @@ export class FerretDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
 
     try {
-      const mongosh = await this.getMongoshPath()
       // Create a temp collection then immediately drop it to force database creation
       // without leaving any visible marker collections.
       // Pre-drop in case a previous run was interrupted and left a stale collection.
       // NOTE: Use db.getCollection() instead of db._spindb_init shorthand because
       // mongosh doesn't support shorthand notation for collection names starting with underscore.
-      const script =
-        'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();'
-      const cmd = isWindows()
-        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "${script.replace(/"/g, '\\"')}"`
-        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval '${script}'`
-
-      await execAsync(cmd, { timeout: 10000 })
+      await this.runLocalMongosh(container, database, {
+        eval: 'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();',
+        timeoutMs: 10000,
+      })
       logDebug(`Database "${database}" created via temp collection`)
     } catch (error) {
       // Ignore errors - database may already exist or collection cleanup succeeded
@@ -1449,15 +1520,12 @@ export class FerretDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
 
     try {
-      const mongosh = await this.getMongoshPath()
-      const cmd = isWindows()
-        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval "db.dropDatabase()"`
-        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${database} --eval 'db.dropDatabase()'`
-
-      await execAsync(cmd, { timeout: 10000 })
+      await this.runLocalMongosh(container, database, {
+        eval: 'db.dropDatabase()',
+        timeoutMs: 10000,
+      })
     } catch (error) {
       logDebug(`dropDatabase result: ${error}`)
     }
@@ -1465,18 +1533,16 @@ export class FerretDBEngine extends BaseEngine {
 
   // Get the size of the database in bytes
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, database } = container
+    const { database } = container
     const db = database || 'test'
     assertValidDatabaseName(db)
 
     try {
-      const mongosh = await this.getMongoshPath()
-      const script = 'JSON.stringify(db.stats())'
-      const cmd = isWindows()
-        ? `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --quiet --eval "${script}"`
-        : `"${mongosh}" --host 127.0.0.1 --port ${port} ${db} --quiet --eval '${script}'`
-
-      const { stdout } = await execAsync(cmd, { timeout: 10000 })
+      const { stdout } = await this.runLocalMongosh(container, db, {
+        eval: 'JSON.stringify(db.stats())',
+        quiet: true,
+        timeoutMs: 10000,
+      })
 
       // Extract JSON from output
       const firstBrace = stdout.indexOf('{')
@@ -1561,83 +1627,20 @@ export class FerretDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port } = container
     const db = options.database || container.database || 'test'
 
-    const mongosh = await this.getMongoshPath()
-
     if (options.file) {
-      const spawnOptions: SpawnOptions = {
-        stdio: 'inherit',
-      }
-
-      return new Promise((resolve, reject) => {
-        const proc = spawn(
-          mongosh,
-          [
-            '--host',
-            '127.0.0.1',
-            '--port',
-            String(port),
-            db,
-            '--file',
-            options.file!,
-          ],
-          spawnOptions,
-        )
-
-        proc.on('error', reject)
-        proc.on('close', (code) => {
-          if (code === 0) {
-            resolve()
-          } else {
-            reject(new Error(`mongosh exited with code ${code}`))
-          }
-        })
+      await this.runLocalMongosh(container, db, {
+        file: options.file,
+        timeoutMs: 60000,
       })
     } else if (options.sql) {
-      // sql field is actually JS for MongoDB-compatible databases
-      const script = options.sql
-
-      return new Promise((resolve, reject) => {
-        const proc = spawn(
-          mongosh,
-          ['--host', '127.0.0.1', '--port', String(port), db, '--eval', script],
-          { stdio: ['pipe', 'pipe', 'pipe'] },
-        )
-
-        let stdout = ''
-        let stderr = ''
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          stdout += data.toString()
-        })
-        proc.stderr?.on('data', (data: Buffer) => {
-          stderr += data.toString()
-        })
-
-        // 60 second timeout
-        const timeout = setTimeout(() => {
-          proc.kill('SIGTERM')
-          reject(new Error('mongosh timed out after 60 seconds'))
-        }, 60000)
-
-        proc.on('error', (err) => {
-          clearTimeout(timeout)
-          reject(err)
-        })
-
-        proc.on('close', (code) => {
-          clearTimeout(timeout)
-          if (stdout) process.stdout.write(stdout)
-          if (stderr) process.stderr.write(stderr)
-          if (code === 0) {
-            resolve()
-          } else {
-            reject(new Error(`mongosh exited with code ${code}`))
-          }
-        })
+      const { stdout, stderr } = await this.runLocalMongosh(container, db, {
+        eval: options.sql,
+        timeoutMs: 60000,
       })
+      if (stdout) process.stdout.write(stdout)
+      if (stderr) process.stderr.write(stderr)
     } else {
       throw new Error('Either file or sql option must be provided')
     }
@@ -1679,63 +1682,51 @@ export class FerretDBEngine extends BaseEngine {
       }
     }
 
-    // Wrap query in async IIFE to properly await cursor.toArray()
-    // This prevents JSON.stringify from serializing a Promise
     const script = `(async () => { const res = ${normalizedQuery}; return JSON.stringify(res.toArray ? await res.toArray() : await Promise.resolve(res)); })()`
+    let args: string[]
+    if (options?.host) {
+      const user = options.username ? encodeURIComponent(options.username) : ''
+      const pass = options.password ? encodeURIComponent(options.password) : ''
+      const auth = user ? `${user}:${pass}@` : ''
+      const host = options.host
+      const isSrv = options.scheme === 'mongodb+srv'
+      const scheme = isSrv ? 'mongodb+srv' : 'mongodb'
+      const portSuffix = isSrv ? '' : `:${port}`
+      const sslParam = options.ssl && !isSrv ? 'tls=true' : ''
+      const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
+      args = [uri, '--quiet', '--eval', script]
+    } else {
+      const savedCreds = await this.getLocalAuth(container.name)
+      args = savedCreds
+        ? [buildMongoUri(port, db, savedCreds), '--quiet', '--eval', script]
+        : [
+            '--host',
+            '127.0.0.1',
+            '--port',
+            String(port),
+            db,
+            '--quiet',
+            '--eval',
+            script,
+          ]
+    }
 
-    return new Promise((resolve, reject) => {
-      let args: string[]
-
-      if (options?.host) {
-        // Remote: build a connection URI for mongosh
-        const user = options.username
-          ? encodeURIComponent(options.username)
-          : ''
-        const pass = options.password
-          ? encodeURIComponent(options.password)
-          : ''
-        const auth = user ? `${user}:${pass}@` : ''
-        const host = options.host
-        const isSrv = options.scheme === 'mongodb+srv'
-        const scheme = isSrv ? 'mongodb+srv' : 'mongodb'
-        const portSuffix = isSrv ? '' : `:${port}`
-        const sslParam = options.ssl && !isSrv ? 'tls=true' : ''
-        const uri = `${scheme}://${auth}${host}${portSuffix}/${db}${sslParam ? `?${sslParam}` : ''}`
-        args = [uri, '--quiet', '--eval', script]
-      } else if (options?.password) {
-        // Local with auth: build URI with credentials
-        const user = options.username
-          ? encodeURIComponent(options.username)
-          : ''
-        const pass = encodeURIComponent(options.password)
-        const auth = user ? `${user}:${pass}@` : ''
-        const uri = `mongodb://${auth}127.0.0.1:${port}/${db}`
-        args = [uri, '--quiet', '--eval', script]
-      } else {
-        args = [
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(port),
-          db,
-          '--quiet',
-          '--eval',
-          script,
-        ]
-      }
-
+    const { stdout, stderr } = await new Promise<{
+      stdout: string
+      stderr: string
+    }>((resolve, reject) => {
       const proc = spawn(mongosh, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-      let stdout = ''
-      let stderr = ''
+      let stdoutBuf = ''
+      let stderrBuf = ''
 
       proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString()
+        stdoutBuf += data.toString()
       })
       proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString()
+        stderrBuf += data.toString()
       })
 
       const timeout = setTimeout(() => {
@@ -1751,43 +1742,31 @@ export class FerretDBEngine extends BaseEngine {
       proc.on('close', (code) => {
         clearTimeout(timeout)
         if (code !== 0) {
-          reject(new Error(stderr || `mongosh exited with code ${code}`))
-          return
-        }
-
-        try {
-          // Extract JSON from output (mongosh may output extra info)
-          const jsonStart = stdout.indexOf('[')
-          const jsonEnd = stdout.lastIndexOf(']')
-
-          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-            const jsonStr = stdout.substring(jsonStart, jsonEnd + 1)
-            resolve(parseMongoDBResult(jsonStr))
-          } else {
-            // Try parsing as single object or scalar
-            const objStart = stdout.indexOf('{')
-            const objEnd = stdout.lastIndexOf('}')
-            if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
-              const jsonStr = stdout.substring(objStart, objEnd + 1)
-              resolve(parseMongoDBResult(jsonStr))
-            } else {
-              // Return as scalar result
-              resolve({
-                columns: ['result'],
-                rows: [{ result: stdout.trim() }],
-                rowCount: 1,
-              })
-            }
-          }
-        } catch (error) {
           reject(
             new Error(
-              `Failed to parse query result: ${error instanceof Error ? error.message : error}`,
+              `${stderrBuf || `mongosh exited with code ${code}`}${stdoutBuf ? `\nOutput: ${stdoutBuf}` : ''}`,
             ),
           )
+          return
         }
+        resolve({ stdout: stdoutBuf, stderr: stderrBuf })
       })
     })
+
+    if (stderr && !stdout.trim()) {
+      throw new Error(`${stderr}${stdout ? `\nOutput: ${stdout}` : ''}`)
+    }
+
+    const jsonMatch = stdout.match(/\[[\s\S]*\]|\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return {
+        columns: ['result'],
+        rows: [{ result: stdout.trim() }],
+        rowCount: 1,
+      }
+    }
+
+    return parseMongoDBResult(jsonMatch[0])
   }
 
   /**
@@ -1795,55 +1774,51 @@ export class FerretDBEngine extends BaseEngine {
    * FerretDB uses MongoDB protocol, so same approach as MongoDB.
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
     const mongosh = await this.getMongoshPath()
 
     return new Promise((resolve, reject) => {
-      // Use JSON output for reliable parsing
       const script = `JSON.stringify(db.adminCommand({listDatabases: 1}).databases.map(d => d.name))`
-      const args = [
-        '--quiet',
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--eval',
-        script,
-      ]
+      const launch = async () => {
+        const args = await this.buildLocalMongoshArgs(container, 'admin', {
+          quiet: true,
+        })
+        args.push('--eval', script)
+        const proc = spawn(mongosh, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
 
-      const proc = spawn(mongosh, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+        let stdout = ''
+        let stderr = ''
 
-      let stdout = ''
-      let stderr = ''
+        proc.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString()
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
+        proc.on('error', reject)
 
-      proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code !== 0) {
+            reject(new Error(stderr || `mongosh exited with code ${code}`))
+            return
+          }
 
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(stderr || `mongosh exited with code ${code}`))
-          return
-        }
+          try {
+            const allDatabases = JSON.parse(stdout.trim()) as string[]
+            const systemDatabases = ['admin', 'config', 'local']
+            const databases = allDatabases.filter(
+              (db) => !systemDatabases.includes(db),
+            )
+            resolve(databases)
+          } catch (error) {
+            reject(new Error(`Failed to parse database list: ${error}`))
+          }
+        })
+      }
 
-        try {
-          const allDatabases = JSON.parse(stdout.trim()) as string[]
-          const systemDatabases = ['admin', 'config', 'local']
-          const databases = allDatabases.filter(
-            (db) => !systemDatabases.includes(db),
-          )
-          resolve(databases)
-        } catch (error) {
-          reject(new Error(`Failed to parse database list: ${error}`))
-        }
-      })
+      void launch().catch(reject)
     })
   }
 
@@ -1858,13 +1833,10 @@ export class FerretDBEngine extends BaseEngine {
     assertValidDatabaseName(db)
     const mongosh = await this.getMongoshPath()
 
-    // Same as MongoDB - auth disabled with --no-auth but user is still created
-    // Use JSON.stringify for password to safely escape all special characters in JS context
-    // Pass script via stdin to avoid exposing passwords in process listings
     const jsonPwd = JSON.stringify(password)
     const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
-    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
+    const mongoshArgs = await this.buildLocalMongoshArgs(container, 'admin')
 
     const runMongoshViaStdin = (js: string): Promise<void> =>
       new Promise((resolve, reject) => {

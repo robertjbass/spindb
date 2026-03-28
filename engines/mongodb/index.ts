@@ -3,8 +3,7 @@
  * Manages MongoDB database containers using hostdb-downloaded binaries
  */
 
-import { spawn, exec, type SpawnOptions } from 'child_process'
-import { promisify } from 'util'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import net from 'net'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
@@ -14,6 +13,7 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -32,6 +32,7 @@ import {
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
 import {
+  Engine,
   Platform,
   type Arch,
   type ContainerConfig,
@@ -49,10 +50,26 @@ import {
 } from '../../types'
 import { parseMongoDBResult } from '../../core/query-parser'
 
-const execAsync = promisify(exec)
-
 const ENGINE = 'mongodb'
 const engineDef = getEngineDefaults(ENGINE)
+
+type LocalMongoAuth = {
+  username: string
+  password: string
+  authDatabase: string
+}
+
+function buildMongoUri(
+  port: number,
+  database: string,
+  auth: LocalMongoAuth,
+): string {
+  const credentials = `${encodeURIComponent(auth.username)}:${encodeURIComponent(auth.password)}@`
+  const params = new URLSearchParams({
+    authSource: auth.authDatabase,
+  })
+  return `mongodb://${credentials}127.0.0.1:${port}/${encodeURIComponent(database)}?${params.toString()}`
+}
 
 // Build a mongosh command for inline JavaScript execution
 export function buildMongoshCommand(
@@ -392,7 +409,7 @@ export class MongoDBEngine extends BaseEngine {
         proc.on('close', async (code) => {
           if (code === 0) {
             // MongoDB forked successfully, now wait for it to be ready
-            const ready = await this.waitForReady(port)
+            const ready = await this.waitForReady(container)
             if (ready) {
               // Read PID from lock file
               const lockFile = join(dataDir, 'mongod.lock')
@@ -421,7 +438,7 @@ export class MongoDBEngine extends BaseEngine {
     }
 
     // Wait for MongoDB to be ready (Windows path)
-    const ready = await this.waitForReady(port)
+    const ready = await this.waitForReady(container)
     if (!ready) {
       throw new Error('MongoDB failed to start within timeout')
     }
@@ -453,6 +470,99 @@ export class MongoDBEngine extends BaseEngine {
     })
   }
 
+  private async getLocalAuth(
+    containerName: string,
+  ): Promise<LocalMongoAuth | null> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.MongoDB,
+      getDefaultUsername(Engine.MongoDB),
+    )
+    if (!savedCreds) {
+      return null
+    }
+
+    return {
+      username: savedCreds.username,
+      password: savedCreds.password,
+      authDatabase: savedCreds.database || 'admin',
+    }
+  }
+
+  private async buildLocalMongoshArgs(
+    container: ContainerConfig,
+    database: string,
+    options?: { quiet?: boolean },
+  ): Promise<string[]> {
+    const savedCreds = await this.getLocalAuth(container.name)
+    const args = savedCreds
+      ? [buildMongoUri(container.port, database, savedCreds)]
+      : ['--host', '127.0.0.1', '--port', String(container.port), database]
+
+    if (options?.quiet) {
+      args.push('--quiet')
+    }
+
+    return args
+  }
+
+  private async runLocalMongosh(
+    container: ContainerConfig,
+    database: string,
+    options: { eval?: string; file?: string; quiet?: boolean; timeoutMs?: number },
+  ): Promise<{ stdout: string; stderr: string }> {
+    const mongosh = await this.getMongoshPath()
+    const args = await this.buildLocalMongoshArgs(container, database, {
+      quiet: options.quiet,
+    })
+
+    if (options.eval) {
+      args.push('--eval', options.eval)
+    }
+    if (options.file) {
+      args.push('--file', options.file)
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mongosh, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(
+          new Error(
+            `${options.file ? 'mongosh file execution' : 'mongosh command'} timed out after ${(options.timeoutMs ?? 10000) / 1000} seconds`,
+          ),
+        )
+      }, options.timeoutMs ?? 10000)
+
+      proc.on('error', (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (code !== 0) {
+          reject(new Error(stderr || `mongosh exited with code ${code}`))
+          return
+        }
+        resolve({ stdout, stderr })
+      })
+    })
+  }
+
   /**
    * Wait for MongoDB to be ready to accept connections
    *
@@ -467,9 +577,10 @@ export class MongoDBEngine extends BaseEngine {
    *    ready, and this avoids requiring mongosh to be installed.
    */
   private async waitForReady(
-    port: number,
+    container: ContainerConfig,
     timeoutMs = 30000,
   ): Promise<boolean> {
+    const { port } = container
     const startTime = Date.now()
     const checkInterval = 500
 
@@ -490,14 +601,11 @@ export class MongoDBEngine extends BaseEngine {
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = buildMongoshCommand(
-          mongosh,
-          port,
-          'admin',
-          'db.runCommand({ping:1})',
-          { quiet: true },
-        )
-        await execAsync(cmd, { timeout: 5000 })
+        await this.runLocalMongosh(container, 'admin', {
+          eval: 'db.runCommand({ping:1})',
+          quiet: true,
+          timeoutMs: 5000,
+        })
         return true
       } catch {
         await new Promise((resolve) => setTimeout(resolve, checkInterval))
@@ -524,13 +632,10 @@ export class MongoDBEngine extends BaseEngine {
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (mongosh) {
       try {
-        const cmd = buildMongoshCommand(
-          mongosh,
-          port,
-          'admin',
-          'db.adminCommand({shutdown:1})',
-        )
-        await execAsync(cmd, { timeout: 10000 })
+        await this.runLocalMongosh(container, 'admin', {
+          eval: 'db.adminCommand({shutdown:1})',
+          timeoutMs: 10000,
+        })
         logDebug('MongoDB shutdown command sent')
         // Wait a bit for process to exit
         await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -596,7 +701,7 @@ export class MongoDBEngine extends BaseEngine {
 
   // Get MongoDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
-    const { name, port } = container
+    const { name } = container
     const containerDir = paths.getContainerPath(name, { engine: ENGINE })
     const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'mongod.pid')
@@ -606,14 +711,11 @@ export class MongoDBEngine extends BaseEngine {
     const mongosh = await configManager.getBinaryPath('mongosh')
     if (mongosh) {
       try {
-        const cmd = buildMongoshCommand(
-          mongosh,
-          port,
-          'admin',
-          'db.runCommand({ping:1})',
-          { quiet: true },
-        )
-        await execAsync(cmd, { timeout: 5000 })
+        await this.runLocalMongosh(container, 'admin', {
+          eval: 'db.runCommand({ping:1})',
+          quiet: true,
+          timeoutMs: 5000,
+        })
         return { running: true, message: 'MongoDB is running' }
       } catch {
         // Not responding, check PID
@@ -656,6 +758,7 @@ export class MongoDBEngine extends BaseEngine {
     const database = (options.database as string) || container.database
 
     return restoreBackup(backupPath, {
+      containerName: container.name,
       port,
       database,
       drop: options.drop !== false,
@@ -692,10 +795,10 @@ export class MongoDBEngine extends BaseEngine {
 
   // Open mongosh interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port } = container
     const db = database || container.database || 'test'
 
     const mongosh = await this.getMongoshPath()
+    const args = await this.buildLocalMongoshArgs(container, db)
 
     // Note: Don't use shell mode - spawn handles paths with spaces correctly
     // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
@@ -704,11 +807,7 @@ export class MongoDBEngine extends BaseEngine {
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        mongosh,
-        ['--host', '127.0.0.1', '--port', String(port), db],
-        spawnOptions,
-      )
+      const proc = spawn(mongosh, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())
@@ -726,9 +825,6 @@ export class MongoDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
-
-    const mongosh = await this.getMongoshPath()
 
     // MongoDB creates databases implicitly when you write to them.
     // Create a temp collection then immediately drop it to force database creation
@@ -737,14 +833,10 @@ export class MongoDBEngine extends BaseEngine {
     // This ensures cleanup even if a previous createDatabase was interrupted.
     // NOTE: Use db.getCollection() instead of db._spindb_init shorthand because
     // mongosh doesn't support shorthand notation for collection names starting with underscore.
-    const cmd = buildMongoshCommand(
-      mongosh,
-      port,
-      database,
-      'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();',
-    )
-
-    await execAsync(cmd, { timeout: 10000 })
+    await this.runLocalMongosh(container, database, {
+      eval: 'try { db.getCollection("_spindb_init").drop(); } catch(e) {} db.createCollection("_spindb_init"); db.getCollection("_spindb_init").drop();',
+      timeoutMs: 10000,
+    })
   }
 
   // Drop a database
@@ -753,19 +845,12 @@ export class MongoDBEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
-
-    const mongosh = await this.getMongoshPath()
-
-    const cmd = buildMongoshCommand(
-      mongosh,
-      port,
-      database,
-      'db.dropDatabase()',
-    )
 
     try {
-      await execAsync(cmd, { timeout: 10000 })
+      await this.runLocalMongosh(container, database, {
+        eval: 'db.dropDatabase()',
+        timeoutMs: 10000,
+      })
     } catch (error) {
       const err = error as Error
       // Ignore "database doesn't exist" scenarios
@@ -775,20 +860,15 @@ export class MongoDBEngine extends BaseEngine {
 
   // Get the size of the database in bytes
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, database } = container
+    const { database } = container
     const db = database || 'test'
 
     try {
-      const mongosh = await this.getMongoshPath()
-      const cmd = buildMongoshCommand(
-        mongosh,
-        port,
-        db,
-        'JSON.stringify(db.stats())',
-        { quiet: true },
-      )
-
-      const { stdout } = await execAsync(cmd, { timeout: 10000 })
+      const { stdout } = await this.runLocalMongosh(container, db, {
+        eval: 'JSON.stringify(db.stats())',
+        quiet: true,
+        timeoutMs: 10000,
+      })
 
       // Defensively extract JSON from output (may contain extra messages)
       const stats = extractJson(stdout) as { dataSize?: number } | null
@@ -872,47 +952,19 @@ export class MongoDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port } = container
     const db = options.database || container.database || 'test'
 
-    const mongosh = await this.getMongoshPath()
-
     if (options.file) {
-      // Run script file
-      // Note: Don't use shell mode here - spawn handles paths with spaces correctly
-      // when shell: false (the default). Shell mode would require quoting the path.
-      const spawnOptions: SpawnOptions = {
-        stdio: 'inherit',
-      }
-
-      return new Promise((resolve, reject) => {
-        const proc = spawn(
-          mongosh,
-          [
-            '--host',
-            '127.0.0.1',
-            '--port',
-            String(port),
-            db,
-            '--file',
-            options.file!,
-          ],
-          spawnOptions,
-        )
-
-        proc.on('error', reject)
-        proc.on('close', (code) => {
-          if (code === 0) {
-            resolve()
-          } else {
-            reject(new Error(`mongosh exited with code ${code}`))
-          }
-        })
+      await this.runLocalMongosh(container, db, {
+        file: options.file,
+        timeoutMs: 60000,
       })
     } else if (options.sql) {
       // Run inline script (using sql field for compatibility, but it's actually JS)
-      const cmd = buildMongoshCommand(mongosh, port, db, options.sql)
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 })
+      const { stdout, stderr } = await this.runLocalMongosh(container, db, {
+        eval: options.sql,
+        timeoutMs: 60000,
+      })
       if (stdout) process.stdout.write(stdout)
       if (stderr) process.stderr.write(stderr)
     } else {
@@ -984,22 +1036,26 @@ export class MongoDBEngine extends BaseEngine {
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else if (options?.password) {
       // Local with auth: build URI with credentials
-      const user = options.username ? encodeURIComponent(options.username) : ''
-      const pass = encodeURIComponent(options.password)
-      const auth = user ? `${user}:${pass}@` : ''
-      const uri = `mongodb://${auth}127.0.0.1:${port}/${db}`
+      const uri = buildMongoUri(port, db, {
+        username: options.username || 'admin',
+        password: options.password,
+        authDatabase: db,
+      })
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else {
-      args = [
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        db,
-        '--quiet',
-        '--eval',
-        wrappedScript,
-      ]
+      const savedCreds = await this.getLocalAuth(container.name)
+      args = savedCreds
+        ? [buildMongoUri(port, db, savedCreds), '--quiet', '--eval', wrappedScript]
+        : [
+            '--host',
+            '127.0.0.1',
+            '--port',
+            String(port),
+            db,
+            '--quiet',
+            '--eval',
+            wrappedScript,
+          ]
     }
 
     const { stdout, stderr } = await new Promise<{
@@ -1066,47 +1122,52 @@ export class MongoDBEngine extends BaseEngine {
    * List all user databases, excluding system databases (admin, config, local).
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
     const mongosh = await this.getMongoshPath()
 
     return new Promise((resolve, reject) => {
       // Use JSON output for reliable parsing
       const script = `JSON.stringify(db.adminCommand({listDatabases: 1}).databases.map(d => d.name))`
-      const args = ['--quiet', '--host', `127.0.0.1:${port}`, '--eval', script]
+      const launch = async () => {
+        const args = await this.buildLocalMongoshArgs(container, 'admin', {
+          quiet: true,
+        })
+        args.push('--eval', script)
+        const proc = spawn(mongosh, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
 
-      const proc = spawn(mongosh, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+        let stdout = ''
+        let stderr = ''
 
-      let stdout = ''
-      let stderr = ''
+        proc.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString()
+        })
+        proc.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString()
+        })
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString()
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
+        proc.on('error', reject)
 
-      proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code !== 0) {
+            reject(new Error(stderr || `mongosh exited with code ${code}`))
+            return
+          }
 
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(stderr || `mongosh exited with code ${code}`))
-          return
-        }
+          try {
+            const allDatabases = JSON.parse(stdout.trim()) as string[]
+            const systemDatabases = ['admin', 'config', 'local']
+            const databases = allDatabases.filter(
+              (db) => !systemDatabases.includes(db),
+            )
+            resolve(databases)
+          } catch (error) {
+            reject(new Error(`Failed to parse database list: ${error}`))
+          }
+        })
+      }
 
-        try {
-          const allDatabases = JSON.parse(stdout.trim()) as string[]
-          const systemDatabases = ['admin', 'config', 'local']
-          const databases = allDatabases.filter(
-            (db) => !systemDatabases.includes(db),
-          )
-          resolve(databases)
-        } catch (error) {
-          reject(new Error(`Failed to parse database list: ${error}`))
-        }
-      })
+      void launch().catch(reject)
     })
   }
 
@@ -1129,7 +1190,7 @@ export class MongoDBEngine extends BaseEngine {
     const jsonPwd = JSON.stringify(password)
     const script = `db.getSiblingDB('${db}').createUser({user:'${username}',pwd:${jsonPwd},roles:[{role:'readWrite',db:'${db}'}]})`
 
-    const mongoshArgs = ['--host', '127.0.0.1', '--port', String(port), 'admin']
+    const mongoshArgs = await this.buildLocalMongoshArgs(container, 'admin')
 
     const runMongoshViaStdin = (js: string): Promise<void> =>
       new Promise((resolve, reject) => {

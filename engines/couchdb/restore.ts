@@ -6,8 +6,9 @@
 import { readFile, open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { couchdbApiRequest } from './api-client'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 // Restore operations may take longer than the default timeout
 const RESTORE_TIMEOUT_MS = 600000 // 10 minutes
@@ -83,6 +84,7 @@ export async function detectBackupFormat(
 
 // Restore options for CouchDB
 export type RestoreOptions = {
+  containerName?: string
   port: number
   database?: string
   flush?: boolean
@@ -99,6 +101,19 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { port, database: targetDatabase, flush } = options
+  const savedCreds = options.containerName
+    ? await loadCredentials(
+        options.containerName,
+        Engine.CouchDB,
+        getDefaultUsername(Engine.CouchDB),
+      )
+    : null
+  const auth = savedCreds
+    ? {
+        username: savedCreds.username,
+        password: savedCreds.password,
+      }
+    : undefined
 
   if (!existsSync(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)
@@ -149,6 +164,9 @@ export async function restoreBackup(
       port,
       'GET',
       `/${encodeURIComponent(dbName)}`,
+      undefined,
+      undefined,
+      auth,
     )
 
     if (checkResponse.status === 200) {
@@ -158,6 +176,9 @@ export async function restoreBackup(
           port,
           'DELETE',
           `/${encodeURIComponent(dbName)}`,
+          undefined,
+          undefined,
+          auth,
         )
         // Accept 200 (OK) or 202 (Accepted) for async deletes
         if (deleteResponse.status !== 200 && deleteResponse.status !== 202) {
@@ -177,6 +198,9 @@ export async function restoreBackup(
         port,
         'PUT',
         `/${encodeURIComponent(dbName)}`,
+        undefined,
+        undefined,
+        auth,
       )
       if (createResponse.status !== 201 && createResponse.status !== 412) {
         // 412 means database already exists, which is fine
@@ -208,6 +232,7 @@ export async function restoreBackup(
       `/${encodeURIComponent(dbName)}/_bulk_docs`,
       { docs: docsToInsert },
       RESTORE_TIMEOUT_MS,
+      auth,
     )
 
     if (bulkResponse.status !== 201) {

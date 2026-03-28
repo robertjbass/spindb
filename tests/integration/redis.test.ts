@@ -32,6 +32,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { paths } from '../../config/paths'
 
 const ENGINE = Engine.Redis
 const DATABASE = '0' // Redis uses numbered databases 0-15
@@ -729,6 +730,210 @@ describe('Redis Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   ✓ Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated local redis', async () => {
+    console.log(`\n🔐 Testing auth-aware Redis backup/restore...`)
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.redis.base + 40,
+    )
+    const sourceName = generateTestName('redis-auth-test-source')
+    const targetName = generateTestName('redis-auth-test-target')
+    const sourcePassword = 'sourcepass123'
+    const targetPassword = 'targetpass456'
+    const { tmpdir } = await import('os')
+    const { appendFile, mkdir, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `redis-auth-backup-${Date.now()}.redis`)
+    const engine = getEngine(ENGINE)
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const connectionString = `redis://default:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE}`
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          'DB_USER=default',
+          `DB_PASSWORD=${password}`,
+          'DB_HOST=127.0.0.1',
+          `DB_PORT=${port}`,
+          `DB_NAME=${DATABASE}`,
+          `DB_URL=${connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    const waitForAuthedReady = async (
+      containerName: string,
+      password: string,
+      timeoutMs = 30000,
+    ): Promise<{ ready: boolean; lastError: string | null }> => {
+      const startTime = Date.now()
+      let lastError: string | null = null
+      while (Date.now() - startTime < timeoutMs) {
+        try {
+          const config = await containerManager.getConfig(containerName)
+          if (config) {
+            const result = await engine.executeQuery(config, 'PING', {
+              database: DATABASE,
+              username: 'default',
+              password,
+            })
+            if (result.rows[0]?.result === 'PONG') {
+              return { ready: true, lastError: null }
+            }
+          }
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error.message : 'unknown auth-ready error'
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      return { ready: false, lastError }
+    }
+
+    const enableRequirePass = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist')
+
+      const configPath = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'redis.conf',
+      )
+      await appendFile(configPath, `\nrequirepass ${password}\n`, 'utf-8')
+      await writeDefaultCredentialFile(containerName, port, password)
+
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
+      const stopped = await waitForStopped(containerName, ENGINE)
+      assert(stopped, 'Container should stop before auth restart')
+
+      const stoppedConfig = await containerManager.getConfig(containerName)
+      assert(stoppedConfig !== null, 'Stopped config should exist')
+      await engine.start(stoppedConfig!)
+      await containerManager.updateConfig(containerName, { status: 'running' })
+      const { ready, lastError } = await waitForAuthedReady(
+        containerName,
+        password,
+      )
+      assert(
+        ready,
+        `Auth-enabled Redis should be ready${lastError ? `: ${lastError}` : ''}`,
+      )
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, {})
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(await waitForReady(ENGINE, sourcePort), 'Source should be ready')
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+      await enableRequirePass(sourceName, sourcePort, sourcePassword)
+
+      const sourceAuthedConfig = await containerManager.getConfig(sourceName)
+      assert(sourceAuthedConfig !== null, 'Source auth config should exist')
+      const sourceResult = await engine.executeQuery(
+        sourceAuthedConfig!,
+        'GET user:count',
+        {
+          database: DATABASE,
+          username: 'default',
+          password: sourcePassword,
+        },
+      )
+      assertEqual(
+        sourceResult.rows[0].result,
+        '5',
+        'Auth-enabled source should still be queryable',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, {})
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(await waitForReady(ENGINE, targetPort), 'Target should be ready')
+      await enableRequirePass(targetName, targetPort, targetPassword)
+
+      const backupResult = await engine.backup(sourceAuthedConfig!, backupPath, {
+        database: DATABASE,
+        format: 'text',
+      })
+      assertEqual(backupResult.format, 'text', 'Backup should use text format')
+
+      const targetAuthedConfig = await containerManager.getConfig(targetName)
+      assert(targetAuthedConfig !== null, 'Target auth config should exist')
+      await engine.restore(targetAuthedConfig!, backupPath, {
+        database: DATABASE,
+        flush: true,
+      })
+
+      const restoredResult = await engine.executeQuery(
+        targetAuthedConfig!,
+        'GET user:count',
+        {
+          database: DATABASE,
+          username: 'default',
+          password: targetPassword,
+        },
+      )
+      assertEqual(
+        restoredResult.rows[0].result,
+        '5',
+        'Restore should succeed against an auth-enabled target',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      for (const containerName of [sourceName, targetName]) {
+        const config = await containerManager.getConfig(containerName)
+        if (config) {
+          const running = await processManager.isRunning(containerName, {
+            engine: ENGINE,
+          }).catch(() => false)
+          if (running) {
+            await engine.stop(config).catch(() => {})
+            await containerManager
+              .updateConfig(containerName, { status: 'stopped' })
+              .catch(() => {})
+          }
+        }
+        await containerManager.delete(containerName, { force: true }).catch(() => {})
+      }
+    }
+
+    console.log('   ✓ Backup and restore work with password-authenticated Redis')
   })
 
   it('should have no test containers remaining', async () => {

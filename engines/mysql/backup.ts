@@ -19,7 +19,16 @@ import {
 import { getEngineDefaults } from '../../config/defaults'
 import { paths } from '../../config/paths'
 import { normalizeVersion } from './version-maps'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 const engineDef = getEngineDefaults('mysql')
 
@@ -96,15 +105,28 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port, version } = container
+  const { name, port, version } = container
   const { database, format } = options
 
   const mysqldump = await getMysqldumpPath(version)
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.MySQL,
+    getDefaultUsername(Engine.MySQL),
+  )
+  const user = savedCreds?.username || engineDef.superuser
+  const password = savedCreds?.password
 
   if (format === 'sql') {
-    return createSqlBackup(mysqldump, port, database, outputPath)
+    return createSqlBackup(mysqldump, port, database, outputPath, {
+      user,
+      password,
+    })
   } else {
-    return createCompressedBackup(mysqldump, port, database, outputPath)
+    return createCompressedBackup(mysqldump, port, database, outputPath, {
+      user,
+      password,
+    })
   }
 }
 
@@ -114,6 +136,7 @@ async function createSqlBackup(
   port: number,
   database: string,
   outputPath: string,
+  auth: { user: string; password?: string },
 ): Promise<BackupResult> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -136,7 +159,7 @@ async function createSqlBackup(
       '-P',
       String(port),
       '-u',
-      engineDef.superuser,
+      auth.user,
       '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
       '--result-file',
       outputPath,
@@ -145,6 +168,9 @@ async function createSqlBackup(
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: auth.password
+        ? { ...process.env, MYSQL_PWD: auth.password }
+        : process.env,
       ...getWindowsSpawnOptions(),
     }
 
@@ -195,6 +221,7 @@ async function createCompressedBackup(
   port: number,
   database: string,
   outputPath: string,
+  auth: { user: string; password?: string },
 ): Promise<BackupResult> {
   const args = [
     '-h',
@@ -202,13 +229,16 @@ async function createCompressedBackup(
     '-P',
     String(port),
     '-u',
-    engineDef.superuser,
+    auth.user,
     '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
     database,
   ]
 
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: auth.password
+      ? { ...process.env, MYSQL_PWD: auth.password }
+      : process.env,
     ...getWindowsSpawnOptions(),
   }
 
