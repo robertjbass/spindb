@@ -1,9 +1,12 @@
+export type RemoteOrigin = 'external' | 'layerbase-cloud'
+
 export type RemoteConnectionConfig = {
   host: string // e.g., 'ep-cool-123.us-east-2.aws.neon.tech'
   connectionString: string // Redacted (password replaced with ***)
   ssl?: boolean // Default true for non-localhost
   provider?: string // Auto-detected: 'neon', 'supabase', 'planetscale', etc.
   providerId?: string // Provider's identifier (e.g., cloud database UUID)
+  origin?: RemoteOrigin // Distinguishes generic external links from Layerbase Cloud links
 }
 
 export type ContainerConfig = {

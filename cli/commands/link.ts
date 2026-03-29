@@ -215,6 +215,7 @@ export const linkCommand = new Command('link')
                 port,
                 database,
                 status: 'linked',
+                origin: remoteConfig.origin,
                 provider: provider ?? undefined,
                 providerId: remoteConfig.providerId,
                 ssl: remoteConfig.ssl,
@@ -248,6 +249,13 @@ export const linkCommand = new Command('link')
             chalk.gray('  ') +
               chalk.white('Database:'.padEnd(14)) +
               chalk.yellow(database),
+          )
+          console.log(
+            chalk.gray('  ') +
+              chalk.white('Origin:'.padEnd(14)) +
+              (remoteConfig.origin === 'layerbase-cloud'
+                ? chalk.cyan('Layerbase Cloud')
+                : chalk.magenta('External')),
           )
           if (provider) {
             console.log(

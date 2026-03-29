@@ -93,6 +93,7 @@ import {
   parseConnectionString,
   detectEngineFromConnectionString,
   detectProvider,
+  isLayerbaseCloudRemote,
   isLocalhost,
   generateRemoteContainerName,
   redactConnectionString,
@@ -747,7 +748,9 @@ export async function handleList(
 
     // Status display
     const statusDisplay = isLinked
-      ? chalk.magenta('↔ linked')
+      ? isLayerbaseCloudRemote(c.remote)
+        ? chalk.cyan('☁ cloud')
+        : chalk.magenta('↔ linked')
       : isFileBased
         ? c.status === 'running'
           ? chalk.blue('● available')
@@ -798,6 +801,10 @@ export async function handleList(
   // Calculate summary
   const linkedContainers = containers.filter((c) => c.status === 'linked')
   const localContainers = containers.filter((c) => c.status !== 'linked')
+  const cloudLinked = linkedContainers.filter((c) =>
+    isLayerbaseCloudRemote(c.remote),
+  ).length
+  const externalLinked = linkedContainers.length - cloudLinked
   const serverContainers = localContainers.filter(
     (c) => !isFileBasedEngine(c.engine),
   )
@@ -823,7 +830,12 @@ export async function handleList(
     )
   }
   if (linkedContainers.length > 0) {
-    parts.push(`${linkedContainers.length} linked`)
+    if (cloudLinked > 0) {
+      parts.push(`${cloudLinked} cloud`)
+    }
+    if (externalLinked > 0) {
+      parts.push(`${externalLinked} linked`)
+    }
   }
 
   // Check if there are any server-based (toggleable) containers (exclude linked)

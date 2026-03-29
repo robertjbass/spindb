@@ -7,6 +7,10 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { paths } from '../../config/paths'
 import { getEngine } from '../../engines'
+import {
+  getRemoteOrigin,
+  isLayerbaseCloudRemote,
+} from '../../core/remote-container'
 import { uiError, uiInfo, header } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import {
@@ -79,7 +83,9 @@ async function displayContainerInfo(
   // Status display based on container type
   let statusDisplay: string
   if (isRemote) {
-    statusDisplay = chalk.magenta('↔ linked')
+    statusDisplay = isLayerbaseCloudRemote(config.remote)
+      ? chalk.cyan('☁ cloud')
+      : chalk.magenta('↔ linked')
   } else if (isFileBased) {
     statusDisplay =
       actualStatus === 'available'
@@ -120,6 +126,13 @@ async function displayContainerInfo(
       chalk.gray('  ') +
         chalk.white('Database:'.padEnd(14)) +
         chalk.yellow(config.database),
+    )
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Origin:'.padEnd(14)) +
+        (getRemoteOrigin(config.remote) === 'layerbase-cloud'
+          ? chalk.cyan('Layerbase Cloud')
+          : chalk.magenta('External')),
     )
     if (config.remote?.provider) {
       console.log(
@@ -232,7 +245,9 @@ async function displayAllContainersInfo(
     // Status display based on container type
     let statusDisplay: string
     if (actualStatus === 'linked') {
-      statusDisplay = chalk.magenta('↔ linked')
+      statusDisplay = isLayerbaseCloudRemote(container.remote)
+        ? chalk.cyan('☁ cloud')
+        : chalk.magenta('↔ linked')
     } else if (isFileBased) {
       statusDisplay =
         actualStatus === 'available'

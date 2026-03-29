@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Secure local CockroachDB mode** — Local CockroachDB containers now generate per-container TLS certificates, start with `--certs-dir`, use root client-cert auth for internal admin flows, and support password-authenticated local backup/restore.
 - **Focused auth-backed backup/restore coverage across the remaining auth-sensitive engines** — CockroachDB, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, and LibSQL now have explicit verification instead of relying on anonymous localhost assumptions.
 - **SurrealDB auth regression coverage** — Added unit tests for explicit `authLevel` handling and quote-safe backup sanitization.
+- **First-class remote origin metadata** — Linked remotes now persist `remote.origin` as either `external` or `layerbase-cloud`, so cloud-linked databases can be distinguished from generic third-party remotes without relying only on provider-name heuristics.
 
 ### Changed
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auth-backed local backup/restore** — PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, SurrealDB, ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, LibSQL, and CockroachDB now reuse saved credentials instead of assuming passwordless localhost access.
 - **FerretDB restore robustness** — Namespace remapping now uses documented `mongorestore` placeholders, and directory scans fail safely instead of throwing on unreadable backups.
 - **Linked-container toggle feedback in the TUI** — Pressing `Shift+Tab` on a linked database in the containers menu now keeps the "managed externally" warning visible across the redraw instead of flashing and disappearing.
+- **Cloud-vs-external linked container display** — `spindb list`, `spindb info`, and the interactive containers menu now show Layerbase Cloud links distinctly from generic linked remotes while staying backward-compatible with older configs that only have `provider`.
 - **MariaDB and Valkey shell safety** — Credential-bearing local admin calls now use argv-based process execution rather than interpolated shell strings.
 - **InfluxDB token parsing errors** — Malformed or unreadable persisted admin token files now raise clear errors that include the file path.
 - **SurrealDB backup sanitization** — Auth-defining statements are stripped without breaking on semicolons inside quoted values.

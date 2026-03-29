@@ -6,7 +6,7 @@
  */
 
 import { Engine, assertExhaustive } from '../types'
-import type { RemoteConnectionConfig } from '../types'
+import type { RemoteConnectionConfig, RemoteOrigin } from '../types'
 
 export type ParsedConnectionString = {
   scheme: string
@@ -116,6 +116,22 @@ const PROVIDER_PATTERNS: ProviderPattern[] = [
   { pattern: /dev\.cloud\.layerbase\.dev$/i, name: 'layerbase-staging' },
   { pattern: /\.layerbase\.dev$/i, name: 'layerbase' },
 ]
+
+export function detectRemoteOrigin(provider?: string | null): RemoteOrigin {
+  return provider?.startsWith('layerbase') ? 'layerbase-cloud' : 'external'
+}
+
+export function getRemoteOrigin(
+  remote?: Pick<RemoteConnectionConfig, 'origin' | 'provider'> | null,
+): RemoteOrigin {
+  return remote?.origin ?? detectRemoteOrigin(remote?.provider ?? null)
+}
+
+export function isLayerbaseCloudRemote(
+  remote?: Pick<RemoteConnectionConfig, 'origin' | 'provider'> | null,
+): boolean {
+  return getRemoteOrigin(remote) === 'layerbase-cloud'
+}
 
 /**
  * Detect the cloud provider from a hostname.
@@ -230,17 +246,20 @@ export function buildRemoteConfig(options: {
   connectionString: string
   provider?: string | null
   providerId?: string
+  origin?: RemoteOrigin
   ssl?: boolean
 }): RemoteConnectionConfig {
   const { host, connectionString, provider, providerId } = options
 
   // Default SSL to true for non-localhost connections
   const ssl = options.ssl ?? !isLocalhost(host)
+  const origin = options.origin ?? detectRemoteOrigin(provider)
 
   return {
     host,
     connectionString: redactConnectionString(connectionString),
     ssl,
+    origin,
     ...(provider && { provider }),
     ...(providerId && { providerId }),
   }

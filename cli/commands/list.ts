@@ -6,6 +6,7 @@ import { containerManager } from '../../core/container-manager'
 import { getEngine } from '../../engines'
 import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
+import { isLayerbaseCloudRemote } from '../../core/remote-container'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import type { ContainerConfig } from '../../types'
 import {
@@ -197,7 +198,9 @@ export const listCommand = new Command('list')
         // Status labels based on container type
         let statusDisplay: string
         if (isRemoteContainer(container)) {
-          statusDisplay = chalk.magenta('↔ linked')
+          statusDisplay = isLayerbaseCloudRemote(container.remote)
+            ? chalk.cyan('☁ cloud')
+            : chalk.magenta('↔ linked')
         } else if (isFileBasedEngine(container.engine)) {
           statusDisplay =
             container.status === 'running'
