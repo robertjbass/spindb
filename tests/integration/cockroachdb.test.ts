@@ -27,6 +27,7 @@ import {
   runScriptSQL,
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
+import { saveCredentials } from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { isWindows } from '../../core/platform-service'
@@ -646,6 +647,123 @@ describe('CockroachDB Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated secure local mode', async () => {
+    const sourceName = generateTestName('cockroachdb-auth-source')
+    const targetName = generateTestName('cockroachdb-auth-target')
+    const sourcePort = testPorts[0] + 10
+    const targetPort = testPorts[1] + 10
+    const username = 'auth_user'
+    const sourcePassword = 'securepass123'
+    const targetPassword = 'securepass456'
+
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `cockroachdb-auth-backup-${Date.now()}.sql`,
+    )
+
+    try {
+      const engine = getEngine(ENGINE)
+
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, {
+        port: sourcePort,
+      })
+
+      let sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(await waitForReady(ENGINE, sourcePort), 'Source should be ready')
+
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+
+      const sourceCreds = await engine.createUser(sourceConfig!, {
+        username,
+        password: sourcePassword,
+        database: DATABASE,
+      })
+      await saveCredentials(sourceName, ENGINE, sourceCreds)
+
+      sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should still exist')
+      const sourceRows = await engine.executeQuery(
+        sourceConfig!,
+        'SELECT id FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+          username,
+          password: sourcePassword,
+        },
+      )
+      assertEqual(
+        sourceRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Password-authenticated source should still be queryable',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, {
+        port: targetPort,
+      })
+
+      let targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(await waitForReady(ENGINE, targetPort), 'Target should be ready')
+
+      const targetCreds = await engine.createUser(targetConfig!, {
+        username,
+        password: targetPassword,
+        database: DATABASE,
+      })
+      await saveCredentials(targetName, ENGINE, targetCreds)
+
+      const backupResult = await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+      assertEqual(backupResult.format, 'sql', 'Backup should use SQL format')
+
+      targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should still exist')
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+
+      const restoredRows = await engine.executeQuery(
+        targetConfig!,
+        'SELECT id FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+          username,
+          password: targetPassword,
+        },
+      )
+      assertEqual(
+        restoredRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Secure local restore should preserve all rows',
+      )
+    } finally {
+      await rm(backupPath, { force: true })
+      await containerManager.delete(sourceName, { force: true }).catch(() => {})
+      await containerManager.delete(targetName, { force: true }).catch(() => {})
+    }
   })
 
   it('should have no test containers remaining', async (t) => {

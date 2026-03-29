@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { existsSync, readdirSync } from 'fs'
 import { rm } from 'fs/promises'
 import { randomUUID } from 'crypto'
+import { join } from 'path'
 import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
 import { processManager } from '../../core/process-manager'
@@ -305,8 +306,16 @@ export async function executeSQL(
     const cockroachPath = await engineImpl
       .getCockroachPath(TEST_VERSIONS.cockroachdb)
       .catch(() => 'cockroach')
-    // For CockroachDB, use cockroach sql --insecure
-    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
+    const config = (await containerManager.list()).find(
+      (c) => c.engine === engine && c.port === port,
+    )
+    if (!config) {
+      throw new Error(
+        `Could not find CockroachDB container config for port ${port}`,
+      )
+    }
+    const certsDir = join(paths.getContainerPath(config.name, { engine }), 'certs')
+    const cmd = `"${cockroachPath}" sql --certs-dir "${certsDir}" --user root --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.SurrealDB) {
     const engineImpl = getEngine(engine)
@@ -502,8 +511,17 @@ export async function executeSQLFile(
     const cockroachPath = await engineImpl
       .getCockroachPath(TEST_VERSIONS.cockroachdb)
       .catch(() => 'cockroach')
+    const config = (await containerManager.list()).find(
+      (c) => c.engine === engine && c.port === port,
+    )
+    if (!config) {
+      throw new Error(
+        `Could not find CockroachDB container config for port ${port}`,
+      )
+    }
+    const certsDir = join(paths.getContainerPath(config.name, { engine }), 'certs')
     // CockroachDB uses --file flag for SQL files
-    const cmd = `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
+    const cmd = `"${cockroachPath}" sql --certs-dir "${certsDir}" --user root --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
     return execAsync(cmd)
   } else if (engine === Engine.SurrealDB) {
     const engineImpl = getEngine(engine)
@@ -567,6 +585,35 @@ export async function getRowCount(
   database: string,
   table: string,
 ): Promise<number> {
+  if (engine === Engine.CockroachDB) {
+    const containers = await containerManager.list()
+    const config =
+      containers.find((c) => c.engine === engine && c.port === port) || null
+
+    if (!config) {
+      throw new Error(
+        `Could not find CockroachDB container config for port ${port}`,
+      )
+    }
+
+    const engineImpl = getEngine(engine)
+    const result = await engineImpl.executeQuery(
+      config,
+      `SELECT COUNT(*) as count FROM ${table}`,
+      { database },
+    )
+
+    const rawCount = result.rows[0]?.count
+    const count =
+      typeof rawCount === 'number' ? rawCount : Number.parseInt(String(rawCount), 10)
+
+    if (!Number.isNaN(count)) {
+      return count
+    }
+
+    throw new Error(`Could not parse CockroachDB row count from: ${rawCount}`)
+  }
+
   if (engine === Engine.MongoDB || engine === Engine.FerretDB) {
     // MongoDB/FerretDB uses countDocuments() for collections
     const { stdout } = await executeSQL(
@@ -756,15 +803,19 @@ export async function waitForReady(
           { timeout: 5000 },
         )
       } else if (engine === Engine.CockroachDB) {
-        // Use cockroach sql to ping CockroachDB
-        const engineImpl = getEngine(engine)
-        const cockroachPath = await engineImpl
-          .getCockroachPath(TEST_VERSIONS.cockroachdb)
-          .catch(() => 'cockroach')
-        await execAsync(
-          `"${cockroachPath}" sql --insecure --host 127.0.0.1:${port} --execute "SELECT 1"`,
-          { timeout: 5000 },
+        const config = (await containerManager.list()).find(
+          (c) => c.engine === engine && c.port === port,
         )
+        if (!config) {
+          throw new Error(
+            `Could not find CockroachDB container config for port ${port}`,
+          )
+        }
+        const status = await getEngine(engine).status(config)
+        if (!status.running) {
+          throw new Error(status.message || 'CockroachDB is not ready')
+        }
+        return true
       } else if (engine === Engine.Qdrant) {
         // Use fetch to ping Qdrant REST API with timeout
         const controller = new AbortController()

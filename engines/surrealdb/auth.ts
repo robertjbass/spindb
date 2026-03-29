@@ -27,6 +27,22 @@ function normalizeSurrealAuthLevel(
   }
 }
 
+function readExplicitSurrealAuthLevel(
+  connectionString: string,
+): SurrealAuthLevel | null {
+  const url = new URL(connectionString)
+  const rawAuthLevel = url.searchParams.get('authLevel')
+  const explicit = normalizeSurrealAuthLevel(rawAuthLevel)
+
+  if (rawAuthLevel && !explicit) {
+    throw new Error(
+      `Invalid SurrealDB authLevel "${rawAuthLevel}" in connection string`,
+    )
+  }
+
+  return explicit
+}
+
 export function getBootstrapSurrealAuth(): LocalSurrealAuth {
   return {
     username: 'root',
@@ -40,18 +56,16 @@ export function inferSurrealAuthLevel(options: {
   database?: string
   connectionString?: string
 }): SurrealAuthLevel {
-  try {
-    if (options.connectionString) {
-      const url = new URL(options.connectionString)
-      const explicit = normalizeSurrealAuthLevel(
-        url.searchParams.get('authLevel'),
-      )
-      if (explicit) {
-        return explicit
-      }
+  if (options.connectionString) {
+    const explicit = readExplicitSurrealAuthLevel(options.connectionString)
+    if (explicit) {
+      return explicit
     }
-  } catch {
-    // Fall back to heuristic inference below.
+    if (options.username !== 'root') {
+      throw new Error(
+        'SurrealDB connection strings for non-root credentials must include ?authLevel=namespace or ?authLevel=database',
+      )
+    }
   }
 
   if (options.username === 'root') {
@@ -104,6 +118,8 @@ export function parseSurrealConnectionString(connectionString: string): {
 } {
   const url = new URL(connectionString)
   const pathParts = url.pathname.split('/').filter(Boolean)
+  const username = decodeURIComponent(url.username || 'root')
+  const password = decodeURIComponent(url.password || 'root')
 
   const namespace =
     pathParts[0] && pathParts[0] !== 'rpc'
@@ -117,12 +133,12 @@ export function parseSurrealConnectionString(connectionString: string): {
   return {
     host: url.hostname || '127.0.0.1',
     port: parseInt(url.port, 10) || 8000,
-    username: decodeURIComponent(url.username || 'root'),
-    password: decodeURIComponent(url.password || 'root'),
+    username,
+    password,
     namespace,
     database,
     authLevel: inferSurrealAuthLevel({
-      username: decodeURIComponent(url.username || 'root'),
+      username,
       database,
       connectionString,
     }),

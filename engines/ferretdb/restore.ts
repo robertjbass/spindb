@@ -126,10 +126,17 @@ function addNamespaceRemapArgs(
   sourceDatabase: string | undefined,
   targetDatabase: string,
 ): void {
-  const nsFromDb = sourceDatabase ?? '$prefix$'
+  if (sourceDatabase) {
+    args.push(
+      `--nsFrom=${sourceDatabase}.$collection$`,
+      `--nsTo=${targetDatabase}.$collection$`,
+    )
+    return
+  }
+
   args.push(
-    `--nsFrom=${nsFromDb}.$suffix$`,
-    `--nsTo=${targetDatabase}.$suffix$`,
+    '--nsFrom=$db$.$collection$',
+    `--nsTo=${targetDatabase}.$collection$`,
   )
 }
 
@@ -318,24 +325,31 @@ async function restoreViaMongo(
     if (existsSync(targetDbDir)) {
       args.push(targetDbDir)
     } else {
-      const entries = readdirSync(backupPath, { withFileTypes: true })
-      const dbDirs = entries.filter((entry) => entry.isDirectory())
+      let restorePath = backupPath
 
-      if (dbDirs.length === 1) {
-        args.push(join(backupPath, dbDirs[0].name))
-      } else if (dbDirs.length > 1) {
-        const dbWithBson = dbDirs.find((entry) => {
-          const files = readdirSync(join(backupPath, entry.name))
-          return files.some((file) => file.endsWith('.bson'))
-        })
-        if (dbWithBson) {
-          args.push(join(backupPath, dbWithBson.name))
-        } else {
-          args.push(backupPath)
+      try {
+        const entries = readdirSync(backupPath, { withFileTypes: true })
+        const dbDirs = entries.filter((entry) => entry.isDirectory())
+
+        if (dbDirs.length === 1) {
+          restorePath = join(backupPath, dbDirs[0].name)
+        } else if (dbDirs.length > 1) {
+          const dbWithBson = dbDirs.find((entry) => {
+            const files = readdirSync(join(backupPath, entry.name))
+            return files.some((file) => file.endsWith('.bson'))
+          })
+          if (dbWithBson) {
+            restorePath = join(backupPath, dbWithBson.name)
+          }
         }
-      } else {
-        args.push(backupPath)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        logWarning(
+          `Failed to inspect FerretDB backup directory "${backupPath}": ${message}. Falling back to root directory restore.`,
+        )
       }
+
+      args.push(restorePath)
     }
   } else if (format.format === 'archive-gzip') {
     args.push('--archive=' + backupPath, '--gzip')

@@ -20,15 +20,56 @@ import {
 import { requireSurrealPath } from './cli-utils'
 import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
-function sanitizeBackupContent(content: string): string {
-  return content
-    .replace(
-      /(^|\n)\s*DEFINE\s+(USER|ACCESS)\b[\s\S]*?;\s*(?=\n|$)/gi,
-      '\n',
-    )
-    .replace(/(^|\n)\s*OPTION\s+IMPORT\s*;\s*(?=\n|$)/gi, '\n')
-    .replace(/(^|\n)\s*USE\s+NS\b[\s\S]*?;\s*(?=\n|$)/gi, '\n')
-    .replace(/(^|\n)\s*USE\s+DB\b[\s\S]*?;\s*(?=\n|$)/gi, '\n')
+function shouldStripSurrealStatement(statement: string): boolean {
+  const normalized = statement.trim().replace(/\s+/g, ' ').toUpperCase()
+  return (
+    normalized.startsWith('DEFINE USER ') ||
+    normalized.startsWith('DEFINE ACCESS ') ||
+    normalized === 'OPTION IMPORT;' ||
+    normalized.startsWith('USE NS ') ||
+    normalized.startsWith('USE DB ')
+  )
+}
+
+export function sanitizeBackupContent(content: string): string {
+  let result = ''
+  let current = ''
+  let quote: "'" | '"' | null = null
+  let escaped = false
+
+  for (const char of content) {
+    current += char
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (quote) {
+      if (char === '\\') {
+        escaped = true
+      } else if (char === quote) {
+        quote = null
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+
+    if (char === ';') {
+      result += shouldStripSurrealStatement(current) ? '\n' : current
+      current = ''
+    }
+  }
+
+  if (current.length > 0) {
+    result += shouldStripSurrealStatement(current) ? '\n' : current
+  }
+
+  return result
 }
 
 /**

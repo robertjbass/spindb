@@ -22,6 +22,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -253,6 +257,116 @@ describe('InfluxDB Integration Tests', () => {
     assertEqual(result.rowCount, 5, 'Should have 5 rows')
 
     console.log(`   REST API query returned ${result.rowCount} rows`)
+  })
+
+  it('should backup and restore with admin token auth enabled', async () => {
+    console.log('\n Testing auth-backed InfluxDB backup/restore...')
+
+    const authPorts = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.influxdb.base + 20,
+    )
+    const [sourcePort, targetPort] = authPorts
+    const sourceName = generateTestName('influxdb-auth-source')
+    const targetName = generateTestName('influxdb-auth-target')
+    const username = getDefaultUsername(ENGINE)
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = `${tmpdir()}/influxdb-auth-backup-${Date.now()}.sql`
+    const engine = getEngine(ENGINE)
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, {
+        port: sourcePort,
+      })
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source container config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+
+      const sourceReady = await waitForReady(ENGINE, sourcePort)
+      assert(sourceReady, 'Source InfluxDB should be ready')
+
+      const writeOk = await writeLineProtocol(sourcePort, DATABASE, SEED_DATA)
+      assert(writeOk, 'Should seed auth-backed source data')
+
+      const sourceCount = await waitForRowCount(
+        sourcePort,
+        DATABASE,
+        'test_user',
+        5,
+      )
+      assertEqual(sourceCount, 5, 'Source should have 5 rows before auth')
+
+      const sourceCreds = await engine.createUser(sourceConfig!, {
+        username,
+        password: 'ignored-admin-token-input',
+      })
+      await saveCredentials(sourceName, ENGINE, sourceCreds)
+
+      const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
+      assert(
+        sourceAuthedReady,
+        'Source InfluxDB should be ready after enabling auth',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, {
+        port: targetPort,
+      })
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target container config should exist')
+
+      // createUser intentionally runs `influxdb3 create token --offline` and writes
+      // the persisted admin token file that the subsequent start() call consumes.
+      const targetCreds = await engine.createUser(targetConfig!, {
+        username,
+        password: 'ignored-target-admin-token-input',
+      })
+      await saveCredentials(targetName, ENGINE, targetCreds)
+
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+
+      const targetReady = await waitForReady(ENGINE, targetPort)
+      assert(targetReady, 'Target InfluxDB should be ready with auth enabled')
+
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+
+      const restored = await executeQuery(
+        targetName,
+        'SELECT * FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        restored.rowCount,
+        5,
+        'Authenticated InfluxDB restore should preserve all rows',
+      )
+    } finally {
+      await containerManager.delete(sourceName, { force: true }).catch(() => {})
+      await containerManager.delete(targetName, { force: true }).catch(() => {})
+      await rm(backupPath, { force: true })
+    }
   })
 
   it('should clone container using backup/restore', async () => {

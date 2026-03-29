@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -11,8 +11,11 @@ import {
   logDebug,
   logWarning,
   assertValidUsername,
-  UnsupportedOperationError,
 } from '../../core/error-handler'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { meilisearchBinaryManager } from './binary-manager'
@@ -36,6 +39,7 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  Engine,
   type QueryResult,
   type QueryOptions,
   type CreateUserOptions,
@@ -45,6 +49,7 @@ import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'meilisearch'
 const engineDef = getEngineDefaults(ENGINE)
+const MASTER_KEY_FILE = 'master.key'
 
 /**
  * Initial delay before checking if Meilisearch is ready after spawning.
@@ -155,6 +160,21 @@ async function remoteMeilisearchRequest(
   } finally {
     clearTimeout(timeoutId)
   }
+}
+
+function getMasterKeyPath(containerName: string): string {
+  const containerDir = paths.getContainerPath(containerName, { engine: ENGINE })
+  return join(containerDir, MASTER_KEY_FILE)
+}
+
+async function readMasterKey(containerName: string): Promise<string | null> {
+  const masterKeyPath = getMasterKeyPath(containerName)
+  if (!existsSync(masterKeyPath)) {
+    return null
+  }
+
+  const masterKey = (await readFile(masterKeyPath, 'utf-8')).trim()
+  return masterKey || null
 }
 
 export class MeilisearchEngine extends BaseEngine {
@@ -446,6 +466,12 @@ export class MeilisearchEngine extends BaseEngine {
     if (pendingSnapshotImport && existsSync(pendingSnapshotImport)) {
       args.push('--import-snapshot', pendingSnapshotImport)
       logDebug(`Will import snapshot: ${pendingSnapshotImport}`)
+    }
+
+    const masterKey = await readMasterKey(name)
+    if (masterKey) {
+      args.push('--master-key', masterKey)
+      logDebug(`Using persisted Meilisearch master key for ${name}`)
     }
 
     logDebug(`Starting meilisearch with args: ${args.join(' ')}`)
@@ -1196,7 +1222,16 @@ export class MeilisearchEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port } = container
+    const { name, port } = container
+    const savedCreds =
+      options?.password
+        ? null
+        : await loadCredentials(
+            name,
+            Engine.Meilisearch,
+            getDefaultUsername(Engine.Meilisearch),
+          )
+    const apiKey = options?.password || savedCreds?.apiKey
 
     // Parse the query string: METHOD /path [body]
     const trimmed = query.trim()
@@ -1251,7 +1286,7 @@ export class MeilisearchEngine extends BaseEngine {
       path,
       body,
       30000,
-      options?.password,
+      apiKey,
     )
 
     if (response.status >= 400) {
@@ -1268,10 +1303,22 @@ export class MeilisearchEngine extends BaseEngine {
    * Meilisearch uses indexes, so we query the /indexes endpoint.
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
+    const { name, port } = container
+    const savedCreds = await loadCredentials(
+      name,
+      Engine.Meilisearch,
+      getDefaultUsername(Engine.Meilisearch),
+    )
 
     try {
-      const response = await meilisearchApiRequest(port, 'GET', '/indexes')
+      const response = await meilisearchApiRequest(
+        port,
+        'GET',
+        '/indexes',
+        undefined,
+        30000,
+        savedCreds?.apiKey,
+      )
       if (response.status === 200 && response.data) {
         // Response is { results: [{ uid: "index_name", ... }, ...], ... }
         const data = response.data as { results?: Array<{ uid: string }> }
@@ -1292,77 +1339,37 @@ export class MeilisearchEngine extends BaseEngine {
     container: ContainerConfig,
     options: CreateUserOptions,
   ): Promise<UserCredentials> {
-    const { username } = options
+    const { name, port } = container
+    const { username, password } = options
     assertValidUsername(username)
-    const { port } = container
+    const masterKeyPath = getMasterKeyPath(name)
 
-    // Meilisearch requires a master key to create API keys
-    // Check if the /keys endpoint is available
-    const keysResponse = await meilisearchApiRequest(port, 'GET', '/keys')
+    let masterKey = await readMasterKey(name)
+    const nextMasterKey = (password || '').trim()
+    const shouldRotateKey =
+      nextMasterKey.length > 0 && nextMasterKey !== masterKey
 
-    if (keysResponse.status === 403 || keysResponse.status === 401) {
-      throw new UnsupportedOperationError(
-        'createUser',
-        this.displayName,
-        'Meilisearch is running without a master key. API key management requires a master key. ' +
-          'Restart the container with a master key to enable user/key management.',
-      )
-    }
-
-    // Derive a deterministic UID from the username so createUser is idempotent.
-    // Meilisearch UIDs are UUIDv4 format; we derive one via a stable hash.
-    const { createHash } = await import('crypto')
-    const hashBuf = createHash('md5').update(`spindb:${username}`).digest()
-    // Set version (4) and variant (RFC 4122) bits for valid UUIDv4
-    hashBuf[6] = (hashBuf[6] & 0x0f) | 0x40
-    hashBuf[8] = (hashBuf[8] & 0x3f) | 0x80
-    const hash = hashBuf.toString('hex')
-    const uid = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
-
-    // Check if a key with this UID already exists
-    const existingResponse = await meilisearchApiRequest(
-      port,
-      'GET',
-      `/keys/${uid}`,
-    )
-
-    let apiKey: string
-
-    if (existingResponse.status === 200) {
-      // Key already exists — return it
-      const existingData = existingResponse.data as { key?: string }
-      if (!existingData.key) {
-        throw new Error('Existing API key response missing key property')
-      }
-      apiKey = existingData.key
-      logDebug(`Found existing Meilisearch API key: ${username}`)
-    } else if (existingResponse.status !== 404) {
-      // Unexpected error (e.g., 401, 403, 429, 500) — surface it instead of silently creating a new key
-      throw new Error(
-        `Failed to check existing API key (HTTP ${existingResponse.status}): ${JSON.stringify(existingResponse.data)}`,
-      )
-    } else {
-      // Create a new API key with the deterministic UID
-      const response = await meilisearchApiRequest(port, 'POST', '/keys', {
-        uid,
-        description: username,
-        actions: ['*'],
-        indexes: ['*'],
-        expiresAt: null,
-      } as unknown as Record<string, unknown>)
-
-      if (response.status !== 201 && response.status !== 200) {
+    if (!masterKey || shouldRotateKey) {
+      if (!nextMasterKey) {
         throw new Error(
-          `Failed to create API key: ${JSON.stringify(response.data)}`,
+          'Meilisearch auth requires a non-empty master key password',
         )
       }
+      masterKey = nextMasterKey
+      await writeFile(masterKeyPath, `${masterKey}\n`, 'utf-8')
+      await chmod(masterKeyPath, 0o600)
 
-      const data = response.data as { key?: string }
-      if (!data.key) {
-        throw new Error('API key creation response missing key property')
+      const statusResult = await this.status(container)
+      if (statusResult.running) {
+        logWarning(
+          `Restarting Meilisearch container "${name}" to apply master key change. ` +
+            'Active client connections will be disconnected.',
+        )
+        await this.stop(container)
+        await this.start(container)
       }
-      apiKey = data.key
-      logDebug(`Created Meilisearch API key: ${username}`)
+
+      logDebug(`Configured persisted Meilisearch master key for ${name}`)
     }
 
     const connectionString = `http://127.0.0.1:${port}`
@@ -1372,8 +1379,8 @@ export class MeilisearchEngine extends BaseEngine {
       password: '',
       connectionString,
       engine: container.engine,
-      container: container.name,
-      apiKey,
+      container: name,
+      apiKey: masterKey,
     }
   }
 }

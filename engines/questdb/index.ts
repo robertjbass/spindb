@@ -42,6 +42,7 @@ import {
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
+import { loadLocalQuestAuth } from './auth'
 import {
   type Platform,
   type Arch,
@@ -553,6 +554,7 @@ export class QuestDBEngine extends BaseEngine {
   async connect(container: ContainerConfig, database?: string): Promise<void> {
     const { port } = container
     const db = database || container.database || 'qdb'
+    const auth = await loadLocalQuestAuth(container.name)
 
     // Find psql
     let psqlPath = await configManager.getBinaryPath('psql')
@@ -570,13 +572,13 @@ export class QuestDBEngine extends BaseEngine {
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
-      env: { ...process.env, PGPASSWORD: 'quest' },
+      env: { ...process.env, PGPASSWORD: auth.password },
     }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(
         psqlPath!,
-        ['-h', '127.0.0.1', '-p', String(port), '-U', 'admin', '-d', db],
+        ['-h', '127.0.0.1', '-p', String(port), '-U', auth.user, '-d', db],
         spawnOptions,
       )
 
@@ -792,6 +794,7 @@ export class QuestDBEngine extends BaseEngine {
   ): Promise<void> {
     const { port } = container
     const db = options.database || container.database || 'qdb'
+    const auth = await loadLocalQuestAuth(container.name)
 
     // Find psql
     let psqlPath = await configManager.getBinaryPath('psql')
@@ -812,7 +815,7 @@ export class QuestDBEngine extends BaseEngine {
         '-p',
         String(port),
         '-U',
-        'admin',
+        auth.user,
         '-d',
         db,
         '-f',
@@ -822,7 +825,7 @@ export class QuestDBEngine extends BaseEngine {
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(psqlPath!, args, {
           stdio: 'inherit',
-          env: { ...process.env, PGPASSWORD: 'quest' },
+          env: { ...process.env, PGPASSWORD: auth.password },
         })
 
         proc.on('error', reject)
@@ -842,7 +845,7 @@ export class QuestDBEngine extends BaseEngine {
         '-p',
         String(port),
         '-U',
-        'admin',
+        auth.user,
         '-d',
         db,
         '-c',
@@ -852,7 +855,7 @@ export class QuestDBEngine extends BaseEngine {
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(psqlPath!, args, {
           stdio: 'inherit',
-          env: { ...process.env, PGPASSWORD: 'quest' },
+          env: { ...process.env, PGPASSWORD: auth.password },
         })
 
         proc.on('error', reject)
@@ -880,6 +883,11 @@ export class QuestDBEngine extends BaseEngine {
   ): Promise<QueryResult> {
     const { port } = container
     const db = options?.database || container.database || 'qdb'
+    const defaultAuth = await loadLocalQuestAuth(container.name)
+    const auth = {
+      user: options?.username || defaultAuth.user,
+      password: options?.password || defaultAuth.password,
+    }
 
     // Find psql
     let psqlPath = await configManager.getBinaryPath('psql')
@@ -902,7 +910,7 @@ export class QuestDBEngine extends BaseEngine {
         '-p',
         String(port),
         '-U',
-        'admin',
+        auth.user,
         '-d',
         db,
         '--csv',
@@ -912,7 +920,7 @@ export class QuestDBEngine extends BaseEngine {
 
       const proc = spawn(psqlPath!, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, PGPASSWORD: 'quest' },
+        env: { ...process.env, PGPASSWORD: auth.password },
       })
 
       let stdout = ''

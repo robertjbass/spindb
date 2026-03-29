@@ -282,10 +282,9 @@ describe('FerretDB v1 Integration Tests', () => {
     const { rm } = await import('fs/promises')
     const dumpPath = join(tmpdir(), `ferretdb-v1-test-dump-${Date.now()}.dump`)
 
-    // Use 'custom' format which supports --clean for proper restore
     await engine.backup(sourceConfig!, dumpPath, {
-      database: 'ferretdb', // FerretDB stores all data in the 'ferretdb' PostgreSQL database
-      format: 'custom',
+      database: DATABASE,
+      format: 'archive',
     })
 
     // Re-read config after start to get the backendPort
@@ -297,7 +296,7 @@ describe('FerretDB v1 Integration Tests', () => {
 
     try {
       await engine.restore(updatedConfig!, dumpPath, {
-        database: 'ferretdb',
+        database: DATABASE,
       })
     } finally {
       // Clean up dump file regardless of restore success/failure

@@ -20,6 +20,7 @@ import {
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername } from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -435,6 +436,120 @@ describe('libSQL Integration Tests', () => {
     await rm(backupPath, { recursive: true, force: true })
 
     console.log('   Container cloned via backup/restore')
+  })
+
+  it('should backup and restore with JWT auth enabled on both source and target', async () => {
+    console.log('\n Testing auth-backed libSQL backup/restore...')
+
+    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.libsql.base + 20)
+    const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
+    const sourceName = generateTestName('libsql-auth-source')
+    const targetName = generateTestName('libsql-auth-target')
+    const username = getDefaultUsername(ENGINE)
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = `${tmpdir()}/libsql-auth-backup-${Date.now()}.sql`
+    const engine = getEngine(ENGINE)
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, { port: sourcePort })
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source container config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+
+      const sourceReady = await waitForReady(ENGINE, sourcePort)
+      assert(sourceReady, 'Source libSQL should be ready')
+
+      await libsqlQuery(
+        sourcePort,
+        `CREATE TABLE IF NOT EXISTS test_user (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
+      )
+      await libsqlQuery(
+        sourcePort,
+        `INSERT INTO test_user (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie')`,
+      )
+
+      const sourceCreds = await engine.createUser(sourceConfig!, {
+        username,
+        password: '',
+      })
+      assertTruthy(sourceCreds.apiKey, 'Source JWT token should exist')
+
+      const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
+      assert(sourceAuthedReady, 'Source libSQL should be ready after auth restart')
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, { port: targetPort })
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target container config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+
+      const targetReady = await waitForReady(ENGINE, targetPort)
+      assert(targetReady, 'Target libSQL should be ready before restore')
+
+      const targetCreds = await engine.createUser(targetConfig!, {
+        username,
+        password: '',
+      })
+      assertTruthy(targetCreds.apiKey, 'Target JWT token should exist')
+
+      const targetAuthedReady = await waitForReady(ENGINE, targetPort)
+      assert(targetAuthedReady, 'Target libSQL should be ready after auth restart')
+
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+
+      const restored = await executeQuery(
+        targetName,
+        'SELECT COUNT(*) AS count FROM test_user',
+      )
+      assertEqual(restored.rowCount, 1, 'Should return a single count row')
+      const row = restored.rows[0] as Record<string, unknown>
+      assertEqual(Number(row.count), 3, 'Restored auth-backed libSQL data should match source')
+
+      console.log('   JWT-authenticated libSQL backup/restore succeeded')
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      if (sourceConfig) {
+        await engine.stop(sourceConfig).catch(() => {})
+        await waitForStopped(sourceName, ENGINE, 60000).catch(() => false)
+        await containerManager.delete(sourceName, { force: true }).catch(
+          () => {},
+        )
+      }
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      if (targetConfig) {
+        await engine.stop(targetConfig).catch(() => {})
+        await waitForStopped(targetName, ENGINE, 60000).catch(() => false)
+        await containerManager.delete(targetName, { force: true }).catch(
+          () => {},
+        )
+      }
+    }
   })
 
   it('should verify cloned data matches source', async () => {

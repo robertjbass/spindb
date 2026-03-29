@@ -25,6 +25,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -362,6 +366,182 @@ describe('Weaviate Integration Tests', () => {
       `   Renamed to "${renamedContainerName}" on port ${testPorts[2]}`,
     )
   })
+
+  it(
+    'should backup with API-key auth and restore successfully',
+    { skip: SKIP_BACKUP_ON_WINDOWS },
+    async () => {
+      console.log('\n Testing auth-backed Weaviate backup/restore...')
+
+      const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.weaviate.base + 20)
+      const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
+      const sourceName = generateTestName('weaviate-auth-source')
+      const targetName = generateTestName('weaviate-auth-target')
+      const username = getDefaultUsername(ENGINE)
+      const sourceApiKey = 'weaviate-source-key-123'
+      const targetApiKey = 'weaviate-target-key-456'
+      const { tmpdir } = await import('os')
+      const { rm, readFile } = await import('fs/promises')
+      const { join: joinPath } = await import('path')
+      const backupPath = `${tmpdir()}/weaviate-auth-backup-${Date.now()}`
+      const engine = getEngine(ENGINE)
+
+      try {
+        await containerManager.create(sourceName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: sourcePort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(sourceName, TEST_VERSION, { port: sourcePort })
+
+        const sourceConfig = await containerManager.getConfig(sourceName)
+        assert(sourceConfig !== null, 'Source container config should exist')
+        await engine.start(sourceConfig!)
+        await containerManager.updateConfig(sourceName, { status: 'running' })
+
+        const sourceReady = await waitForReady(ENGINE, sourcePort)
+        assert(sourceReady, 'Source Weaviate should be ready')
+
+        const created = await createWeaviateClass(sourcePort, TEST_CLASS)
+        assert(created, 'Should create source class')
+        const inserted = await insertWeaviateObjects(sourcePort, TEST_CLASS, [
+          { properties: { text: 'alpha document', value: 1 } },
+          { properties: { text: 'beta document', value: 2 } },
+        ])
+        assert(inserted, 'Should insert source objects')
+
+        const sourceCreds = await engine.createUser(sourceConfig!, {
+          username,
+          password: sourceApiKey,
+        })
+        await saveCredentials(sourceName, ENGINE, sourceCreds)
+
+        const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
+        assert(sourceAuthedReady, 'Source Weaviate should be ready after auth restart')
+
+        await containerManager.create(targetName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: targetPort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(targetName, TEST_VERSION, { port: targetPort })
+
+        const targetConfig = await containerManager.getConfig(targetName)
+        assert(targetConfig !== null, 'Target container config should exist')
+        await engine.start(targetConfig!)
+        await containerManager.updateConfig(targetName, { status: 'running' })
+
+        const targetReady = await waitForReady(ENGINE, targetPort)
+        assert(targetReady, 'Target Weaviate should be ready before auth config')
+
+        const targetCreds = await engine.createUser(targetConfig!, {
+          username,
+          password: targetApiKey,
+        })
+        await saveCredentials(targetName, ENGINE, targetCreds)
+
+        const targetAuthedReady = await waitForReady(ENGINE, targetPort)
+        assert(targetAuthedReady, 'Target Weaviate should be ready after auth restart')
+
+        await engine.stop(targetConfig!)
+        await containerManager.updateConfig(targetName, { status: 'stopped' })
+        const targetStopped = await waitForStopped(targetName, ENGINE, 90000)
+        assert(targetStopped, 'Target should stop before restore copy')
+
+        await engine.backup(sourceConfig!, backupPath, {
+          database: DATABASE,
+          format: 'snapshot',
+        })
+
+        await engine.restore(targetConfig!, backupPath, {
+          database: DATABASE,
+        })
+
+        await engine.start(targetConfig!)
+        await containerManager.updateConfig(targetName, { status: 'running' })
+        const restoredReady = await waitForReady(ENGINE, targetPort)
+        assert(restoredReady, 'Target Weaviate should be ready after restore')
+
+        const backupConfigPath = joinPath(backupPath, 'backup_config.json')
+        const backupConfig = JSON.parse(
+          await readFile(backupConfigPath, 'utf-8'),
+        ) as { id: string }
+        const backupId = backupConfig.id
+
+        const sourceHostname = `node-${sourcePort}`
+        const targetHostname = `node-${targetPort}`
+        const restoreResponse = await fetch(
+          `http://127.0.0.1:${targetPort}/v1/backups/filesystem/${backupId}/restore`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${targetCreds.apiKey}`,
+            },
+            body: JSON.stringify({
+              node_mapping: { [sourceHostname]: targetHostname },
+            }),
+          },
+        )
+        assert(restoreResponse.ok, 'Auth-backed restore API call should succeed')
+
+        let restored = false
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const statusResp = await fetch(
+            `http://127.0.0.1:${targetPort}/v1/backups/filesystem/${backupId}/restore`,
+            {
+              headers: { Authorization: `Bearer ${targetCreds.apiKey}` },
+            },
+          )
+          if (statusResp.ok) {
+            const status = (await statusResp.json()) as { status: string }
+            if (status.status === 'SUCCESS') {
+              restored = true
+              break
+            }
+            if (status.status === 'FAILED') {
+              throw new Error('Weaviate restore failed')
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+        assert(restored, 'Weaviate auth-backed restore should complete')
+
+        const queryResult = await engine.executeQuery(
+          targetConfig!,
+          `GET /v1/schema/${TEST_CLASS}`,
+          {
+            password: targetCreds.apiKey,
+          },
+        )
+        assertEqual(queryResult.rowCount, 1, 'Should query restored class with API key')
+
+        console.log('   API-key Weaviate backup/restore succeeded')
+      } finally {
+        await rm(backupPath, { recursive: true, force: true }).catch(() => {})
+
+        const sourceConfig = await containerManager.getConfig(sourceName)
+        if (sourceConfig) {
+          await engine.stop(sourceConfig).catch(() => {})
+          await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
+          await containerManager.delete(sourceName, { force: true }).catch(
+            () => {},
+          )
+        }
+
+        const targetConfig = await containerManager.getConfig(targetName)
+        if (targetConfig) {
+          await engine.stop(targetConfig).catch(() => {})
+          await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
+          await containerManager.delete(targetName, { force: true }).catch(
+            () => {},
+          )
+        }
+      }
+    },
+  )
 
   it('should delete cloned container', async () => {
     console.log(`\n Deleting cloned container "${clonedContainerName}"...`)

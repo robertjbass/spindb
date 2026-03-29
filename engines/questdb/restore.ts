@@ -8,32 +8,12 @@
 import { open, readFile } from 'fs/promises'
 import { spawn, spawnSync } from 'child_process'
 import { configManager } from '../../core/config-manager'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
-import { Engine, type BackupFormat, type RestoreResult } from '../../types'
+import { type BackupFormat, type RestoreResult } from '../../types'
+import { loadLocalQuestAuth } from './auth'
 
 // Read only the first 8KB for format detection
 const HEADER_SIZE = 8192
-
-type QuestLocalAuth = {
-  user: string
-  password: string
-}
-
-async function loadLocalQuestAuth(
-  containerName: string,
-): Promise<QuestLocalAuth> {
-  const savedCreds = await loadCredentials(
-    containerName,
-    Engine.QuestDB,
-    getDefaultUsername(Engine.QuestDB),
-  )
-
-  return {
-    user: savedCreds?.username || 'admin',
-    password: savedCreds?.password || 'quest',
-  }
-}
 
 /**
  * Detect the backup format from file content

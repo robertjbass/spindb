@@ -153,6 +153,15 @@ If a password-protected local backup or restart fails, inspect `.env.spindb` bef
 - verifies backup and restore against an auth-enabled target
 The focused March 28, 2026 auth sweep passed sequentially for all of the engines above. MariaDB still has unrelated broader-suite initialization flakiness on this machine, so treat that as a test-harness/platform issue rather than an auth backup/restore gap.
 
+**The auth-backed backup/restore sweep was extended on March 29, 2026 to the remaining major auth-sensitive server engines:** ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, and LibSQL now have explicit auth-aware local backup/restore verification rather than relying on anonymous localhost assumptions. Verification status:
+- ClickHouse and Qdrant have focused auth-backed integration coverage in addition to their broader engine suites
+- QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, and LibSQL now also have focused integration coverage for local auth-enabled backup/restore
+- InfluxDB local auth is now driven by a persisted `admin-token.json` file passed to `influxdb3 serve --admin-token-file`; the token file must contain JSON (`{"token":"...","name":"..."}`), not raw text
+- Meilisearch local auth is now driven by a persisted `master.key` file passed to `meilisearch --master-key`; `createUser()` currently configures that master key directly for local auth-backed backup/restore
+- Qdrant restore is special: restore writes a pending storage-snapshot marker and `start()` must consume it with `--storage-snapshot`; copying snapshot files alone is not deterministic enough once auth-backed restore is in play
+
+**CockroachDB local development now runs in secure mode:** local containers generate per-container Cockroach certs, start with `--certs-dir`, use root client-cert auth for internal admin flows, and return TLS connection strings for created users. Focused integration coverage now proves password-auth backup/restore against secure local CockroachDB. SQLite, DuckDB, and TigerBeetle remain explicit "not applicable" cases for username/password local backup semantics unless product scope changes.
+
 **SurrealDB auth nuance:** `surreal import` still needs root-level permissions. Namespace-scoped users can query and export, but the focused restore path only passed once the saved default credential file used root creds with `authLevel=root`. Keep that distinction in mind:
 - server start: bootstrap with stable root creds
 - client query/export/import: load `.env.spindb` and pass `--auth-level`

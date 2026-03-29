@@ -10,7 +10,7 @@
  * - Uses PostgreSQL wire protocol for client connections
  * - Single binary: `cockroach` (handles server, sql client, and admin tasks)
  * - Default database: `defaultdb`
- * - Default user: `root` (no password in insecure mode)
+ * - Default local admin user: `root` authenticated via generated client cert
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
@@ -49,6 +49,12 @@ import {
   parseCsvLine,
   parseCsvRecords,
   isInsecureConnection,
+  buildLocalCockroachSqlArgs,
+  buildSecureCockroachConnectionString,
+  getCockroachCertsDir,
+  getCockroachCaKeyPath,
+  getCockroachClientCertPath,
+  getCockroachClientKeyPath,
 } from './cli-utils'
 import {
   type Platform,
@@ -70,6 +76,93 @@ import { parseCSVToQueryResult } from '../../core/query-parser'
 
 const ENGINE = 'cockroachdb'
 const engineDef = getEngineDefaults(ENGINE)
+
+async function runCockroachCommand(
+  cockroachPath: string,
+  args: string[],
+  spawnOptions: SpawnOptions = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cockroachPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...spawnOptions,
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(new Error(stderr || `cockroach exited with code ${code}`))
+      }
+    })
+  })
+}
+
+async function ensureSecureLocalAssets(
+  cockroachPath: string,
+  containerName: string,
+  bindAddress?: string,
+): Promise<void> {
+  const certsDir = getCockroachCertsDir(containerName)
+  const caKey = getCockroachCaKeyPath(containerName)
+  const nodeCert = join(certsDir, 'node.crt')
+  const nodeKey = join(certsDir, 'node.key')
+  const rootClientCert = getCockroachClientCertPath(containerName, 'root')
+  const rootClientKey = getCockroachClientKeyPath(containerName, 'root')
+
+  await mkdir(certsDir, { recursive: true })
+
+  if (!existsSync(join(certsDir, 'ca.crt')) || !existsSync(caKey)) {
+    await runCockroachCommand(cockroachPath, [
+      'cert',
+      'create-ca',
+      '--certs-dir',
+      certsDir,
+      '--ca-key',
+      caKey,
+    ])
+  }
+
+  if (!existsSync(nodeCert) || !existsSync(nodeKey)) {
+    const hosts = new Set(['127.0.0.1', 'localhost', '::1'])
+    if (bindAddress && bindAddress !== '0.0.0.0' && bindAddress !== '::') {
+      hosts.add(bindAddress)
+    }
+
+    await runCockroachCommand(cockroachPath, [
+      'cert',
+      'create-node',
+      ...Array.from(hosts),
+      '--certs-dir',
+      certsDir,
+      '--ca-key',
+      caKey,
+    ])
+  }
+
+  if (!existsSync(rootClientCert) || !existsSync(rootClientKey)) {
+    await runCockroachCommand(cockroachPath, [
+      'cert',
+      'create-client',
+      'root',
+      '--certs-dir',
+      certsDir,
+      '--ca-key',
+      caKey,
+    ])
+  }
+}
 
 export class CockroachDBEngine extends BaseEngine {
   name = ENGINE
@@ -252,11 +345,14 @@ export class CockroachDBEngine extends BaseEngine {
 
     logDebug(`Starting CockroachDB with data dir: ${dataDir}`)
 
+    await ensureSecureLocalAssets(cockroachBinary!, name, container.bindAddress)
+
     // CockroachDB start command
-    // Using --insecure for local development (no TLS)
+    // Local containers run in secure mode with per-container certs.
     const args = [
       'start-single-node',
-      '--insecure',
+      '--certs-dir',
+      getCockroachCertsDir(name),
       '--store',
       dataDir,
       '--listen-addr',
@@ -357,7 +453,7 @@ export class CockroachDBEngine extends BaseEngine {
     logDebug(
       `Waiting for CockroachDB server to be ready on port ${port}... (timeout: ${timeout}ms)`,
     )
-    const ready = await this.waitForReady(port, version, timeout)
+    const ready = await this.waitForReady(name, port, version, timeout)
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
@@ -388,6 +484,7 @@ export class CockroachDBEngine extends BaseEngine {
 
   // Wait for CockroachDB to be ready
   private async waitForReady(
+    containerName: string,
     port: number,
     version: string,
     timeoutMs = 60000,
@@ -416,14 +513,11 @@ export class CockroachDBEngine extends BaseEngine {
       attempt++
       logDebug(`Connection attempt ${attempt}...`)
       try {
-        const args = [
-          'sql',
-          '--insecure',
-          '--host',
-          `127.0.0.1:${port}`,
-          '--execute',
-          'SELECT 1',
-        ]
+        const args = buildLocalCockroachSqlArgs({
+          containerName,
+          port,
+        })
+        args.push('--execute', 'SELECT 1')
         await new Promise<void>((resolve, reject) => {
           const proc = spawn(cockroach, args, {
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -514,19 +608,16 @@ export class CockroachDBEngine extends BaseEngine {
 
   // Get CockroachDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
-    const { port, version } = container
+    const { name, port, version } = container
 
     // Try to connect
     try {
       const cockroach = await this.getCockroachPath(version)
-      const args = [
-        'sql',
-        '--insecure',
-        '--host',
-        `127.0.0.1:${port}`,
-        '--execute',
-        'SELECT 1',
-      ]
+      const args = buildLocalCockroachSqlArgs({
+        containerName: name,
+        port,
+      })
+      args.push('--execute', 'SELECT 1')
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(cockroach, args, {
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -569,20 +660,29 @@ export class CockroachDBEngine extends BaseEngine {
 
   /**
    * Get connection string
-   * Format: postgresql://root@127.0.0.1:PORT/DATABASE?sslmode=disable
+   * Format: postgresql://root@127.0.0.1:PORT/DATABASE?sslmode=verify-full...
    */
   getConnectionString(container: ContainerConfig, database?: string): string {
-    const { port } = container
+    const { name, port } = container
     const db = database || container.database || 'defaultdb'
-    return `postgresql://root@127.0.0.1:${port}/${db}?sslmode=disable`
+    return buildSecureCockroachConnectionString({
+      containerName: name,
+      port,
+      database: db,
+    })
   }
 
   // Open cockroach sql interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = database || container.database || 'defaultdb'
 
     const cockroach = await this.getCockroachPath(version)
+    const args = buildLocalCockroachSqlArgs({
+      containerName: name,
+      port,
+      database: db,
+    })
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
@@ -591,7 +691,7 @@ export class CockroachDBEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(
         cockroach,
-        ['sql', '--insecure', '--host', `127.0.0.1:${port}`, '--database', db],
+        args,
         spawnOptions,
       )
 
@@ -607,7 +707,7 @@ export class CockroachDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
 
     // Validate database identifier to prevent SQL injection
     validateCockroachIdentifier(database, 'database')
@@ -615,14 +715,11 @@ export class CockroachDBEngine extends BaseEngine {
 
     const cockroach = await this.getCockroachPath(version)
 
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--execute',
-      `CREATE DATABASE IF NOT EXISTS ${escapedDb}`,
-    ]
+    const args = buildLocalCockroachSqlArgs({
+      containerName: name,
+      port,
+    })
+    args.push('--execute', `CREATE DATABASE IF NOT EXISTS ${escapedDb}`)
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(cockroach, args, {
@@ -653,7 +750,7 @@ export class CockroachDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
 
     // Don't allow dropping system databases
     const systemDatabases = ['defaultdb', 'postgres', 'system']
@@ -667,14 +764,11 @@ export class CockroachDBEngine extends BaseEngine {
 
     const cockroach = await this.getCockroachPath(version)
 
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--execute',
-      `DROP DATABASE IF EXISTS ${escapedDb}`,
-    ]
+    const args = buildLocalCockroachSqlArgs({
+      containerName: name,
+      port,
+    })
+    args.push('--execute', `DROP DATABASE IF EXISTS ${escapedDb}`)
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(cockroach, args, {
@@ -706,7 +800,7 @@ export class CockroachDBEngine extends BaseEngine {
     oldName: string,
     newName: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
 
     const systemDatabases = ['defaultdb', 'postgres', 'system']
     if (systemDatabases.includes(oldName.toLowerCase())) {
@@ -723,14 +817,11 @@ export class CockroachDBEngine extends BaseEngine {
 
     const cockroach = await this.getCockroachPath(version)
 
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--execute',
-      `ALTER DATABASE ${escapedOld} RENAME TO ${escapedNew}`,
-    ]
+    const args = buildLocalCockroachSqlArgs({
+      containerName: name,
+      port,
+    })
+    args.push('--execute', `ALTER DATABASE ${escapedOld} RENAME TO ${escapedNew}`)
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(cockroach, args, {
@@ -758,7 +849,7 @@ export class CockroachDBEngine extends BaseEngine {
    * Get the database size in bytes
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, version, database } = container
+    const { name, port, version, database } = container
     const db = database || 'defaultdb'
 
     try {
@@ -769,17 +860,12 @@ export class CockroachDBEngine extends BaseEngine {
       const query = `SELECT sum(range_size_mb) * 1024 * 1024 as size_bytes FROM [SHOW RANGES FROM DATABASE ${escapeCockroachIdentifier(db)}]`
 
       const result = await new Promise<string>((resolve, reject) => {
-        const args = [
-          'sql',
-          '--insecure',
-          '--host',
-          `127.0.0.1:${port}`,
-          '--database',
-          db,
-          '--execute',
-          query,
-          '--format=csv',
-        ]
+        const args = buildLocalCockroachSqlArgs({
+          containerName: name,
+          port,
+          database: db,
+        })
+        args.push('--execute', query, '--format=csv')
 
         const proc = spawn(cockroach, args, {
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -1084,23 +1170,19 @@ export class CockroachDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = options.database || container.database || 'defaultdb'
 
     const cockroach = await this.getCockroachPath(version)
 
     if (options.file) {
       // Run SQL file
-      const args = [
-        'sql',
-        '--insecure',
-        '--host',
-        `127.0.0.1:${port}`,
-        '--database',
-        db,
-        '--file',
-        options.file,
-      ]
+      const args = buildLocalCockroachSqlArgs({
+        containerName: name,
+        port,
+        database: db,
+      })
+      args.push('--file', options.file)
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(cockroach, args, {
@@ -1120,14 +1202,11 @@ export class CockroachDBEngine extends BaseEngine {
       })
     } else if (options.sql) {
       // Run inline SQL via stdin
-      const args = [
-        'sql',
-        '--insecure',
-        '--host',
-        `127.0.0.1:${port}`,
-        '--database',
-        db,
-      ]
+      const args = buildLocalCockroachSqlArgs({
+        containerName: name,
+        port,
+        database: db,
+      })
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(cockroach, args, {
@@ -1161,25 +1240,19 @@ export class CockroachDBEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = options?.database || container.database || 'defaultdb'
 
     const cockroach = await this.getCockroachPath(version)
 
     return new Promise((resolve, reject) => {
-      const args = ['sql']
-
-      if (options?.password) {
-        const user = options.username || 'root'
-        const encodedPass = encodeURIComponent(options.password)
-        args.push(
-          '--url',
-          `postgresql://${user}:${encodedPass}@127.0.0.1:${port}/${db}?sslmode=disable`,
-        )
-      } else {
-        args.push('--insecure', '--host', `127.0.0.1:${port}`, '--database', db)
-      }
-
+      const args = buildLocalCockroachSqlArgs({
+        containerName: name,
+        port,
+        database: db,
+        username: options?.username,
+        password: options?.password,
+      })
       args.push('--execute', query, '--format=csv')
 
       const proc = spawn(cockroach, args, {
@@ -1221,19 +1294,15 @@ export class CockroachDBEngine extends BaseEngine {
    * List all user databases, excluding system databases (defaultdb, postgres, system).
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port, version } = container
+    const { name, port, version } = container
     const cockroach = await this.getCockroachPath(version)
 
     return new Promise((resolve, reject) => {
-      const args = [
-        'sql',
-        '--insecure',
-        '--host',
-        `127.0.0.1:${port}`,
-        '--execute',
-        `SHOW DATABASES`,
-        '--format=csv',
-      ]
+      const args = buildLocalCockroachSqlArgs({
+        containerName: name,
+        port,
+      })
+      args.push('--execute', `SHOW DATABASES`, '--format=csv')
 
       const proc = spawn(cockroach, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -1276,7 +1345,7 @@ export class CockroachDBEngine extends BaseEngine {
   ): Promise<UserCredentials> {
     const { username, password, database } = options
     assertValidUsername(username)
-    const { port, version } = container
+    const { name, port, version } = container
     const db = database || container.database || 'defaultdb'
 
     validateCockroachIdentifier(username, 'user')
@@ -1286,12 +1355,24 @@ export class CockroachDBEngine extends BaseEngine {
 
     const cockroach = await this.getCockroachPath(version)
 
-    // CockroachDB in insecure mode doesn't support passwords.
-    // Create user without password and grant privileges.
-    // SQL is sent via stdin to avoid shell escaping issues with --execute.
-    const sql = `CREATE USER IF NOT EXISTS ${escapedUser}; GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser};`
+    // Local CockroachDB containers run with TLS enabled. Bootstrap admin commands
+    // authenticate as root via the generated client certificate, while end users
+    // connect with password-based auth over TLS.
+    const escapedPassword = password.replace(/'/g, "''")
+    const sql = [
+      `CREATE USER IF NOT EXISTS ${escapedUser}`,
+      `ALTER USER ${escapedUser} WITH PASSWORD '${escapedPassword}'`,
+      `GRANT admin TO ${escapedUser}`,
+      `GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser}`,
+      `GRANT ALL ON SCHEMA public TO ${escapedUser}`,
+      `GRANT ALL ON ALL TABLES IN SCHEMA public TO ${escapedUser}`,
+      `GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${escapedUser}`,
+    ].join('; ') + ';'
 
-    const args = ['sql', '--insecure', '--host', `127.0.0.1:${port}`]
+    const args = buildLocalCockroachSqlArgs({
+      containerName: name,
+      port,
+    })
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(cockroach, args, {
@@ -1316,13 +1397,16 @@ export class CockroachDBEngine extends BaseEngine {
       proc.stdin?.end()
     })
 
-    // In insecure mode, connections don't use passwords
-    const connectionString = `postgresql://${encodeURIComponent(username)}@127.0.0.1:${port}/${db}?sslmode=disable`
+    const connectionString = buildSecureCockroachConnectionString({
+      containerName: name,
+      port,
+      database: db,
+      username,
+      password,
+    })
 
     return {
       username,
-      // CockroachDB insecure mode does not enforce password authentication,
-      // but we return the caller-provided password for credential file consistency.
       password,
       connectionString,
       engine: container.engine,

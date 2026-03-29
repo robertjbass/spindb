@@ -27,6 +27,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -356,6 +360,93 @@ describe('TypeDB Integration Tests', () => {
     )
 
     console.log(`   Verified ${rowCount} entities in restored container`)
+  })
+
+  it('should backup and restore with saved TypeDB credentials', async () => {
+    console.log('\n Testing auth-backed TypeDB backup/restore...')
+
+    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.typedb.base + 20)
+    const targetPort = allPorts[2]
+    const targetName = generateTestName('typedb-auth-target')
+    const username = getDefaultUsername(ENGINE)
+    const sourcePassword = 'typedbSourcePass123'
+    const targetPassword = 'typedbTargetPass456'
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `typedb-auth-backup-${Date.now()}.typeql`)
+    const engine = getEngine(ENGINE)
+
+    try {
+      const sourceConfig = await containerManager.getConfig(containerName)
+      assert(sourceConfig !== null, 'Source container config should exist')
+
+      const sourceCreds = await engine.createUser(sourceConfig!, {
+        username,
+        password: sourcePassword,
+      })
+      await saveCredentials(containerName, ENGINE, sourceCreds)
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target container config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+
+      const targetReady = await waitForReady(ENGINE, targetPort, 60000)
+      assert(targetReady, 'Target TypeDB should be ready')
+
+      const targetCreds = await engine.createUser(targetConfig!, {
+        username,
+        password: targetPassword,
+      })
+      await saveCredentials(targetName, ENGINE, targetCreds)
+
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'typeql',
+      })
+
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+
+      const restored = await engine.executeQuery(
+        targetConfig!,
+        'match $u isa test_user; fetch { "name": $u.name };',
+        {
+          username: targetCreds.username,
+          password: targetCreds.password,
+        },
+      )
+
+      assertEqual(restored.rowCount, 1, 'TypeDB executeQuery should return raw output')
+      const output = restored.rows[0].result as string
+      assert(output.includes('Alice'), 'Restored TypeDB data should include Alice')
+      assert(output.includes('Bob'), 'Restored TypeDB data should include Bob')
+
+      console.log('   Saved-credential TypeDB backup/restore succeeded')
+    } finally {
+      const schemaPath = backupPath.replace(/\.typeql$/, '-schema.typeql')
+      const dataPath = backupPath.replace(/\.typeql$/, '-data.typeql')
+      await rm(backupPath, { force: true }).catch(() => {})
+      await rm(schemaPath, { force: true }).catch(() => {})
+      await rm(dataPath, { force: true }).catch(() => {})
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      if (targetConfig) {
+        await engine.stop(targetConfig).catch(() => {})
+        await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
+        await containerManager.delete(targetName, { force: true }).catch(
+          () => {},
+        )
+      }
+    }
   })
 
   it('should stop and delete the restored container', async (t) => {

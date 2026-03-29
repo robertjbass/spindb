@@ -15,6 +15,7 @@ import {
   requireCockroachPath,
   validateCockroachIdentifier,
   escapeCockroachIdentifier,
+  buildLocalCockroachSqlArgs,
 } from './cli-utils'
 import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
 
@@ -23,22 +24,18 @@ import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
  */
 async function execCockroachQuery(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
   query: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--database',
+    const args = buildLocalCockroachSqlArgs({
+      containerName,
+      port,
       database,
-      '--execute',
-      query,
-      '--format=csv',
-    ]
+    })
+    args.push('--execute', query, '--format=csv')
 
     const proc = spawn(cockroachPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -71,6 +68,7 @@ async function execCockroachQuery(
  */
 async function getTables(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
 ): Promise<string[]> {
@@ -79,6 +77,7 @@ async function getTables(
 
   const result = await execCockroachQuery(
     cockroachPath,
+    containerName,
     port,
     database,
     `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`,
@@ -99,6 +98,7 @@ async function getTables(
  */
 async function getCreateTableStatement(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
   table: string,
@@ -110,6 +110,7 @@ async function getCreateTableStatement(
 
   const result = await execCockroachQuery(
     cockroachPath,
+    containerName,
     port,
     database,
     `SHOW CREATE TABLE ${escapedTable}`,
@@ -150,6 +151,7 @@ async function getCreateTableStatement(
  */
 async function getTableData(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
   table: string,
@@ -160,6 +162,7 @@ async function getTableData(
   // Get column names
   const columnsResult = await execCockroachQuery(
     cockroachPath,
+    containerName,
     port,
     database,
     `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table.replace(/'/g, "''")}' ORDER BY ordinal_position`,
@@ -179,6 +182,7 @@ async function getTableData(
   // Get data
   const dataResult = await execCockroachQuery(
     cockroachPath,
+    containerName,
     port,
     database,
     `SELECT * FROM ${escapedTable}`,
@@ -280,6 +284,7 @@ async function createSqlBackup(
   database: string,
 ): Promise<BackupResult> {
   const { port, version } = container
+  const { name } = container
 
   const cockroachPath = await requireCockroachPath(version)
 
@@ -290,7 +295,7 @@ async function createSqlBackup(
   lines.push('')
 
   // Get list of tables
-  const tables = await getTables(cockroachPath, port, database)
+  const tables = await getTables(cockroachPath, name, port, database)
   logDebug(`Found ${tables.length} tables to backup`)
 
   for (const table of tables) {
@@ -301,6 +306,7 @@ async function createSqlBackup(
     try {
       const createStmt = await getCreateTableStatement(
         cockroachPath,
+        name,
         port,
         database,
         table,
@@ -314,7 +320,13 @@ async function createSqlBackup(
 
     // Export data
     try {
-      const inserts = await getTableData(cockroachPath, port, database, table)
+      const inserts = await getTableData(
+        cockroachPath,
+        name,
+        port,
+        database,
+        table,
+      )
       if (inserts.length > 0) {
         lines.push(...inserts)
         lines.push('')

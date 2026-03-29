@@ -26,7 +26,7 @@ export async function influxdbApiRequest(
 
   const headers: Record<string, string> = {}
   if (token) {
-    headers['Authorization'] = `Token ${token}`
+    headers['Authorization'] = `Bearer ${token}`
   }
 
   const options: RequestInit = {

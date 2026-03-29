@@ -1045,7 +1045,7 @@ export class TypeDBEngine extends BaseEngine {
   async executeQuery(
     container: ContainerConfig,
     query: string,
-    _options?: QueryOptions,
+    options?: QueryOptions,
   ): Promise<QueryResult> {
     const { port, version } = container
     const db = container.database
@@ -1070,7 +1070,14 @@ export class TypeDBEngine extends BaseEngine {
       await writeFile(tempScript, scriptContent, 'utf-8')
 
       return await new Promise((resolve, reject) => {
-        const args = [...getConsoleBaseArgs(port), '--script', tempScript]
+        const args = [
+          ...getConsoleBaseArgs(port, '127.0.0.1', true, {
+            username: options?.username,
+            password: options?.password,
+          }),
+          '--script',
+          tempScript,
+        ]
 
         const proc = spawn(consolePath, args, {
           stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,5 +1,4 @@
-import { spawn, exec, type SpawnOptions } from 'child_process'
-import { promisify } from 'util'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
@@ -52,8 +51,6 @@ import {
 import { parseRedisResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
-const execAsync = promisify(exec)
-
 const ENGINE = 'valkey'
 
 type ValkeyCliAuth = {
@@ -79,6 +76,74 @@ function buildValkeyCliEnv(
   return password
     ? { ...process.env, ...libraryEnv, REDISCLI_AUTH: password }
     : { ...process.env, ...libraryEnv }
+}
+
+async function runValkeyCliCommand(
+  valkeyCli: string,
+  args: string[],
+  options: {
+    password?: string
+    timeout?: number
+    libraryEnv?: Record<string, string | undefined>
+  } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(valkeyCli, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildValkeyCliEnv(options.libraryEnv, options.password),
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    let timeoutId: NodeJS.Timeout | undefined
+    let timeoutError: Error | null = null
+
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (error) {
+        reject(error)
+      } else {
+        resolve({ stdout, stderr })
+      }
+    }
+
+    if (options.timeout && options.timeout > 0) {
+      timeoutId = setTimeout(() => {
+        timeoutError = new Error(
+          `valkey-cli command timed out after ${options.timeout}ms`,
+        )
+        proc.kill()
+      }, options.timeout)
+    }
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('error', (error) => {
+      finish(error)
+    })
+
+    proc.on('close', (code) => {
+      if (timeoutError) {
+        finish(timeoutError)
+        return
+      }
+      if (code === 0) {
+        finish()
+        return
+      }
+      finish(new Error(stderr || `valkey-cli exited with code ${code}`))
+    })
+  })
 }
 
 /**
@@ -875,13 +940,10 @@ export class ValkeyEngine extends BaseEngine {
           args.push('--user', auth.username)
         }
         args.push('PING')
-        const { stdout } = await execAsync(
-          `"${valkeyCli}" ${args.join(' ')}`,
-          {
-            timeout: 5000,
-            env: buildValkeyCliEnv({}, auth.password),
-          },
-        )
+        const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
+          timeout: 5000,
+          password: auth.password,
+        })
         if (stdout.trim() === 'PONG') {
           logDebug(`Valkey ready on port ${port}`)
           return true
@@ -916,9 +978,9 @@ export class ValkeyEngine extends BaseEngine {
           args.push('--user', auth.username)
         }
         args.push('SHUTDOWN', 'SAVE')
-        await execAsync(`"${valkeyCli}" ${args.join(' ')}`, {
+        await runValkeyCliCommand(valkeyCli, args, {
           timeout: 10000,
-          env: buildValkeyCliEnv({}, auth.password),
+          password: auth.password,
         })
         logDebug('Valkey shutdown command sent')
         // Wait a bit for process to exit
@@ -985,9 +1047,9 @@ export class ValkeyEngine extends BaseEngine {
           args.push('--user', auth.username)
         }
         args.push('PING')
-        const { stdout } = await execAsync(`"${valkeyCli}" ${args.join(' ')}`, {
+        const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
           timeout: 5000,
-          env: buildValkeyCliEnv({}, auth.password),
+          password: auth.password,
         })
         if (stdout.trim() === 'PONG') {
           return { running: true, message: 'Valkey is running' }
@@ -1184,9 +1246,9 @@ export class ValkeyEngine extends BaseEngine {
     args.push('FLUSHDB')
 
     try {
-      await execAsync(`"${valkeyCli}" ${args.join(' ')}`, {
+      await runValkeyCliCommand(valkeyCli, args, {
         timeout: 10000,
-        env: buildValkeyCliEnv({}, auth.password),
+        password: auth.password,
       })
       logDebug(`Flushed Valkey database ${database}`)
     } catch (error) {
@@ -1219,9 +1281,9 @@ export class ValkeyEngine extends BaseEngine {
       }
       args.push('INFO', 'memory')
 
-      const { stdout } = await execAsync(`"${valkeyCli}" ${args.join(' ')}`, {
+      const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
         timeout: 10000,
-        env: buildValkeyCliEnv({}, auth.password),
+        password: auth.password,
       })
 
       // Parse used_memory (total server memory) from INFO output

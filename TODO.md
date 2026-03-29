@@ -19,8 +19,9 @@ These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due
 - [x] **MongoDB: `--auth` flag** — `spindb start <name> --auth` passes `--auth` to mongod. Persisted via `authEnabled` in ContainerConfig.
 - [x] **FerretDB: restart without `--no-auth`** — `spindb start <name> --auth` omits `--no-auth` on FerretDB v2, enabling SCRAM. Persisted via `authEnabled` in ContainerConfig.
 - [ ] **SurrealDB: credential reset** — Cloud needs to wipe data dir to reset credentials. SpinDB doesn't expose this capability.
-- [ ] **InfluxDB: pre-start admin token** — Admin token file must exist before startup. SpinDB doesn't support pre-start setup hooks.
+- [x] **InfluxDB: pre-start admin token** — SpinDB now persists `admin-token.json` and wires `influxdb3 serve --admin-token-file` into local auth-backed startup and restore flows.
 - [ ] **Weaviate: RAFT state wipe + env vars** — Cloud needs to wipe RAFT state and pass env vars at startup. SpinDB doesn't expose these.
+- [x] **CockroachDB: secure local mode** — Local containers now generate per-container certs, start with `--certs-dir`, and support password-auth query/backup/restore against real TLS-enabled local CockroachDB.
 
 ---
 
@@ -90,6 +91,7 @@ The following engines may be added based on community interest:
 - [ ] **Export query results** - `spindb run <container> query.sql --format csv/json --output file`
 - [ ] **Run multiple SQL files** - `spindb run <container> schema.sql seed.sql`
 - [ ] **Health checks** - Periodic connection tests for container status
+- [ ] **Replace long positional parameter lists with typed options objects** - Do a low-risk sweep after the auth-backed backup/restore engine work is formally closed. Prioritize helpers/functions with 4+ positional params where argument ordering is easy to break. Preserve behavior and land it incrementally with regression coverage rather than as one large refactor.
 - [ ] **Add `--json` to remaining commands** - clone, connect, logs, edit, attach, detach
 - [ ] **Add `--json` to `spindb run`** - Capture stdout/stderr and return as JSON instead of inheriting stdio
   - Requires updating `runScript` signature in `BaseEngine` (line 233-236 of `engines/base-engine.ts`)

@@ -857,6 +857,7 @@ describe('PostgreSQL Integration Tests', () => {
 
       await runScriptSQL(
         containerName,
+        // Test-only controlled constant; direct interpolation keeps the setup path simple here.
         `ALTER ROLE postgres WITH PASSWORD '${password}'`,
         'postgres',
       )

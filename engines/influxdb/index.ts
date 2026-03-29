@@ -1,13 +1,21 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { logDebug, logWarning } from '../../core/error-handler'
+import {
+  logDebug,
+  logWarning,
+  assertValidUsername,
+} from '../../core/error-handler'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
 import { influxdbBinaryManager } from './binary-manager'
@@ -31,13 +39,17 @@ import {
   type RestoreResult,
   type DumpResult,
   type StatusResult,
+  Engine,
   type QueryResult,
   type QueryOptions,
+  type CreateUserOptions,
+  type UserCredentials,
 } from '../../types'
 import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'influxdb'
 const engineDef = getEngineDefaults(ENGINE)
+const ADMIN_TOKEN_FILE = 'admin-token.json'
 
 /**
  * Initial delay before checking if InfluxDB is ready after spawning.
@@ -147,6 +159,45 @@ async function remoteInfluxDBRequest(
     throw error
   } finally {
     clearTimeout(timeoutId)
+  }
+}
+
+type StoredAdminToken = {
+  token: string
+  name: string
+}
+
+function getAdminTokenPath(containerName: string): string {
+  const containerDir = paths.getContainerPath(containerName, { engine: ENGINE })
+  return join(containerDir, ADMIN_TOKEN_FILE)
+}
+
+async function readAdminToken(
+  containerName: string,
+): Promise<StoredAdminToken | null> {
+  const tokenPath = getAdminTokenPath(containerName)
+  if (!existsSync(tokenPath)) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(await readFile(tokenPath, 'utf-8')) as Partial<
+      StoredAdminToken
+    >
+
+    if (!parsed.token || !parsed.name) {
+      throw new Error('is missing token or name')
+    }
+
+    return {
+      token: parsed.token,
+      name: parsed.name,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Failed to read InfluxDB admin token file ${tokenPath}: ${message}`,
+    )
   }
 }
 
@@ -382,9 +433,10 @@ export class InfluxDBEngine extends BaseEngine {
 
     onProgress?.({ stage: 'starting', message: 'Starting InfluxDB...' })
 
-    // Build command arguments
-    // InfluxDB 3.x uses 'serve' subcommand with required --node-id
-    // Use fixed node-id so data persists across container renames
+    const adminToken = await readAdminToken(name)
+
+    // Build command arguments. InfluxDB 3.x uses 'serve' with a required --node-id.
+    // Use fixed node-id so data persists across container renames.
     const args = [
       'serve',
       '--node-id',
@@ -395,8 +447,19 @@ export class InfluxDBEngine extends BaseEngine {
       dataDir,
       '--http-bind',
       `${container.bindAddress ?? '127.0.0.1'}:${port}`,
-      '--without-auth',
     ]
+
+    if (adminToken) {
+      args.push(
+        '--admin-token-file',
+        getAdminTokenPath(name),
+        '--disable-authz',
+        'health,ping',
+      )
+      logDebug(`Using persisted InfluxDB admin token for ${name}`)
+    } else {
+      args.push('--without-auth')
+    }
 
     logDebug(`Starting influxdb3 with args: ${args.join(' ')}`)
 
@@ -1159,8 +1222,17 @@ export class InfluxDBEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port } = container
+    const { name, port } = container
     const database = options?.database || container.database
+    const savedCreds =
+      options?.password
+        ? null
+        : await loadCredentials(
+            name,
+            Engine.InfluxDB,
+            getDefaultUsername(Engine.InfluxDB),
+          )
+    const authToken = options?.password || savedCreds?.apiKey
     const trimmed = query.trim()
 
     // Check if this is a REST API-style query (starts with HTTP method)
@@ -1207,7 +1279,7 @@ export class InfluxDBEngine extends BaseEngine {
         path,
         body,
         30000,
-        options?.password,
+        authToken,
       )
 
       if (response.status >= 400) {
@@ -1230,7 +1302,7 @@ export class InfluxDBEngine extends BaseEngine {
         format: 'json',
       },
       30000,
-      options?.password,
+      authToken,
     )
 
     if (response.status >= 400) {
@@ -1247,13 +1319,21 @@ export class InfluxDBEngine extends BaseEngine {
    * InfluxDB 3.x uses GET /api/v3/configure/database?format=json
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
-    const { port } = container
+    const { name, port } = container
+    const savedCreds = await loadCredentials(
+      name,
+      Engine.InfluxDB,
+      getDefaultUsername(Engine.InfluxDB),
+    )
 
     try {
       const response = await influxdbApiRequest(
         port,
         'GET',
         '/api/v3/configure/database?format=json',
+        undefined,
+        30000,
+        savedCreds?.apiKey,
       )
 
       if (response.status === 200 && response.data) {
@@ -1274,6 +1354,95 @@ export class InfluxDBEngine extends BaseEngine {
       return [container.database]
     } catch {
       return [container.database]
+    }
+  }
+
+  async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    const { name, port, version } = container
+    const { username } = options
+    assertValidUsername(username)
+
+    const existingToken = await readAdminToken(name)
+    if (existingToken) {
+      return {
+        username,
+        password: '',
+        connectionString: `http://127.0.0.1:${port}`,
+        engine: container.engine,
+        container: name,
+        apiKey: existingToken.token,
+      }
+    }
+
+    const tokenPath = getAdminTokenPath(name)
+    const influxdbServer = await this.getInfluxDBServerPath(version)
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        influxdbServer,
+        [
+          'create',
+          'token',
+          '--admin',
+          '--offline',
+          '--output-file',
+          tokenPath,
+          '--name',
+          username,
+          '--format',
+          'json',
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      )
+
+      let stderr = ''
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(
+            new Error(
+              stderr || `influxdb3 create token exited with code ${code}`,
+            ),
+          )
+        }
+      })
+    })
+
+    await chmod(tokenPath, 0o600)
+
+    const storedToken = await readAdminToken(name)
+    if (!storedToken) {
+      throw new Error('Failed to load generated InfluxDB admin token')
+    }
+
+    const statusResult = await this.status(container)
+    if (statusResult.running) {
+      logWarning(
+        `Restarting InfluxDB container "${name}" to apply auth token configuration. ` +
+          'Active client connections will be disconnected.',
+      )
+      await this.stop(container)
+      await this.start(container)
+    }
+
+    return {
+      username,
+      password: '',
+      connectionString: `http://127.0.0.1:${port}`,
+      engine: container.engine,
+      container: name,
+      apiKey: storedToken.token,
     }
   }
 }

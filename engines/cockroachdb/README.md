@@ -92,7 +92,7 @@ This is documented in CLAUDE.md as a major gotcha.
 
 ```bash
 cockroach start-single-node \
-  --insecure \
+  --certs-dir={containerDir}/certs \
   --store={dataDir} \
   --listen-addr=127.0.0.1:{port} \
   --http-addr=127.0.0.1:{httpPort} \
@@ -134,7 +134,7 @@ Version `25.4.2` is year 2025, not semver version 25.
 
 ### 3. Single-Node Mode
 
-SpinDB runs CockroachDB in single-node mode (`--insecure`) for local development. Not suitable for production.
+SpinDB runs CockroachDB in secure single-node mode for local development using per-container generated certs. It is still a local/dev topology, not a production HA deployment.
 
 ### 4. Admin UI Port
 

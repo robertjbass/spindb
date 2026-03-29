@@ -27,6 +27,7 @@ import {
   runScriptSQL,
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
+import { saveCredentials } from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { isWindows } from '../../core/platform-service'
@@ -242,6 +243,120 @@ describe('QuestDB Integration Tests', () => {
     )
 
     console.log(`   Verified ${rowCount} rows in restored container`)
+  })
+
+  it('should prefer saved admin credentials over legacy generic credentials', async () => {
+    console.log('\n Testing saved QuestDB auth-backed backup/restore...')
+
+    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.questdb.base + 20)
+    const targetPort = allPorts[2]
+    const targetName = generateTestName('questdb-auth-target')
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `questdb-auth-backup-${Date.now()}.sql`)
+    const engine = getEngine(ENGINE)
+
+    const sourceConfig = await containerManager.getConfig(containerName)
+    assert(sourceConfig !== null, 'Source QuestDB config should exist')
+
+    const sourceAdminCreds = {
+      username: 'admin',
+      password: 'quest',
+      connectionString: `postgresql://admin:quest@127.0.0.1:${testPorts[0]}/${DATABASE}`,
+      engine: ENGINE,
+      container: containerName,
+      database: DATABASE,
+    }
+    const sourceLegacyCreds = {
+      username: 'spindb',
+      password: 'wrongpass',
+      connectionString: `postgresql://spindb:wrongpass@127.0.0.1:${testPorts[0]}/${DATABASE}`,
+      engine: ENGINE,
+      container: containerName,
+      database: DATABASE,
+    }
+
+    try {
+      await saveCredentials(containerName, ENGINE, sourceAdminCreds)
+      await saveCredentials(containerName, ENGINE, sourceLegacyCreds)
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, {
+        port: targetPort,
+      })
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target QuestDB config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, {
+        status: 'running',
+      })
+
+      const targetReady = await waitForReady(ENGINE, targetPort, 150000)
+      assert(targetReady, 'Target QuestDB should be ready before restore')
+
+      const targetAdminCreds = {
+        username: 'admin',
+        password: 'quest',
+        connectionString: `postgresql://admin:quest@127.0.0.1:${targetPort}/${DATABASE}`,
+        engine: ENGINE,
+        container: targetName,
+        database: DATABASE,
+      }
+      const targetLegacyCreds = {
+        username: 'spindb',
+        password: 'wrongpass',
+        connectionString: `postgresql://spindb:wrongpass@127.0.0.1:${targetPort}/${DATABASE}`,
+        engine: ENGINE,
+        container: targetName,
+        database: DATABASE,
+      }
+      await saveCredentials(targetName, ENGINE, targetAdminCreds)
+      await saveCredentials(targetName, ENGINE, targetLegacyCreds)
+
+      await engine.backup(sourceConfig!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+
+      await engine.restore(targetConfig!, backupPath, {
+        database: DATABASE,
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      const restored = await engine.executeQuery(
+        targetConfig!,
+        'SELECT count(*) AS count FROM test_user',
+        {
+          database: DATABASE,
+        },
+      )
+      assertEqual(restored.rowCount, 1, 'Should return one count row')
+      assertEqual(
+        Number(restored.rows[0].count),
+        EXPECTED_ROW_COUNT,
+        'QuestDB restore should ignore broken legacy creds and use admin creds',
+      )
+
+      console.log('   Saved QuestDB admin credentials were used successfully')
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      if (targetConfig) {
+        await engine.stop(targetConfig).catch(() => {})
+        await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
+        await containerManager.delete(targetName, { force: true }).catch(
+          () => {},
+        )
+      }
+    }
   })
 
   it('should stop and delete the restored container', async () => {

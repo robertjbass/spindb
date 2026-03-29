@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-03-29
+
+### Added
+
+- **Secure local CockroachDB mode** — Local CockroachDB containers now generate per-container TLS certificates, start with `--certs-dir`, use root client-cert auth for internal admin flows, and support password-authenticated local backup/restore.
+- **Focused auth-backed backup/restore coverage across the remaining auth-sensitive engines** — CockroachDB, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, and LibSQL now have explicit verification instead of relying on anonymous localhost assumptions.
+- **SurrealDB auth regression coverage** — Added unit tests for explicit `authLevel` handling and quote-safe backup sanitization.
+
+### Changed
+
+- **FerretDB backups are now Mongo-native** — New FerretDB backups use Mongo-style archive/BSON semantics instead of PostgreSQL dump formats. Restore remains backward-compatible with older artifacts.
+- **SurrealDB non-root connection strings must be explicit** — Non-root `surrealdb://` URLs now require `?authLevel=namespace|database` instead of guessing `database`.
+- **InfluxDB local auth now persists admin tokens** — Local auth-backed startup and restore now rely on `admin-token.json`, not ad hoc token creation at query time.
+- **Meilisearch local auth now persists a master key** — `createUser()` configures a stable `master.key` so local auth-backed backup/restore can restart cleanly.
+
+### Fixed
+
+- **Auth-backed local backup/restore** — PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, SurrealDB, ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, LibSQL, and CockroachDB now reuse saved credentials instead of assuming passwordless localhost access.
+- **FerretDB restore robustness** — Namespace remapping now uses documented `mongorestore` placeholders, and directory scans fail safely instead of throwing on unreadable backups.
+- **MariaDB and Valkey shell safety** — Credential-bearing local admin calls now use argv-based process execution rather than interpolated shell strings.
+- **InfluxDB token parsing errors** — Malformed or unreadable persisted admin token files now raise clear errors that include the file path.
+- **SurrealDB backup sanitization** — Auth-defining statements are stripped without breaking on semicolons inside quoted values.
+
 ## [0.46.5] - 2026-03-26
 
 ### Fixed
