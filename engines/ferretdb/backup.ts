@@ -17,6 +17,28 @@ import { buildMongoUri } from '../mongo-uri'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
 import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
+function redactMongoUri(uri: string): string {
+  try {
+    const url = new URL(uri)
+    if (!url.username && !url.password) {
+      return uri
+    }
+
+    return `${url.protocol}//<redacted>@${url.host}${url.pathname}${url.search}`
+  } catch {
+    return 'mongodb://<redacted>'
+  }
+}
+
+function sanitizeMongoArgs(args: string[]): string[] {
+  const sanitized = [...args]
+  const uriIndex = sanitized.indexOf('--uri')
+  if (uriIndex >= 0 && uriIndex + 1 < sanitized.length) {
+    sanitized[uriIndex + 1] = redactMongoUri(sanitized[uriIndex + 1])
+  }
+  return sanitized
+}
+
 /**
  * Create a backup of a FerretDB database using pg_dump
  *
@@ -78,7 +100,7 @@ export async function createBackup(
     args.push('--out', outputPath)
   }
 
-  logDebug(`Running mongodump with args: ${args.join(' ')}`)
+  logDebug(`Running mongodump with args: ${sanitizeMongoArgs(args).join(' ')}`)
 
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],

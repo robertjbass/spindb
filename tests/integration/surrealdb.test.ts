@@ -31,7 +31,7 @@ import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
-import { Engine } from '../../types'
+import { Engine, type ContainerConfig } from '../../types'
 import { paths } from '../../config/paths'
 import { parseSurrealDBResult } from '../../core/query-parser'
 
@@ -706,13 +706,13 @@ describe('SurrealDB Integration Tests', () => {
       `surrealdb-auth-backup-${Date.now()}.surql`,
     )
     const engine = getEngine(ENGINE)
-    const buildSavedRootCredentials = (
+    const buildSavedRootScopedCredentials = (
       containerName: string,
       port: number,
     ) => ({
-      username: 'root',
-      password: 'root',
-      connectionString: `surrealdb://root:root@127.0.0.1:${port}/${containerName.replace(/-/g, '_')}/${DATABASE}?authLevel=root`,
+      username: 'saved_root_user',
+      password: 'saved-root-pass-123',
+      connectionString: `surrealdb://saved_root_user:saved-root-pass-123@127.0.0.1:${port}/${containerName.replace(/-/g, '_')}/${DATABASE}?authLevel=root`,
       database: DATABASE,
     })
 
@@ -746,6 +746,20 @@ describe('SurrealDB Integration Tests', () => {
       )
     }
 
+    const createSavedRootScopedUser = async (
+      config: ContainerConfig,
+      containerName: string,
+      port: number,
+    ) => {
+      const credentials = buildSavedRootScopedCredentials(containerName, port)
+      await engine.runScript(config, {
+        sql: `DEFINE USER OVERWRITE ${credentials.username} ON ROOT PASSWORD '${credentials.password}' ROLES OWNER;`,
+        database: DATABASE,
+      })
+      await writeDefaultCredentialFile(containerName, credentials)
+      return credentials
+    }
+
     try {
       await containerManager.create(sourceName, {
         engine: ENGINE,
@@ -763,8 +777,11 @@ describe('SurrealDB Integration Tests', () => {
         'Source should be ready',
       )
       await runScriptFile(sourceName, SEED_FILE, DATABASE)
-      const sourceCredentials = buildSavedRootCredentials(sourceName, sourcePort)
-      await writeDefaultCredentialFile(sourceName, sourceCredentials)
+      await createSavedRootScopedUser(
+        sourceConfig!,
+        sourceName,
+        sourcePort,
+      )
 
       sourceConfig = await containerManager.getConfig(sourceName)
       assert(sourceConfig !== null, 'Source auth config should exist')
@@ -796,8 +813,11 @@ describe('SurrealDB Integration Tests', () => {
         await waitForReady(ENGINE, targetPort, 60000),
         'Target should be ready',
       )
-      const targetCredentials = buildSavedRootCredentials(targetName, targetPort)
-      await writeDefaultCredentialFile(targetName, targetCredentials)
+      await createSavedRootScopedUser(
+        targetConfig!,
+        targetName,
+        targetPort,
+      )
 
       const backupResult = await engine.backup(sourceConfig!, backupPath, {
         database: DATABASE,

@@ -16,6 +16,7 @@ import {
   addSurrealAuthArgs,
   getBootstrapSurrealAuth,
   inferSurrealAuthLevel,
+  sanitizeSurrealAuthArgs,
 } from './auth'
 import { requireSurrealPath } from './cli-utils'
 import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
@@ -124,7 +125,7 @@ async function createSurqlBackup(
       auth,
     )
 
-    logDebug(`Running: surreal ${args.join(' ')}`)
+    logDebug(`Running: surreal ${sanitizeSurrealAuthArgs(args).join(' ')}`)
 
     const proc = spawn(surrealPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],

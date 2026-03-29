@@ -213,9 +213,16 @@ function doRestore(
   format: BackupFormat,
   withCompatSettings: boolean,
 ): Promise<RestoreResult & { rawStderr?: string }> {
+  const env = { ...process.env }
+  if (password) {
+    env.MYSQL_PWD = password
+  } else {
+    delete env.MYSQL_PWD
+  }
+
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
+    env,
   }
 
   return new Promise((resolve, reject) => {

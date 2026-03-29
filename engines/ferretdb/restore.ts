@@ -29,6 +29,28 @@ import {
   type RestoreResult,
 } from '../../types'
 
+function redactMongoUri(uri: string): string {
+  try {
+    const url = new URL(uri)
+    if (!url.username && !url.password) {
+      return uri
+    }
+
+    return `${url.protocol}//<redacted>@${url.host}${url.pathname}${url.search}`
+  } catch {
+    return 'mongodb://<redacted>'
+  }
+}
+
+function sanitizeMongoArgs(args: string[]): string[] {
+  const sanitized = [...args]
+  const uriIndex = sanitized.indexOf('--uri')
+  if (uriIndex >= 0 && uriIndex + 1 < sanitized.length) {
+    sanitized[uriIndex + 1] = redactMongoUri(sanitized[uriIndex + 1])
+  }
+  return sanitized
+}
+
 /**
  * Resolve the path to a PostgreSQL client binary (pg_restore, psql, etc.)
  *
@@ -282,6 +304,8 @@ async function restoreViaMongo(
 ): Promise<RestoreResult> {
   const { port, database, drop = true, sourceDatabase, containerVersion } =
     options
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RESTORE_TIMEOUT_MS
+  const backupDatabase = sourceDatabase ?? database
 
   const mongorestore = await getMongorestorePath(containerVersion)
   if (!mongorestore) {
@@ -321,9 +345,9 @@ async function restoreViaMongo(
   }
 
   if (format.format === 'directory') {
-    const targetDbDir = join(backupPath, database)
-    if (existsSync(targetDbDir)) {
-      args.push(targetDbDir)
+    const backupDbDir = join(backupPath, backupDatabase)
+    if (existsSync(backupDbDir)) {
+      args.push(backupDbDir)
     } else {
       let restorePath = backupPath
 
@@ -364,7 +388,7 @@ async function restoreViaMongo(
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
-  logDebug(`Running mongorestore with args: ${args.join(' ')}`)
+  logDebug(`Running mongorestore with args: ${sanitizeMongoArgs(args).join(' ')}`)
 
   return new Promise((resolve, reject) => {
     const proc = spawn(mongorestore, args, {
@@ -373,6 +397,33 @@ async function restoreViaMongo(
 
     let stdout = ''
     let stderr = ''
+    let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const cleanup = (): void => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      settled = true
+    }
+
+    timeoutId = setTimeout(() => {
+      if (settled) return
+      cleanup()
+      try {
+        if (proc.exitCode === null && !proc.killed) {
+          proc.kill('SIGTERM')
+        }
+      } catch {
+        // Ignore kill races
+      }
+      reject(
+        new Error(
+          `Restore timed out after ${timeoutMs}ms. The mongorestore process was killed.`,
+        ),
+      )
+    }, timeoutMs)
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString()
@@ -381,8 +432,14 @@ async function restoreViaMongo(
       stderr += data.toString()
     })
 
-    proc.on('error', reject)
+    proc.on('error', (error) => {
+      if (settled) return
+      cleanup()
+      reject(error)
+    })
     proc.on('close', (code) => {
+      if (settled) return
+      cleanup()
       if (code === 0) {
         resolve({ format: format.format, stdout, stderr, code })
       } else {
@@ -428,6 +485,10 @@ export async function restoreBackup(
 
   // Choose restore tool based on format
   const isSqlFormat = format.format === 'sql'
+  const targetDb =
+    format.format === 'custom' || format.format === 'sql'
+      ? 'ferretdb'
+      : database
   const toolPath = isSqlFormat
     ? await getPsqlPath(container)
     : await getPgRestorePath(container)
@@ -440,7 +501,7 @@ export async function restoreBackup(
     '-U',
     'postgres',
     '-d',
-    database,
+    targetDb,
   ]
 
   if (isSqlFormat) {

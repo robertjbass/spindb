@@ -51,7 +51,9 @@ import {
   isInsecureConnection,
   buildLocalCockroachSqlArgs,
   buildSecureCockroachConnectionString,
+  buildInsecureCockroachConnectionString,
   getCockroachCertsDir,
+  getCockroachCaCertPath,
   getCockroachCaKeyPath,
   getCockroachClientCertPath,
   getCockroachClientKeyPath,
@@ -665,6 +667,18 @@ export class CockroachDBEngine extends BaseEngine {
   getConnectionString(container: ContainerConfig, database?: string): string {
     const { name, port } = container
     const db = database || container.database || 'defaultdb'
+
+    const legacyInsecureRunning =
+      container.status === 'running' &&
+      !existsSync(getCockroachCaCertPath(name))
+
+    if (legacyInsecureRunning) {
+      return buildInsecureCockroachConnectionString({
+        port,
+        database: db,
+      })
+    }
+
     return buildSecureCockroachConnectionString({
       containerName: name,
       port,

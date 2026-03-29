@@ -757,12 +757,13 @@ describe('MySQL Integration Tests', () => {
       port: number,
       password: string,
     ) => {
+      const escapedPassword = password.replace(/'/g, "''")
       await runScriptSQL(
         containerName,
         [
-          `CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${password}'`,
-          `ALTER USER 'root'@'%' IDENTIFIED BY '${password}'`,
-          `ALTER USER 'root'@'localhost' IDENTIFIED BY '${password}'`,
+          `CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${escapedPassword}'`,
+          `ALTER USER 'root'@'%' IDENTIFIED BY '${escapedPassword}'`,
+          `ALTER USER 'root'@'localhost' IDENTIFIED BY '${escapedPassword}'`,
           "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION",
           "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION",
           'FLUSH PRIVILEGES',

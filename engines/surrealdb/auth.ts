@@ -90,6 +90,24 @@ export function addSurrealAuthArgs(
   return args
 }
 
+export function sanitizeSurrealAuthArgs(args: string[]): string[] {
+  const sanitized = [...args]
+
+  for (let i = 0; i < sanitized.length; i++) {
+    if (
+      sanitized[i] === '--pass' ||
+      sanitized[i] === '--password' ||
+      sanitized[i] === '--token'
+    ) {
+      if (i + 1 < sanitized.length) {
+        sanitized[i + 1] = '<redacted>'
+      }
+    }
+  }
+
+  return sanitized
+}
+
 export function buildSurrealUserConnectionString(options: {
   username: string
   password: string

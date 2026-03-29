@@ -641,10 +641,20 @@ export class MySQLEngine extends BaseEngine {
       logDebug('No valid PID, checking if MySQL is responding on port')
       try {
         await this.pingLocalAdmin(name, port)
-        logWarning(`MySQL responding on port ${port} but no valid PID file`)
-        await this.gracefulShutdown(name, port)
       } catch {
         logDebug('MySQL not responding, nothing to stop')
+        return
+      }
+
+      logWarning(`MySQL responding on port ${port} but no valid PID file`)
+      const gracefulSuccess = await this.gracefulShutdown(name, port)
+      if (!gracefulSuccess) {
+        throw new SpinDBError(
+          ErrorCodes.PROCESS_STOP_TIMEOUT,
+          `MySQL on port ${port} responded to ping but did not shut down cleanly`,
+          'error',
+          'Check credentials and stop the process manually if it is still running.',
+        )
       }
       return
     }
@@ -718,6 +728,7 @@ export class MySQLEngine extends BaseEngine {
           return false
         }
       }
+      return false
     }
 
     if (pid) {
@@ -736,7 +747,7 @@ export class MySQLEngine extends BaseEngine {
       return false
     }
 
-    return true
+    return false
   }
 
   private async forceKillWithEscalation(

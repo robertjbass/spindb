@@ -150,6 +150,33 @@ export function buildSecureCockroachConnectionString(options: {
   return url.toString()
 }
 
+export function buildInsecureCockroachConnectionString(options: {
+  port: number
+  database?: string
+  username?: string
+  password?: string
+  host?: string
+}): string {
+  const {
+    port,
+    database = 'defaultdb',
+    username = 'root',
+    password,
+    host = '127.0.0.1',
+  } = options
+
+  const url = new URL(
+    `postgresql://${encodeURIComponent(username)}@${host}:${port}/${database}`,
+  )
+
+  if (password) {
+    url.password = password
+  }
+
+  url.searchParams.set('sslmode', 'disable')
+  return url.toString()
+}
+
 export function buildLocalCockroachSqlArgs(options: {
   containerName: string
   port: number

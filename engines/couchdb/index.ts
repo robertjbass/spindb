@@ -126,9 +126,22 @@ function patchCouchDBConfig(
       `bind_address = ${options.bindAddress}`,
     )
   }
-  const adminsSection = `[admins]\n${options.adminUsername} = ${options.adminPassword}`
-  if (/\[admins\][\s\S]*?(?=\n\[|$)/m.test(config)) {
-    config = config.replace(/\[admins\][\s\S]*?(?=\n\[|$)/m, adminsSection)
+  const managedAdminLine = `${options.adminUsername} = ${options.adminPassword}`
+  const adminsSection = `[admins]\n${managedAdminLine}`
+  const adminsSectionPattern = /\[admins\][\s\S]*?(?=\n\[|$)/m
+  const escapedUsername = options.adminUsername.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    '\\$&',
+  )
+  const managedAdminPattern = new RegExp(`^${escapedUsername}\\s*=.*$`, 'm')
+
+  if (adminsSectionPattern.test(config)) {
+    config = config.replace(adminsSectionPattern, (section) => {
+      if (managedAdminPattern.test(section)) {
+        return section.replace(managedAdminPattern, managedAdminLine)
+      }
+      return `${section.trimEnd()}\n${managedAdminLine}`
+    })
   } else {
     config = `${config.trimEnd()}\n\n${adminsSection}\n`
   }

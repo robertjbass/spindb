@@ -375,8 +375,8 @@ describe('Weaviate Integration Tests', () => {
 
       const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.weaviate.base + 20)
       const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
-      const sourceName = generateTestName('weaviate-auth-source')
-      const targetName = generateTestName('weaviate-auth-target')
+      const sourceName = generateTestName('weaviate-auth-test-source')
+      const targetName = generateTestName('weaviate-auth-test-target')
       const username = getDefaultUsername(ENGINE)
       const sourceApiKey = 'weaviate-source-key-123'
       const targetApiKey = 'weaviate-target-key-456'
@@ -511,12 +511,19 @@ describe('Weaviate Integration Tests', () => {
 
         const queryResult = await engine.executeQuery(
           targetConfig!,
-          `GET /v1/schema/${TEST_CLASS}`,
+          `GET /v1/objects?class=${TEST_CLASS}&limit=10`,
           {
             password: targetCreds.apiKey,
           },
         )
-        assertEqual(queryResult.rowCount, 1, 'Should query restored class with API key')
+        const restoredObjects =
+          (queryResult.rows[0] as { objects?: unknown[] } | undefined)
+            ?.objects ?? []
+        assertEqual(
+          restoredObjects.length,
+          2,
+          'Should query restored objects with API key',
+        )
 
         console.log('   API-key Weaviate backup/restore succeeded')
       } finally {

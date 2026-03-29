@@ -362,6 +362,16 @@ describe('Meilisearch Integration Tests', () => {
           'Authenticated Meilisearch restore should retain searchable documents',
         )
       } finally {
+        for (const containerName of [sourceName, targetName]) {
+          const config = await containerManager.getConfig(containerName)
+          if (config) {
+            await engine.stop(config).catch(() => {})
+            await waitForStopped(containerName, ENGINE).catch(() => false)
+            await containerManager.delete(containerName, { force: true }).catch(
+              () => {},
+            )
+          }
+        }
         await rm(backupPath, { force: true })
       }
     },

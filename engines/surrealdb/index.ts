@@ -1118,18 +1118,23 @@ export class SurrealDBEngine extends BaseEngine {
         }
 
         try {
-          // Parse JSON output - INFO FOR NS returns database info
-          const results = JSON.parse(stdout)
-          if (Array.isArray(results) && results[0]?.result?.databases) {
-            const databases = Object.keys(results[0].result.databases)
+          const result = parseSurrealDBResult(stdout)
+          const firstRow = result.rows[0] as
+            | { databases?: Record<string, unknown> }
+            | undefined
+          if (firstRow?.databases) {
+            const databases = Object.keys(firstRow.databases)
             resolve(databases)
           } else {
             // No databases found or different format
             resolve([container.database])
           }
-        } catch {
-          // If parsing fails, return the configured database
-          resolve([container.database])
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse SurrealDB database list: ${error instanceof Error ? error.message : error}`,
+            ),
+          )
         }
       })
     })

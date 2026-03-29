@@ -325,7 +325,8 @@ describe('Qdrant Integration Tests', () => {
     const sourceName = generateTestName('qdrant-auth-test-source')
     const targetName = generateTestName('qdrant-auth-test-target')
     const username = getDefaultUsername(ENGINE)
-    const apiKey = 'qdrant-auth-key-123'
+    const sourceApiKey = 'qdrant-auth-key-123'
+    const targetApiKey = 'qdrant-auth-key-456'
     const { tmpdir } = await import('os')
     const { rm } = await import('fs/promises')
     const backupPath = `${tmpdir()}/qdrant-auth-backup-${Date.now()}.snapshot`
@@ -364,7 +365,7 @@ describe('Qdrant Integration Tests', () => {
 
       const sourceCreds = await engine.createUser(sourceConfig!, {
         username,
-        password: apiKey,
+        password: sourceApiKey,
         database: DATABASE,
       })
       await saveCredentials(sourceName, ENGINE, sourceCreds)
@@ -394,6 +395,12 @@ describe('Qdrant Integration Tests', () => {
 
       const targetConfig = await containerManager.getConfig(targetName)
       assert(targetConfig !== null, 'Target container config should exist')
+      const targetCreds = await engine.createUser(targetConfig!, {
+        username,
+        password: targetApiKey,
+        database: DATABASE,
+      })
+      await saveCredentials(targetName, ENGINE, targetCreds)
 
       await engine.backup(sourceConfig!, backupPath, {
         database: DATABASE,
@@ -420,8 +427,8 @@ describe('Qdrant Integration Tests', () => {
           targetConfig!,
           `POST /collections/${TEST_COLLECTION}/points/scroll {"limit": 10}`,
           {
-            username: sourceCreds.username,
-            password: sourceCreds.apiKey,
+            username: targetCreds.username,
+            password: targetCreds.apiKey,
           },
         )
         const restoredRow = restoredResult.rows[0] as Record<string, unknown>

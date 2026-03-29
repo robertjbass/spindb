@@ -1,4 +1,4 @@
-import { spawn, exec, type SpawnOptions } from 'child_process'
+import { spawn, exec, execFile, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
@@ -53,6 +53,7 @@ import { parseRedisResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 const ENGINE = 'redis'
 
@@ -70,6 +71,14 @@ function escapeKeyForCommand(key: string): string {
     .replace(/\t/g, '\\t') // Tab
 }
 const engineDef = getEngineDefaults(ENGINE)
+
+function buildRedisCliEnv(
+  password?: string,
+): NodeJS.ProcessEnv {
+  return password
+    ? { ...process.env, REDISCLI_AUTH: password }
+    : { ...process.env }
+}
 
 /**
  * Shell metacharacters that indicate potential command injection
@@ -864,12 +873,9 @@ export class RedisEngine extends BaseEngine {
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = `"${redisCli}" ${cliArgs.join(' ')} PING`
-        const { stdout } = await execAsync(cmd, {
+        const { stdout } = await execFileAsync(redisCli, [...cliArgs, 'PING'], {
           timeout: 5000,
-          env: savedCreds?.password
-            ? { ...process.env, REDISCLI_AUTH: savedCreds.password }
-            : process.env,
+          env: buildRedisCliEnv(savedCreds?.password),
         })
         if (stdout.trim() === 'PONG') {
           logDebug(`Redis ready on port ${port}`)
@@ -909,12 +915,9 @@ export class RedisEngine extends BaseEngine {
           args.push('--user', savedCreds.username)
         }
         args.push('SHUTDOWN', 'SAVE')
-        const cmd = `"${redisCli}" ${args.join(' ')}`
-        await execAsync(cmd, {
+        await execFileAsync(redisCli, args, {
           timeout: 10000,
-          env: savedCreds?.password
-            ? { ...process.env, REDISCLI_AUTH: savedCreds.password }
-            : process.env,
+          env: buildRedisCliEnv(savedCreds?.password),
         })
         logDebug('Redis shutdown command sent')
         // Wait a bit for process to exit
