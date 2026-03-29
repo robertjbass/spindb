@@ -538,15 +538,13 @@ export class InfluxDBEngine extends BaseEngine {
       return new Promise((resolve, reject) => {
         const spawnOpts: SpawnOptions = {
           cwd: containerDir,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['ignore', 'ignore', 'ignore'],
           detached: true,
           windowsHide: true,
         }
 
         const proc = spawn(influxdbServer, args, spawnOpts)
         let settled = false
-        let stderrOutput = ''
-        let stdoutOutput = ''
 
         proc.on('error', (err) => {
           if (settled) return
@@ -560,22 +558,9 @@ export class InfluxDBEngine extends BaseEngine {
           const reason = signal ? `signal ${signal}` : `code ${code}`
           reject(
             new Error(
-              `InfluxDB process exited unexpectedly (${reason}).\n` +
-                `Stderr: ${stderrOutput || '(none)'}\n` +
-                `Stdout: ${stdoutOutput || '(none)'}`,
+              `InfluxDB process exited unexpectedly (${reason}).`,
             ),
           )
-        })
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stdoutOutput += str
-          logDebug(`influxdb3 stdout: ${str}`)
-        })
-        proc.stderr?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stderrOutput += str
-          logDebug(`influxdb3 stderr: ${str}`)
         })
 
         proc.unref()
@@ -626,8 +611,6 @@ export class InfluxDBEngine extends BaseEngine {
               portError || 'InfluxDB failed to start within timeout.',
               `Binary: ${influxdbServer}`,
               `Log file: ${logFile}`,
-              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
-              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
             ]
               .filter(Boolean)
               .join('\n')

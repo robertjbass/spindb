@@ -144,6 +144,7 @@ Combine common multi-step workflows into single commands:
 - [ ] **Windows support for ClickHouse and FerretDB** - Currently not supported due to binary issues
   - **ClickHouse**: hostdb doesn't have Windows builds. Investigate MinGW/MSYS2 or WSL2 fallback
   - **FerretDB**: postgresql-documentdb fails to start on Windows. Debug or WSL2 fallback
+- [ ] **Qdrant snapshot restore on Windows** - Full snapshot restore via startup-time recovery still panics on Win x64 (`Too many parts in snapshot mapping` in Qdrant 1.16.x). Basic Qdrant lifecycle/query coverage runs on Windows, but clone/auth restore coverage is temporarily skipped there until the restore path is reworked or upstream behavior changes.
 
 ### Distribution
 

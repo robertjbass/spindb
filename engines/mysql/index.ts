@@ -538,16 +538,9 @@ export class MySQLEngine extends BaseEngine {
 
     if (isWindows()) {
       proc = spawn(mysqld, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
         windowsHide: true,
-      })
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`mysqld stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`mysqld stderr: ${data.toString()}`)
       })
 
       proc.unref()
