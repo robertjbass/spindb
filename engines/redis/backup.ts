@@ -10,6 +10,7 @@ import { copyFile, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { detectLibraryError } from '../../core/library-env'
 import {
   getDefaultUsername,
   loadCredentials,
@@ -52,7 +53,7 @@ async function execRedisCommand(
     const args = buildRedisCliArgs(port, auth)
     const proc = spawn(redisCli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildRedisCliEnv(auth),
+      env: buildRedisCliEnv(auth, redisCli),
     })
 
     let stdout = ''
@@ -74,8 +75,11 @@ async function execRedisCommand(
         stderr,
         inspectStdoutErrors,
       )
+      const libraryError = detectLibraryError(combinedOutput, 'Redis')
 
-      if (code === 0 && !hasCliError) {
+      if (libraryError) {
+        reject(new Error(libraryError))
+      } else if (code === 0 && !hasCliError) {
         resolve(stdout)
       } else {
         reject(

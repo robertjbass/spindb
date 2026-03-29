@@ -45,7 +45,11 @@ import {
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
 import { ferretdbBinaryManager } from './binary-manager'
-import { buildMongoUri, type MongoWireAuth } from '../mongo-uri'
+import {
+  buildMongoUri,
+  normalizeMongoHost,
+  type MongoWireAuth,
+} from '../mongo-uri'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   FALLBACK_VERSION_MAP,
@@ -86,10 +90,6 @@ const ENGINE = 'ferretdb'
 const engineDef = getEngineDefaults(ENGINE)
 
 type LocalFerretAuth = MongoWireAuth
-
-function getLocalConnectHost(bindAddress?: string): string {
-  return bindAddress === '0.0.0.0' ? '127.0.0.1' : bindAddress ?? '127.0.0.1'
-}
 
 // Default internal PostgreSQL port range for FerretDB backends
 const BACKEND_PORT_START = 54320
@@ -1273,7 +1273,7 @@ export class FerretDBEngine extends BaseEngine {
     options?: { quiet?: boolean },
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
-    const connectHost = getLocalConnectHost(container.bindAddress)
+    const connectHost = normalizeMongoHost(container.bindAddress)
     const args = savedCreds
       ? [
           buildMongoUri(
@@ -1694,7 +1694,7 @@ export class FerretDBEngine extends BaseEngine {
       args = [uri, '--quiet', '--eval', script]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
-      const connectHost = getLocalConnectHost(container.bindAddress)
+      const connectHost = normalizeMongoHost(container.bindAddress)
       args = savedCreds
         ? [
             buildMongoUri(

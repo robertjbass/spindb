@@ -114,7 +114,7 @@ pnpm test:engine              # All integration tests
 pnpm test:docker              # Docker Linux E2E
 ```
 
-Integration tests use reserved ports (not defaults): PostgreSQL 5454-5456, MySQL 3333-3335, Redis 6399-6401.
+Integration tests use reserved ports (not defaults): PostgreSQL 5454-5456, MySQL 3333-3337 (main suite 3333-3335, auth backup/restore 3336-3337), Redis 6399-6401. `tests/integration/helpers.ts` is the source of truth for the reserved ranges.
 
 Tests use `--experimental-test-isolation=none` due to Node 22 macOS worker thread bug — don't remove.
 

@@ -1,3 +1,6 @@
+import { basename, dirname } from 'path'
+import { getLibraryEnv } from '../../core/library-env'
+
 type RedisCliAuth = {
   username?: string
   password?: string
@@ -40,8 +43,27 @@ export function buildRedisCliArgs(
   return args
 }
 
-export function buildRedisCliEnv(auth?: RedisCliAuth): NodeJS.ProcessEnv {
-  const env = { ...process.env }
+function getRedisCliLibraryEnv(
+  redisCliPath?: string,
+): Record<string, string> | undefined {
+  if (!redisCliPath) {
+    return undefined
+  }
+
+  const cliDir = dirname(redisCliPath)
+  const baseDir = basename(cliDir) === 'bin' ? dirname(cliDir) : cliDir
+  return getLibraryEnv(baseDir)
+}
+
+export function buildRedisCliEnv(
+  auth?: RedisCliAuth,
+  redisCliPath?: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = {
+    ...baseEnv,
+    ...getRedisCliLibraryEnv(redisCliPath),
+  }
 
   if (auth?.password) {
     env.REDISCLI_AUTH = auth.password

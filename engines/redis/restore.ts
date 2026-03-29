@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'child_process'
+import { once } from 'events'
 import { copyFile, open } from 'fs/promises'
 import { existsSync, statSync, createReadStream } from 'fs'
 import { createInterface } from 'readline'
@@ -16,6 +17,7 @@ import {
   loadCredentials,
 } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
+import { detectLibraryError } from '../../core/library-env'
 import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import {
   buildRedisCliArgs,
@@ -247,7 +249,7 @@ async function restoreTextBackup(
     const args = buildRedisCliArgs(port, auth, database)
     const proc = spawn(redisCli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildRedisCliEnv(auth),
+      env: buildRedisCliEnv(auth, redisCli),
     })
 
     let stdout = ''
@@ -271,8 +273,11 @@ async function restoreTextBackup(
 
       const combinedOutput = `${stdout}\n${stderr}`.trim()
       const hasCliError = hasRedisCliError(stdout, stderr, true)
+      const libraryError = detectLibraryError(combinedOutput, 'Redis')
 
-      if (code === 0 && !hasCliError) {
+      if (libraryError) {
+        reject(new Error(libraryError))
+      } else if (code === 0 && !hasCliError) {
         resolve({
           format: 'text',
           stdout: stdout || 'Redis commands executed successfully',
@@ -315,9 +320,11 @@ async function restoreTextBackup(
 
     proc.stdin.on('error', (error) => {
       // Handle stdin errors (e.g., process closed unexpectedly)
-      streamError = new Error(
-        `Failed to write to redis-cli stdin: ${error.message}`,
-      )
+      if ((error as NodeJS.ErrnoException).code !== 'EPIPE') {
+        streamError = new Error(
+          `Failed to write to redis-cli stdin: ${error.message}`,
+        )
+      }
       fileStream.destroy()
       lineReader.close()
     })
@@ -329,7 +336,12 @@ async function restoreTextBackup(
           if (!line || line.startsWith('#')) {
             continue
           }
-          proc.stdin.write(rawLine + '\n')
+          if (proc.stdin.destroyed) {
+            break
+          }
+          if (!proc.stdin.write(rawLine + '\n')) {
+            await once(proc.stdin, 'drain')
+          }
         }
       } catch (error) {
         streamError = new Error(
