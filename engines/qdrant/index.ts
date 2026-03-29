@@ -1,7 +1,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { createWriteStream, existsSync } from 'fs'
 import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { join, relative } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { BaseEngine } from '../base-engine'
@@ -50,6 +50,19 @@ import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'qdrant'
 const engineDef = getEngineDefaults(ENGINE)
+
+function getStorageSnapshotArg(
+  containerDir: string,
+  snapshotPath: string,
+): string {
+  if (!isWindows()) {
+    return snapshotPath
+  }
+
+  // Qdrant parses `--storage-snapshot` values using `:` separators. On Windows,
+  // absolute paths include a drive-letter colon, so pass a cwd-relative path.
+  return relative(containerDir, snapshotPath).replace(/\\/g, '/')
+}
 
 /**
  * Generate Qdrant configuration YAML content
@@ -533,7 +546,10 @@ export class QdrantEngine extends BaseEngine {
       try {
         const snapshotPath = (await readFile(pendingSnapshotMarker, 'utf-8')).trim()
         if (snapshotPath && existsSync(snapshotPath)) {
-          args.push('--storage-snapshot', snapshotPath)
+          args.push(
+            '--storage-snapshot',
+            getStorageSnapshotArg(containerDir, snapshotPath),
+          )
           snapshotApplied = true
           logDebug(`Starting Qdrant with storage snapshot: ${snapshotPath}`)
         }
