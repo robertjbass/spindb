@@ -687,7 +687,7 @@ describe('MySQL Integration Tests', () => {
 
     const [sourcePort, targetPort] = await findConsecutiveFreePorts(
       2,
-      TEST_PORTS.mysql.base + 40,
+      TEST_PORTS.mysql.authBase,
     )
     const sourceName = generateTestName('mysql-auth-test-source')
     const targetName = generateTestName('mysql-auth-test-target')

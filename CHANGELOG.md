@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-03-29
+
 ### Fixed
 
 - **PostgreSQL auth-aware database creation** — Restore/setup paths now honor the authenticated username passed into `createDatabase()` instead of always forcing the default superuser.
