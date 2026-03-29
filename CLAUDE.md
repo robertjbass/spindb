@@ -45,6 +45,8 @@ tests/fixtures/       # Test data and seed files
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
 
+**`spindb deploy` (antiquated):** The `deploy` command exists but is not used by layerbase-cloud or layerbase-desktop. Cloud deployments are handled by layerbase-cloud's own infrastructure (Docker containers running spindb on Hetzner), not by `spindb deploy`. The command may be worth re-evaluating for users who want to deploy local databases to external (non-Layerbase) cloud services, but it is not part of any current workflow.
+
 **Bind address (`--bind` flag):** `spindb start --bind <address>` sets `bindAddress` in `ContainerConfig`, persisted to `config.json`. All server engines read `container.bindAddress ?? '127.0.0.1'` (QuestDB defaults to `0.0.0.0`). Config-file engines (Redis, Valkey, CouchDB, Qdrant) patch existing configs on restart rather than regenerating them, preserving user modifications like credentials and API keys. ClickHouse patches `<listen_host>` in config.xml. TypeDB regenerates config.yml on every start (passes bindAddress via initDataDir options).
 
 **Authentication (`--auth` / `--no-auth` flags):** `spindb start --auth` sets `authEnabled: true` in `ContainerConfig`, persisted to `config.json`. `spindb start --no-auth` sets it to `false`. Only supported for MongoDB and FerretDB; warns and ignores for other engines. MongoDB: passes `--auth` to mongod when enabled. FerretDB v2: omits `--no-auth` flag when enabled (SCRAM authentication enforced). Default for both is auth disabled (backwards-compatible).
