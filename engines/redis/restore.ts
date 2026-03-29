@@ -8,6 +8,7 @@
 import { spawn } from 'child_process'
 import { copyFile, open } from 'fs/promises'
 import { existsSync, statSync, createReadStream } from 'fs'
+import { createInterface } from 'readline'
 import { join } from 'path'
 import { paths } from '../../config/paths'
 import {
@@ -16,21 +17,13 @@ import {
 } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
+import {
+  buildRedisCliArgs,
+  buildRedisCliEnv,
+  hasRedisCliError,
+  type RedisCliAuth,
+} from './cli-common'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
-
-type RedisCliAuth = {
-  username?: string
-  password?: string
-}
-
-function shouldPassRedisCliUsername(username?: string): username is string {
-  if (!username) {
-    return false
-  }
-
-  const trimmed = username.trim()
-  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
-}
 
 /**
  * Common Redis commands used to detect text-based backup files
@@ -251,15 +244,10 @@ async function restoreTextBackup(
   }
 
   return new Promise<RestoreResult>((resolve, reject) => {
-    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', database]
-    if (shouldPassRedisCliUsername(auth?.username)) {
-      args.push('--user', auth.username)
-    }
+    const args = buildRedisCliArgs(port, auth, database)
     const proc = spawn(redisCli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: auth?.password
-        ? { ...process.env, REDISCLI_AUTH: auth.password }
-        : process.env,
+      env: buildRedisCliEnv(auth),
     })
 
     let stdout = ''
@@ -274,14 +262,17 @@ async function restoreTextBackup(
       stderr += data.toString()
     })
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       // If there was a stream error, report it
       if (streamError) {
         reject(streamError)
         return
       }
 
-      if (code === 0) {
+      const combinedOutput = `${stdout}\n${stderr}`.trim()
+      const hasCliError = hasRedisCliError(stdout, stderr, true)
+
+      if (code === 0 && !hasCliError) {
         resolve({
           format: 'text',
           stdout: stdout || 'Redis commands executed successfully',
@@ -291,7 +282,8 @@ async function restoreTextBackup(
       } else {
         reject(
           new Error(
-            `redis-cli exited with code ${code}${stderr ? `: ${stderr}` : ''}`,
+            combinedOutput ||
+              `redis-cli exited with code ${code} and signal ${signal ?? 'none'}`,
           ),
         )
       }
@@ -307,12 +299,17 @@ async function restoreTextBackup(
       proc.stdin.write('FLUSHDB\n')
     }
 
-    // Stream backup file to redis-cli stdin
+    // Stream backup commands to redis-cli stdin, skipping comments/blank lines.
     const fileStream = createReadStream(backupPath, { encoding: 'utf-8' })
+    const lineReader = createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    })
 
     fileStream.on('error', (error) => {
       streamError = new Error(`Failed to read backup file: ${error.message}`)
       fileStream.destroy()
+      lineReader.close()
       proc.stdin.end()
     })
 
@@ -322,9 +319,35 @@ async function restoreTextBackup(
         `Failed to write to redis-cli stdin: ${error.message}`,
       )
       fileStream.destroy()
+      lineReader.close()
     })
 
-    fileStream.pipe(proc.stdin)
+    ;(async () => {
+      try {
+        for await (const rawLine of lineReader) {
+          const line = rawLine.trim()
+          if (!line || line.startsWith('#')) {
+            continue
+          }
+          proc.stdin.write(rawLine + '\n')
+        }
+      } catch (error) {
+        streamError = new Error(
+          `Failed to stream backup commands: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      } finally {
+        proc.stdin.end()
+      }
+    })().catch((error) => {
+      streamError = new Error(
+        `Failed to process backup commands: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      proc.stdin.end()
+    })
   })
 }
 

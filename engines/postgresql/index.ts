@@ -721,12 +721,13 @@ export class PostgreSQLEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
     const psqlPath = await this.getPsqlPath()
+    const user = auth?.username || defaults.superuser
 
     // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
     const sql = `CREATE DATABASE "${database}"`
     const cmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
+      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${user} -d postgres -c '${sql}'`
 
     try {
       await execAsync(cmd, {

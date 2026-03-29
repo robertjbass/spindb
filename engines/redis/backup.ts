@@ -17,25 +17,17 @@ import {
 import { paths } from '../../config/paths'
 import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import {
+  buildRedisCliArgs,
+  buildRedisCliEnv,
+  hasRedisCliError,
+  type RedisCliAuth,
+} from './cli-common'
+import {
   Engine,
   type ContainerConfig,
   type BackupOptions,
   type BackupResult,
 } from '../../types'
-
-type RedisCliAuth = {
-  username?: string
-  password?: string
-}
-
-function shouldPassRedisCliUsername(username?: string): username is string {
-  if (!username) {
-    return false
-  }
-
-  const trimmed = username.trim()
-  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
-}
 
 /**
  * Execute a Redis command via stdin piping
@@ -49,15 +41,18 @@ async function execRedisCommand(
   auth?: RedisCliAuth,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = ['-h', '127.0.0.1', '-p', String(port)]
-    if (shouldPassRedisCliUsername(auth?.username)) {
-      args.push('--user', auth.username)
-    }
+    const commandName = command.trim().split(/\s+/)[0]?.toUpperCase() || ''
+    const inspectStdoutErrors = !new Set([
+      'GET',
+      'HGETALL',
+      'LRANGE',
+      'SMEMBERS',
+      'ZRANGE',
+    ]).has(commandName)
+    const args = buildRedisCliArgs(port, auth)
     const proc = spawn(redisCli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: auth?.password
-        ? { ...process.env, REDISCLI_AUTH: auth.password }
-        : process.env,
+      env: buildRedisCliEnv(auth),
     })
 
     let stdout = ''
@@ -72,24 +67,21 @@ async function execRedisCommand(
 
     proc.on('error', reject)
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       const combinedOutput = `${stdout}\n${stderr}`.trim()
-      const errorMarkers = [
-        'NOAUTH',
-        'WRONGPASS',
-        'NOPERM',
-        'ACL',
-      ]
-      const hasCliError =
-        /^ERR\b/m.test(combinedOutput) ||
-        errorMarkers.some((marker) => combinedOutput.includes(marker))
+      const hasCliError = hasRedisCliError(
+        stdout,
+        stderr,
+        inspectStdoutErrors,
+      )
 
-      if ((code === 0 || code === null) && !hasCliError) {
+      if (code === 0 && !hasCliError) {
         resolve(stdout)
       } else {
         reject(
           new Error(
-            combinedOutput || `redis-cli exited with code ${code}`,
+            combinedOutput ||
+              `redis-cli exited with code ${code} and signal ${signal ?? 'none'}`,
           ),
         )
       }

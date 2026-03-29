@@ -52,6 +52,10 @@ function sanitizeMongoArgs(args: string[]): string[] {
   return sanitized
 }
 
+function getNormalizedMongoHost(bindAddress?: string): string {
+  return bindAddress === '0.0.0.0' ? '127.0.0.1' : bindAddress ?? '127.0.0.1'
+}
+
 /**
  * Resolve the path to a PostgreSQL client binary (pg_restore, psql, etc.)
  *
@@ -324,7 +328,7 @@ async function restoreViaMongo(
     options.containerName
       ? await containerManager.getConfig(options.containerName)
       : null
-  const host = container?.bindAddress ?? '127.0.0.1'
+  const host = getNormalizedMongoHost(container?.bindAddress)
 
   const args: string[] = savedCreds
     ? [
@@ -335,7 +339,7 @@ async function restoreViaMongo(
           authDatabase: savedCreds.database || 'admin',
         }, host),
       ]
-    : ['--host', '127.0.0.1', '--port', String(port)]
+    : ['--host', host, '--port', String(port)]
 
   if (drop) {
     args.push('--drop')
@@ -395,7 +399,7 @@ async function restoreViaMongo(
     args.push(`--collection=${collectionName}`)
     args.push(backupPath)
   } else {
-    args.push('--archive=' + backupPath, '--gzip')
+    args.push('--archive=' + backupPath)
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 

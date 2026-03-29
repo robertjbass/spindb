@@ -364,16 +364,27 @@ export async function restoreBackup(
   }
 
   const mysql = getMysqlClientPath(binPath)
-  const savedCreds =
+  let savedCreds = null
+  if (
     containerName &&
     requestedPassword === undefined &&
     requestedUser === engineDef.superuser
-      ? await loadCredentials(
-          containerName,
-          Engine.MariaDB,
-          getDefaultUsername(Engine.MariaDB),
-        )
-      : null
+  ) {
+    try {
+      savedCreds = await loadCredentials(
+        containerName,
+        Engine.MariaDB,
+        getDefaultUsername(Engine.MariaDB),
+      )
+    } catch (error) {
+      logDebug(
+        `Failed to load saved MariaDB credentials for restore (${containerName}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      savedCreds = null
+    }
+  }
   const user = savedCreds?.username || requestedUser
   const password = requestedPassword ?? savedCreds?.password
 

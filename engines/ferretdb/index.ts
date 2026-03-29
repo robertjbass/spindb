@@ -87,6 +87,10 @@ const engineDef = getEngineDefaults(ENGINE)
 
 type LocalFerretAuth = MongoWireAuth
 
+function getLocalConnectHost(bindAddress?: string): string {
+  return bindAddress === '0.0.0.0' ? '127.0.0.1' : bindAddress ?? '127.0.0.1'
+}
+
 // Default internal PostgreSQL port range for FerretDB backends
 const BACKEND_PORT_START = 54320
 const BACKEND_PORT_END = 54400
@@ -1269,16 +1273,17 @@ export class FerretDBEngine extends BaseEngine {
     options?: { quiet?: boolean },
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
+    const connectHost = getLocalConnectHost(container.bindAddress)
     const args = savedCreds
       ? [
           buildMongoUri(
             container.port,
             database,
             savedCreds,
-            container.bindAddress ?? '127.0.0.1',
+            connectHost,
           ),
         ]
-      : ['--host', '127.0.0.1', '--port', String(container.port), database]
+      : ['--host', connectHost, '--port', String(container.port), database]
 
     if (options?.quiet) {
       args.push('--quiet')
@@ -1689,13 +1694,14 @@ export class FerretDBEngine extends BaseEngine {
       args = [uri, '--quiet', '--eval', script]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
+      const connectHost = getLocalConnectHost(container.bindAddress)
       args = savedCreds
         ? [
             buildMongoUri(
               port,
               db,
               savedCreds,
-              container.bindAddress ?? '127.0.0.1',
+              connectHost,
             ),
             '--quiet',
             '--eval',
@@ -1703,7 +1709,7 @@ export class FerretDBEngine extends BaseEngine {
           ]
         : [
             '--host',
-            '127.0.0.1',
+            connectHost,
             '--port',
             String(port),
             db,
