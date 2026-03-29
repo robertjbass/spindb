@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Auth-backed local backup/restore** — PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, SurrealDB, ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, LibSQL, and CockroachDB now reuse saved credentials instead of assuming passwordless localhost access.
 - **FerretDB restore robustness** — Namespace remapping now uses documented `mongorestore` placeholders, and directory scans fail safely instead of throwing on unreadable backups.
+- **Linked-container toggle feedback in the TUI** — Pressing `Shift+Tab` on a linked database in the containers menu now keeps the "managed externally" warning visible across the redraw instead of flashing and disappearing.
 - **MariaDB and Valkey shell safety** — Credential-bearing local admin calls now use argv-based process execution rather than interpolated shell strings.
 - **InfluxDB token parsing errors** — Malformed or unreadable persisted admin token files now raise clear errors that include the file path.
 - **SurrealDB backup sanitization** — Auth-defining statements are stripped without breaking on semicolons inside quoted values.

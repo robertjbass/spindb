@@ -191,6 +191,8 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 
 **Commander.js:** Use `await program.parseAsync()`, not `program.parse()` — the latter returns immediately without waiting for async actions.
 
+**Interactive menu redraws wipe ad-hoc console output:** `handleList()` clears and redraws the screen, so transient warnings or status messages for menu actions must be passed through the redraw path (for example via `inlineMessage`) instead of being printed with `console.log()` immediately before calling `handleList()` again. If a TUI message "flashes" and disappears, inspect the redraw flow before changing the action logic.
+
 **FerretDB v1 vs v2:** FerretDB is a single engine (`Engine.FerretDB`) with version-branched behavior via `isV1(version)` in `engines/ferretdb/version-maps.ts`. Key differences:
 - **Backend:** v1 uses plain PostgreSQL (shared with standalone PG containers). v2 uses postgresql-documentdb (separate binary).
 - **Platforms:** v1 supports all 5 platforms including Windows. v2 is macOS/Linux only.
