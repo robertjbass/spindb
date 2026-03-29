@@ -4,6 +4,10 @@ export type MongoWireAuth = {
   authDatabase: string
 }
 
+export function normalizeMongoHost(bindAddress?: string): string {
+  return bindAddress === '0.0.0.0' ? '127.0.0.1' : bindAddress ?? '127.0.0.1'
+}
+
 export function buildMongoUri(
   port: number,
   database: string,

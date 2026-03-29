@@ -14,7 +14,7 @@ import { containerManager } from '../../core/container-manager'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
-import { buildMongoUri } from '../mongo-uri'
+import { buildMongoUri, normalizeMongoHost } from '../mongo-uri'
 import { ferretdbBinaryManager } from './binary-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
 import {
@@ -324,7 +324,7 @@ async function restoreViaMongo(
     options.containerName
       ? await containerManager.getConfig(options.containerName)
       : null
-  const host = container?.bindAddress ?? '127.0.0.1'
+  const host = normalizeMongoHost(container?.bindAddress)
 
   const args: string[] = savedCreds
     ? [
@@ -335,7 +335,7 @@ async function restoreViaMongo(
           authDatabase: savedCreds.database || 'admin',
         }, host),
       ]
-    : ['--host', '127.0.0.1', '--port', String(port)]
+    : ['--host', host, '--port', String(port)]
 
   if (drop) {
     args.push('--drop')
@@ -395,7 +395,7 @@ async function restoreViaMongo(
     args.push(`--collection=${collectionName}`)
     args.push(backupPath)
   } else {
-    args.push('--archive=' + backupPath, '--gzip')
+    args.push('--archive=' + backupPath)
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 

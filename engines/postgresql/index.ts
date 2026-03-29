@@ -721,24 +721,48 @@ export class PostgreSQLEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
     const psqlPath = await this.getPsqlPath()
-
-    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
+    const user = auth?.username || defaults.superuser
     const sql = `CREATE DATABASE "${database}"`
-    const cmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+    const args = [
+      '-h',
+      '127.0.0.1',
+      '-p',
+      String(port),
+      '-U',
+      user,
+      '-d',
+      'postgres',
+      '-c',
+      sql,
+    ]
 
-    try {
-      await execAsync(cmd, {
-        env: auth?.password ? { ...process.env, PGPASSWORD: auth.password } : process.env,
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(psqlPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: auth?.password
+          ? { ...process.env, PGPASSWORD: auth.password }
+          : process.env,
       })
-    } catch (error) {
-      const err = error as Error
-      // Ignore "database already exists" error
-      if (!err.message.includes('already exists')) {
-        throw error
-      }
-    }
+
+      let stdout = ''
+      let stderr = ''
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        const output = `${stdout}\n${stderr}`.trim()
+        if (code === 0 || output.includes('already exists')) {
+          resolve()
+          return
+        }
+        reject(new Error(output || `psql exited with code ${code ?? 'unknown'}`))
+      })
+    })
   }
 
   async dropDatabase(

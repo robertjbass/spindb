@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-03-29
+
+### Fixed
+
+- **PostgreSQL auth-aware database creation** — Restore/setup paths now honor the authenticated username passed into `createDatabase()` instead of always forcing the default superuser.
+- **Redis backup/restore CLI error handling** — Local backup and restore now share the same auth-aware `redis-cli` invocation, reject signal-terminated runs, and avoid misclassifying valid data output as auth failures.
+- **MariaDB restore credential fallback** — Corrupt or unreadable saved credential files no longer abort restore when explicit credentials were provided.
+- **FerretDB local host normalization** — Local query/restore flows now normalize `0.0.0.0` to `127.0.0.1` consistently, and archive restore fallback no longer wrongly assumes gzip compression.
+- **Meilisearch auth test cleanup** — Auth integration test container names now consistently include `-test`, so shared cleanup checks can detect leaks reliably.
+
 ## [0.47.0] - 2026-03-29
 
 ### Added

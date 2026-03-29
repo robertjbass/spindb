@@ -45,7 +45,11 @@ import {
 import { processManager } from '../../core/process-manager'
 import { spawnAsync } from '../../core/spawn-utils'
 import { ferretdbBinaryManager } from './binary-manager'
-import { buildMongoUri, type MongoWireAuth } from '../mongo-uri'
+import {
+  buildMongoUri,
+  normalizeMongoHost,
+  type MongoWireAuth,
+} from '../mongo-uri'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   FALLBACK_VERSION_MAP,
@@ -1269,16 +1273,17 @@ export class FerretDBEngine extends BaseEngine {
     options?: { quiet?: boolean },
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
+    const connectHost = normalizeMongoHost(container.bindAddress)
     const args = savedCreds
       ? [
           buildMongoUri(
             container.port,
             database,
             savedCreds,
-            container.bindAddress ?? '127.0.0.1',
+            connectHost,
           ),
         ]
-      : ['--host', '127.0.0.1', '--port', String(container.port), database]
+      : ['--host', connectHost, '--port', String(container.port), database]
 
     if (options?.quiet) {
       args.push('--quiet')
@@ -1689,13 +1694,14 @@ export class FerretDBEngine extends BaseEngine {
       args = [uri, '--quiet', '--eval', script]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
+      const connectHost = normalizeMongoHost(container.bindAddress)
       args = savedCreds
         ? [
             buildMongoUri(
               port,
               db,
               savedCreds,
-              container.bindAddress ?? '127.0.0.1',
+              connectHost,
             ),
             '--quiet',
             '--eval',
@@ -1703,7 +1709,7 @@ export class FerretDBEngine extends BaseEngine {
           ]
         : [
             '--host',
-            '127.0.0.1',
+            connectHost,
             '--port',
             String(port),
             db,

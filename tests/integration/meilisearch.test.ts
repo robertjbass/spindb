@@ -248,8 +248,8 @@ describe('Meilisearch Integration Tests', () => {
         TEST_PORTS.meilisearch.base + 20,
       )
       const [sourcePort, targetPort] = authPorts
-      const sourceName = generateTestName('meilisearch-auth-source')
-      const targetName = generateTestName('meilisearch-auth-target')
+      const sourceName = generateTestName('meilisearch-auth-source-test')
+      const targetName = generateTestName('meilisearch-auth-target-test')
       const username = getDefaultUsername(ENGINE)
       const sourceMasterKey = 'meili-source-master-key-12345'
       const targetMasterKey = 'meili-target-master-key-67890'

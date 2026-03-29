@@ -59,7 +59,7 @@ async function runMongoshFile(
 // Default test port configuration
 export const TEST_PORTS = {
   postgresql: { base: 5454, clone: 5456, renamed: 5455 },
-  mysql: { base: 3333, clone: 3335, renamed: 3334 },
+  mysql: { base: 3333, clone: 3335, renamed: 3334, authBase: 3336 },
   mariadb: { base: 3340, clone: 3342, renamed: 3341 },
   mongodb: { base: 27050, clone: 27052, renamed: 27051 },
   ferretdb: { base: 27060, clone: 27062, renamed: 27061 },
