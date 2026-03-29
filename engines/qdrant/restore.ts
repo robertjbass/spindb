@@ -3,7 +3,7 @@
  * Supports snapshot-based restore using Qdrant's snapshot files
  */
 
-import { copyFile, open, mkdir, rm } from 'fs/promises'
+import { copyFile, open, mkdir, rm, writeFile } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join, basename } from 'path'
 import { paths } from '../../config/paths'
@@ -88,11 +88,13 @@ async function restoreSnapshotBackup(
   containerName: string,
   dataDir?: string,
 ): Promise<RestoreResult> {
+  const containerDir = paths.getContainerPath(containerName, { engine: 'qdrant' })
   const targetDir =
     dataDir || paths.getContainerDataPath(containerName, { engine: 'qdrant' })
   const snapshotsDir = join(targetDir, 'snapshots')
   const snapshotName = basename(backupPath)
   const targetPath = join(snapshotsDir, snapshotName)
+  const pendingSnapshotMarker = join(containerDir, 'pending-storage-snapshot')
 
   logDebug(`Restoring snapshot to: ${targetPath}`)
 
@@ -112,11 +114,12 @@ async function restoreSnapshotBackup(
     await rm(collectionsDir, { recursive: true, force: true })
   }
 
+  await writeFile(pendingSnapshotMarker, targetPath, 'utf-8')
+
   return {
     format: 'snapshot',
     stdout:
-      `Restored snapshot to ${targetPath}. Restart Qdrant to load the data.\n` +
-      `Use: POST http://127.0.0.1:PORT/snapshots/recover to trigger recovery.`,
+      `Restored snapshot to ${targetPath}. Next start will load the storage snapshot automatically.`,
     code: 0,
   }
 }

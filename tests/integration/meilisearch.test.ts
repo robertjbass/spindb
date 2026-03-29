@@ -27,6 +27,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -232,6 +236,146 @@ describe('Meilisearch Integration Tests', () => {
 
     logDebug(`REST API query returned index with ${searchResult.rowCount} hits`)
   })
+
+  it(
+    'should backup and restore with master-key auth enabled',
+    { skip: SKIP_BACKUP_ON_WINDOWS },
+    async () => {
+      console.log('\n Testing auth-backed Meilisearch backup/restore...')
+
+      const authPorts = await findConsecutiveFreePorts(
+        2,
+        TEST_PORTS.meilisearch.base + 20,
+      )
+      const [sourcePort, targetPort] = authPorts
+      const sourceName = generateTestName('meilisearch-auth-source')
+      const targetName = generateTestName('meilisearch-auth-target')
+      const username = getDefaultUsername(ENGINE)
+      const sourceMasterKey = 'meili-source-master-key-12345'
+      const targetMasterKey = 'meili-target-master-key-67890'
+      const { tmpdir } = await import('os')
+      const { rm } = await import('fs/promises')
+      const backupPath = `${tmpdir()}/meilisearch-auth-backup-${Date.now()}.snapshot`
+      const engine = getEngine(ENGINE)
+
+      try {
+        await containerManager.create(sourceName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: sourcePort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(sourceName, TEST_VERSION, {
+          port: sourcePort,
+        })
+
+        const sourceConfig = await containerManager.getConfig(sourceName)
+        assert(sourceConfig !== null, 'Source container config should exist')
+        await engine.start(sourceConfig!)
+        await containerManager.updateConfig(sourceName, { status: 'running' })
+
+        const sourceReady = await waitForReady(ENGINE, sourcePort)
+        assert(sourceReady, 'Source Meilisearch should be ready')
+
+        const createResult = await createMeilisearchIndex(
+          sourcePort,
+          TEST_INDEX,
+          'id',
+        )
+        assert(createResult.success, 'Should create source index')
+        if (createResult.taskUid !== undefined) {
+          const taskComplete = await waitForMeilisearchTask(
+            sourcePort,
+            createResult.taskUid,
+          )
+          assert(taskComplete, 'Source index creation task should complete')
+        }
+
+        const insertResult = await insertMeilisearchDocuments(
+          sourcePort,
+          TEST_INDEX,
+          [
+            { id: 1, title: 'Alpha', content: 'alpha document' },
+            { id: 2, title: 'Beta', content: 'beta document' },
+          ],
+        )
+        assert(insertResult.success, 'Should insert source documents')
+        if (insertResult.taskUid !== undefined) {
+          const taskComplete = await waitForMeilisearchTask(
+            sourcePort,
+            insertResult.taskUid,
+          )
+          assert(taskComplete, 'Source document insertion task should complete')
+        }
+
+        const sourceCreds = await engine.createUser(sourceConfig!, {
+          username,
+          password: sourceMasterKey,
+        })
+        await saveCredentials(sourceName, ENGINE, sourceCreds)
+
+        const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
+        assert(
+          sourceAuthedReady,
+          'Source Meilisearch should be ready after enabling auth',
+        )
+
+        await engine.backup(sourceConfig!, backupPath, {
+          database: DATABASE,
+          format: 'snapshot',
+        })
+
+        await containerManager.create(targetName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: targetPort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(targetName, TEST_VERSION, {
+          port: targetPort,
+        })
+
+        const targetConfig = await containerManager.getConfig(targetName)
+        assert(targetConfig !== null, 'Target container config should exist')
+
+        const targetCreds = await engine.createUser(targetConfig!, {
+          username,
+          password: targetMasterKey,
+        })
+        await saveCredentials(targetName, ENGINE, targetCreds)
+
+        await engine.restore(targetConfig!, backupPath, {
+          database: DATABASE,
+        })
+        await engine.start(targetConfig!)
+        await containerManager.updateConfig(targetName, { status: 'running' })
+
+        const targetReady = await waitForReady(ENGINE, targetPort)
+        assert(targetReady, 'Target Meilisearch should be ready after restore')
+
+        const searchResult = await executeQuery(
+          targetName,
+          `POST /indexes/${TEST_INDEX}/search {"q": "document"}`,
+        )
+        assertTruthy(
+          searchResult.rowCount > 0,
+          'Authenticated Meilisearch restore should retain searchable documents',
+        )
+      } finally {
+        for (const cleanupName of [sourceName, targetName]) {
+          const config = await containerManager.getConfig(cleanupName)
+          if (config) {
+            await engine.stop(config).catch(() => {})
+            await waitForStopped(cleanupName, ENGINE).catch(() => false)
+            await containerManager.delete(cleanupName, { force: true }).catch(
+              () => {},
+            )
+          }
+        }
+        await rm(backupPath, { force: true })
+      }
+    },
+  )
 
   it(
     'should clone container using backup/restore',

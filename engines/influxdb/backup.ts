@@ -3,12 +3,40 @@
  * Supports SQL-based backup using InfluxDB's REST API to export data
  */
 
-import { mkdir, stat, writeFile } from 'fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
+import { paths } from '../../config/paths'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+
+const ADMIN_TOKEN_FILE = 'admin-token.json'
+
+async function loadInfluxAuthToken(
+  containerName: string,
+  username = getDefaultUsername(Engine.InfluxDB),
+): Promise<string | undefined> {
+  const tokenPath = dirname(
+    paths.getContainerPidPath(containerName, { engine: Engine.InfluxDB }),
+  )
+  const adminTokenPath = `${tokenPath}/${ADMIN_TOKEN_FILE}`
+
+  try {
+    const parsed = JSON.parse(await readFile(adminTokenPath, 'utf-8')) as {
+      token?: unknown
+    }
+    if (typeof parsed.token === 'string' && parsed.token.length > 0) {
+      return parsed.token
+    }
+  } catch {
+    // Fall back to saved credentials
+  }
+
+  const savedCreds = await loadCredentials(containerName, Engine.InfluxDB, username)
+  return savedCreds?.apiKey
+}
 
 /**
  * Create an SQL backup using InfluxDB's REST API
@@ -19,8 +47,9 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port } = container
+  const { port, name } = container
   const database = options.database || container.database
+  const token = await loadInfluxAuthToken(name)
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -42,6 +71,8 @@ export async function createBackup(
       q: 'SHOW TABLES',
       format: 'json',
     },
+    30000,
+    token,
   )
 
   if (tablesResponse.status !== 200) {
@@ -92,6 +123,8 @@ export async function createBackup(
           q: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}'`,
           format: 'json',
         },
+        30000,
+        token,
       )
       if (colResponse.status === 200 && Array.isArray(colResponse.data)) {
         for (const col of colResponse.data as Array<Record<string, unknown>>) {
@@ -115,6 +148,8 @@ export async function createBackup(
         q: `SELECT * FROM "${table.replace(/"/g, '""')}"`,
         format: 'json',
       },
+      30000,
+      token,
     )
 
     if (dataResponse.status !== 200) {

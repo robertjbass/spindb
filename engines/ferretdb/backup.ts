@@ -1,99 +1,42 @@
 /**
  * FerretDB backup module
  *
- * Creates backups using pg_dump on the embedded PostgreSQL backend.
- * This backs up the ferretdb database which contains all MongoDB-compatible data.
+ * Creates backups using mongodump on the MongoDB-compatible proxy.
+ * This preserves FerretDB's document model correctly and works when SCRAM auth
+ * is enabled, unlike the old pg_dump-based backend backup.
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, dirname } from 'path'
+import { dirname, join } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
-import { configManager } from '../../core/config-manager'
-import { platformService } from '../../core/platform-service'
-import { paths } from '../../config/paths'
-import { ferretdbBinaryManager } from './binary-manager'
-import {
-  DEFAULT_DOCUMENTDB_VERSION,
-  DEFAULT_V1_POSTGRESQL_VERSION,
-  isV1,
-} from './version-maps'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import { buildMongoUri } from '../mongo-uri'
+import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
-/**
- * Get the path to pg_dump from the backend installation.
- *
- * Searches with fallbacks:
- * 1. Container's specific backend binary directory
- * 2. Any installed PostgreSQL version (newest first) — pg_dump is forward-compatible
- * 3. System binary registered via `spindb config set pg_dump`
- */
-async function getPgDumpPath(container: ContainerConfig): Promise<string> {
-  const { version, backendVersion } = container
-  const { platform, arch } = platformService.getPlatformInfo()
-  const v1 = isV1(version)
-  const ext = platformService.getExecutableExtension()
-
-  const effectiveBackendVersion = v1
-    ? backendVersion || DEFAULT_V1_POSTGRESQL_VERSION
-    : backendVersion || DEFAULT_DOCUMENTDB_VERSION
-
-  // 1. Try the container's own backend path
-  const backendPath = ferretdbBinaryManager.getBackendBinaryPath(
-    version,
-    effectiveBackendVersion,
-    platform,
-    arch,
-  )
-  const primaryPath = join(backendPath, 'bin', `pg_dump${ext}`)
-  if (existsSync(primaryPath)) {
-    return primaryPath
-  }
-
-  logDebug(
-    `pg_dump not found at ${primaryPath}, searching other installed PostgreSQL versions`,
-  )
-
-  // 2. Search all installed PostgreSQL versions (newest first)
-  const installed = paths.findInstalledBinaries('postgresql', platform, arch)
-  for (const entry of installed) {
-    const candidate = join(entry.path, 'bin', `pg_dump${ext}`)
-    if (existsSync(candidate)) {
-      logDebug(`Found pg_dump in PostgreSQL ${entry.version}`)
-      return candidate
+function redactMongoUri(uri: string): string {
+  try {
+    const url = new URL(uri)
+    if (!url.username && !url.password) {
+      return uri
     }
-  }
 
-  // Also check postgresql-documentdb installations
-  const documentdbInstalled = paths.findInstalledBinaries(
-    'postgresql-documentdb',
-    platform,
-    arch,
-  )
-  for (const entry of documentdbInstalled) {
-    const candidate = join(entry.path, 'bin', `pg_dump${ext}`)
-    if (existsSync(candidate)) {
-      logDebug(`Found pg_dump in postgresql-documentdb ${entry.version}`)
-      return candidate
-    }
+    return `${url.protocol}//<redacted>@${url.host}${url.pathname}${url.search}`
+  } catch {
+    return 'mongodb://<redacted>'
   }
+}
 
-  // 3. Fall back to system binary
-  const systemPgDump = await configManager.getBinaryPath('pg_dump')
-  if (systemPgDump) {
-    return systemPgDump
+function sanitizeMongoArgs(args: string[]): string[] {
+  const sanitized = [...args]
+  const uriIndex = sanitized.indexOf('--uri')
+  if (uriIndex >= 0 && uriIndex + 1 < sanitized.length) {
+    sanitized[uriIndex + 1] = redactMongoUri(sanitized[uriIndex + 1])
   }
-
-  const backendName = v1 ? 'PostgreSQL' : 'postgresql-documentdb'
-  throw new Error(
-    `pg_dump not found. The ${backendName} installation at ${backendPath} does not include client tools.\n` +
-      'Install PostgreSQL client tools:\n' +
-      '  macOS: brew install libpq && brew link --force libpq\n' +
-      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-      'Or configure manually: spindb config set pg_dump /path/to/pg_dump',
-  )
+  return sanitized
 }
 
 /**
@@ -108,16 +51,12 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { backendPort } = container
-  const database = options.database || 'ferretdb'
-
-  if (!backendPort) {
-    throw new Error(
-      'Backend port not set. Make sure the container is running before creating a backup.',
-    )
+  const { name, port, version } = container
+  const database = options.database || container.database || 'test'
+  const mongodump = await getMongodumpPath(version)
+  if (!mongodump) {
+    throw new Error(MONGODUMP_NOT_FOUND_ERROR)
   }
-
-  const pgDump = await getPgDumpPath(container)
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -125,40 +64,57 @@ export async function createBackup(
     await mkdir(outputDir, { recursive: true })
   }
 
-  const args: string[] = [
-    '-h',
-    '127.0.0.1',
-    '-p',
-    String(backendPort),
-    '-U',
-    'postgres',
-    '--no-password',
-    '-d',
-    database,
-  ]
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.FerretDB,
+    getDefaultUsername(Engine.FerretDB),
+  )
 
-  // Determine output format (default to 'sql' as per backup-formats.ts)
-  const format = options.format ?? 'sql'
-  if (format === 'custom') {
-    // Custom format: binary, compressed, supports parallel restore
-    args.push('-Fc', '-f', outputPath)
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, database, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }, container.bindAddress ?? '127.0.0.1'),
+        '--db',
+        database,
+      ]
+    : [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--db',
+        database,
+      ]
+
+  // FerretDB now uses Mongo-compatible backup formats under the hood:
+  // - archive: single compressed file
+  // - bson: directory dump
+  const format = options.format ?? 'archive'
+  if (format === 'archive') {
+    args.push('--archive=' + outputPath, '--gzip')
   } else {
-    // SQL format: plain text, human-readable
-    args.push('-f', outputPath)
+    args.push('--out', outputPath)
   }
 
-  logDebug(`Running pg_dump with args: ${args.join(' ')}`)
+  logDebug(`Running mongodump with args: ${sanitizeMongoArgs(args).join(' ')}`)
 
   const spawnOptions: SpawnOptions = {
-    stdio: ['pipe', 'ignore', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   }
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(pgDump, args, spawnOptions)
+    const proc = spawn(mongodump, args, spawnOptions)
 
     let stderr = ''
     let finished = false
 
+    proc.stdout?.on('data', () => {
+      // mongodump typically writes progress to stderr
+    })
     proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
@@ -175,12 +131,35 @@ export async function createBackup(
 
       if (code === 0) {
         // Get backup size
-        stat(outputPath)
-          .then((stats) => {
+        const getBackupSize = async (): Promise<number> => {
+          if (format !== 'bson') {
+            return (await stat(outputPath)).size
+          }
+
+          const { readdir, stat: fileStat } = await import('fs/promises')
+          const sumDirectory = async (dirPath: string): Promise<number> => {
+            const entries = await readdir(dirPath, { withFileTypes: true })
+            let total = 0
+            for (const entry of entries) {
+              const entryPath = join(dirPath, entry.name)
+              if (entry.isDirectory()) {
+                total += await sumDirectory(entryPath)
+              } else if (entry.isFile()) {
+                total += (await fileStat(entryPath)).size
+              }
+            }
+            return total
+          }
+
+          return sumDirectory(outputPath)
+        }
+
+        getBackupSize()
+          .then((size) => {
             resolve({
               path: outputPath,
               format,
-              size: stats.size,
+              size,
             })
           })
           .catch(() => {
@@ -192,7 +171,7 @@ export async function createBackup(
             })
           })
       } else {
-        reject(new Error(stderr || `pg_dump exited with code ${code}`))
+        reject(new Error(stderr || `mongodump exited with code ${code}`))
       }
     })
   })
@@ -206,11 +185,8 @@ export async function createCloneBackup(
   container: ContainerConfig,
   outputPath: string,
 ): Promise<BackupResult> {
-  // FerretDB stores all MongoDB-compatible document data in a PostgreSQL database
-  // named 'ferretdb'. This is the backend database that pg_dump targets.
-  // See CLAUDE.md "FerretDB (Composite Engine)" section for architecture details.
   return createBackup(container, outputPath, {
-    database: 'ferretdb',
-    format: 'custom',
+    database: container.database,
+    format: 'archive',
   })
 }

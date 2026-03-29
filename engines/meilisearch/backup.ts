@@ -6,10 +6,11 @@
 import { mkdir, stat, copyFile, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
 import { meilisearchApiRequest } from './api-client'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
 
 // Backup operations may take longer than the default timeout
 const BACKUP_TIMEOUT_MS = 600000 // 10 minutes
@@ -24,6 +25,12 @@ export async function createBackup(
   _options: BackupOptions,
 ): Promise<BackupResult> {
   const { port, name } = container
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.Meilisearch,
+    getDefaultUsername(Engine.Meilisearch),
+  )
+  const apiKey = savedCreds?.apiKey
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -40,6 +47,7 @@ export async function createBackup(
     '/snapshots',
     undefined,
     BACKUP_TIMEOUT_MS,
+    apiKey,
   )
 
   // Meilisearch returns 202 Accepted for snapshot creation
@@ -57,7 +65,7 @@ export async function createBackup(
   if (taskUid !== undefined) {
     logDebug(`Meilisearch snapshot task created: ${taskUid}`)
     // Wait for task to complete
-    await waitForTask(port, taskUid, BACKUP_TIMEOUT_MS)
+    await waitForTask(port, taskUid, BACKUP_TIMEOUT_MS, apiKey)
   }
 
   // The snapshot is stored in the snapshots folder (sibling of data, not inside it)
@@ -145,6 +153,7 @@ async function waitForTask(
   port: number,
   taskUid: number,
   timeoutMs: number,
+  apiKey?: string,
 ): Promise<void> {
   const startTime = Date.now()
   const checkInterval = 500
@@ -154,6 +163,9 @@ async function waitForTask(
       port,
       'GET',
       `/tasks/${taskUid}`,
+      undefined,
+      30000,
+      apiKey,
     )
 
     if (response.status === 200) {

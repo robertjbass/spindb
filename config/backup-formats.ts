@@ -182,21 +182,21 @@ export const BACKUP_FORMATS: {
   },
   [Engine.FerretDB]: {
     formats: {
-      sql: {
-        extension: '.sql',
-        label: '.sql',
-        description: 'Plain SQL - human-readable, larger file',
-        spinnerLabel: 'SQL',
+      bson: {
+        extension: '',
+        label: '.bson',
+        description: 'Directory dump - BSON files per collection',
+        spinnerLabel: 'BSON directory',
       },
-      custom: {
-        extension: '.dump',
-        label: '.dump',
-        description: 'Custom format - smaller file, faster restore',
-        spinnerLabel: 'custom',
+      archive: {
+        extension: '.archive',
+        label: '.archive',
+        description: 'Compressed archive - single file, smaller',
+        spinnerLabel: 'archive',
       },
     },
     supportsFormatChoice: true,
-    defaultFormat: 'sql',
+    defaultFormat: 'archive',
   },
   [Engine.Redis]: {
     formats: {

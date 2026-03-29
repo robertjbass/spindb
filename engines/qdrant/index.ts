@@ -1,7 +1,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { createWriteStream, existsSync } from 'fs'
 import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { join, relative } from 'path'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { BaseEngine } from '../base-engine'
@@ -50,6 +50,19 @@ import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'qdrant'
 const engineDef = getEngineDefaults(ENGINE)
+
+function getStorageSnapshotArg(
+  containerDir: string,
+  snapshotPath: string,
+): string {
+  if (!isWindows()) {
+    return snapshotPath
+  }
+
+  // Qdrant parses `--storage-snapshot` values using `:` separators. On Windows,
+  // absolute paths include a drive-letter colon, so pass a cwd-relative path.
+  return relative(containerDir, snapshotPath).replace(/\\/g, '/')
+}
 
 /**
  * Generate Qdrant configuration YAML content
@@ -439,6 +452,7 @@ export class QdrantEngine extends BaseEngine {
     const snapshotsDir = join(dataDir, 'snapshots')
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = join(containerDir, 'qdrant.pid')
+    const pendingSnapshotMarker = join(containerDir, 'pending-storage-snapshot')
     const grpcPort = port + 1
 
     // Check if gRPC port is available (Qdrant uses HTTP port + 1 for gRPC)
@@ -526,9 +540,26 @@ export class QdrantEngine extends BaseEngine {
       return null
     }
 
+    const args = ['--config-path', configPath]
+    let snapshotApplied = false
+    if (existsSync(pendingSnapshotMarker)) {
+      try {
+        const snapshotPath = (await readFile(pendingSnapshotMarker, 'utf-8')).trim()
+        if (snapshotPath && existsSync(snapshotPath)) {
+          args.push(
+            '--storage-snapshot',
+            getStorageSnapshotArg(containerDir, snapshotPath),
+          )
+          snapshotApplied = true
+          logDebug(`Starting Qdrant with storage snapshot: ${snapshotPath}`)
+        }
+      } catch (error) {
+        logWarning(`Failed to read pending Qdrant snapshot marker: ${error}`)
+      }
+    }
+
     // Qdrant runs in foreground, so we need to spawn detached
     // Set cwd to container directory so any files Qdrant creates stay there
-    const args = ['--config-path', configPath]
 
     // On non-Windows, use 'ignore' for stdio to allow Node.js process to exit
     // (piped streams keep the event loop alive even after unref)
@@ -598,6 +629,9 @@ export class QdrantEngine extends BaseEngine {
           if (settled) return
 
           if (ready) {
+            if (snapshotApplied && existsSync(pendingSnapshotMarker)) {
+              await unlink(pendingSnapshotMarker).catch(() => {})
+            }
             settled = true
             resolve({
               port,
@@ -656,6 +690,9 @@ export class QdrantEngine extends BaseEngine {
     const ready = await this.waitForReady(port)
 
     if (ready) {
+      if (snapshotApplied && existsSync(pendingSnapshotMarker)) {
+        await unlink(pendingSnapshotMarker).catch(() => {})
+      }
       return {
         port,
         connectionString: this.getConnectionString(container),

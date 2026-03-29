@@ -40,7 +40,7 @@ tests/fixtures/       # Test data and seed files
 **Engine categories:**
 - **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, LibSQL): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
 - **File-based** (SQLite, DuckDB): data in CWD, no server process, `start()`/`stop()` are no-ops, tracked via registry in `~/.spindb/config.json`
-- **Remote/linked** (`spindb link`): external databases linked via connection string, `status: 'linked'`, uses `remote` field in ContainerConfig, credentials stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`, `query`. Does NOT support `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities. Query support loads credentials, parses the connection string, and passes `host`/`password`/`username`/`ssl` to engine `executeQuery` via `QueryOptions`.
+- **Remote/linked** (`spindb link`): linked databases use `status: 'linked'` plus the `remote` field in `ContainerConfig`. `remote.origin` is now first-class: `'external'` for third-party/manual remotes and `'layerbase-cloud'` for Layerbase-managed cloud links. `provider` remains display metadata, and `providerId` is the stable provider-side identifier when available. Credentials are stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`, `query`. Does NOT support `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities. Query support loads credentials, parses the connection string, and passes `host`/`password`/`username`/`ssl` to engine `executeQuery` via `QueryOptions`.
 - **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB, LibSQL): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard (LibSQL shows curl examples)
 
 Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
@@ -136,6 +136,39 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 **Redis/Valkey local query auth:** `spindb query` for local server containers does **not** use ad-hoc env vars from the caller. In `cli/commands/query.ts`, the local-server path loads credentials from `credential-manager.loadCredentials(containerName, engineName, getDefaultUsername(engineName))`. For Redis/Valkey, that means the filename stays `.env.spindb`, but the file contents can still be `DB_USER=default` and `DB_PASSWORD=...`. If cloud or desktop query auth breaks, inspect the saved credential file path and contents before changing CLI flags.
 
+**Local backup/restore auth uses the same default credential file:** As of March 28, 2026, PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB local backup/restore paths load server credentials from `loadCredentials(containerName, engine, getDefaultUsername(engine))`. That feeds the engine-native auth mechanism instead of assuming localhost trust:
+- PostgreSQL: `PGPASSWORD` for `pg_dump` / `psql` / `pg_restore`
+- MySQL / MariaDB: `MYSQL_PWD` for dump, restore, readiness, shutdown, and local admin commands
+- MongoDB: `--uri mongodb://...?...authSource=...` for `mongodump`, `mongorestore`, and local `mongosh` query/admin paths
+- FerretDB: local `mongosh`, `mongodump`, and `mongorestore` now go through the MongoDB wire protocol with saved `.env.spindb` credentials; legacy PostgreSQL `.dump` / `.sql` restores are still supported as a fallback
+- Redis / Valkey: `REDISCLI_AUTH` for backup, text restore, readiness, and graceful shutdown
+- CouchDB: saved admin credentials for REST backup/restore and local admin API calls
+- SurrealDB: local query/backup/restore commands load `.env.spindb`, infer `authLevel` from the saved `DB_URL`, and pass `--auth-level` to `surreal sql` / `export` / `import`; server startup still uses stable bootstrap root creds instead of replaying saved client creds
+If a password-protected local backup or restart fails, inspect `.env.spindb` before changing engine flags.
+
+**Focused auth-backed backup/restore coverage now exists for the main password-protected engines:** PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB now have focused integration coverage that:
+- enables real local auth
+- writes `.env.spindb`
+- restarts the container through the normal engine lifecycle
+- verifies backup and restore against an auth-enabled target
+The focused March 28, 2026 auth sweep passed sequentially for all of the engines above. MariaDB still has unrelated broader-suite initialization flakiness on this machine, so treat that as a test-harness/platform issue rather than an auth backup/restore gap.
+
+**The auth-backed backup/restore sweep was extended on March 29, 2026 to the remaining major auth-sensitive server engines:** ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, and LibSQL now have explicit auth-aware local backup/restore verification rather than relying on anonymous localhost assumptions. Verification status:
+- ClickHouse and Qdrant have focused auth-backed integration coverage in addition to their broader engine suites
+- QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, and LibSQL now also have focused integration coverage for local auth-enabled backup/restore
+- InfluxDB local auth is now driven by a persisted `admin-token.json` file passed to `influxdb3 serve --admin-token-file`; the token file must contain JSON (`{"token":"...","name":"..."}`), not raw text
+- Meilisearch local auth is now driven by a persisted `master.key` file passed to `meilisearch --master-key`; `createUser()` currently configures that master key directly for local auth-backed backup/restore
+- Qdrant restore is special: restore writes a pending storage-snapshot marker and `start()` must consume it with `--storage-snapshot`; copying snapshot files alone is not deterministic enough once auth-backed restore is in play
+
+**CockroachDB local development now runs in secure mode:** local containers generate per-container Cockroach certs, start with `--certs-dir`, use root client-cert auth for internal admin flows, and return TLS connection strings for created users. Focused integration coverage now proves password-auth backup/restore against secure local CockroachDB. SQLite, DuckDB, and TigerBeetle remain explicit "not applicable" cases for username/password local backup semantics unless product scope changes.
+
+**SurrealDB auth nuance:** `surreal import` still needs root-level permissions. Namespace-scoped users can query and export, but the focused restore path only passed once the saved default credential file used root creds with `authLevel=root`. Keep that distinction in mind:
+- server start: bootstrap with stable root creds
+- client query/export/import: load `.env.spindb` and pass `--auth-level`
+- restore/import: do not assume namespace/database users are allowed to import
+
+**SurrealDB CLI JSON output is noisy:** `surreal sql --json` can emit prompt text before or after the JSON payload (for example `surrealdb_namespace/db>`). `parseSurrealDBResult()` now extracts the first complete JSON document instead of assuming stdout is pure JSON. If Surreal query parsing regresses, inspect raw stdout before blaming auth or query semantics.
+
 **Redis `default` user vs `--user` flag:** Managed Redis/Valkey setups that use `requirepass` often expect the implicit default user and fail when `redis-cli --user default` is passed explicitly. The fix was to omit `--user` when the resolved username is literally `default`, while still passing `--user` for explicit ACL usernames. This logic must stay aligned in both Redis query paths:
 - remote connection-string query path (`dumpFromConnectionString`)
 - local/linked query execution path (`executeQuery`)
@@ -154,9 +187,13 @@ Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
 
 **Weaviate backup/restore:** Requires `ENABLE_MODULES=backup-filesystem` env var. Backups are directories (not single files). The directory name MUST match the internal backup ID in `backup_config.json` — `restore.ts` reads this file to use the correct name. When restoring to a container with a different `CLUSTER_HOSTNAME`, the restore API requires a `node_mapping` body parameter. See `engines/weaviate/README.md`.
 
+**Qdrant snapshot restore on Windows is not stable yet:** Qdrant 1.16.x full snapshot restore via startup-time recovery still panics on Win x64 with `Too many parts in snapshot mapping`. Keep Windows coverage for create/start/query, but treat clone/auth-backed snapshot restore as a known gap until the restore path is reworked or upstream behavior changes.
+
 **Dynamic library errors (MariaDB, Redis, Valkey):** hostdb binaries for these engines are dynamically linked against Homebrew's OpenSSL (`/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`). On Macs without `brew install openssl@3`, they fail with `dyld: Library not loaded` errors. `core/library-env.ts` provides two utilities: `getLibraryEnv(binPath)` returns `DYLD_FALLBACK_LIBRARY_PATH` (macOS) or `LD_LIBRARY_PATH` (Linux) pointing to `{binPath}/lib` — spread into spawn env options. `detectLibraryError(output, engineName)` scans stderr/logs for dyld, GLIBC, and shared-library patterns, returning an actionable error message or null. When adding new engines with dynamically-linked binaries, use these utilities in `start()` and `initDataDir()` spawn calls. See `engines/redis/index.ts` for the canonical integration pattern.
 
 **Commander.js:** Use `await program.parseAsync()`, not `program.parse()` — the latter returns immediately without waiting for async actions.
+
+**Interactive menu redraws wipe ad-hoc console output:** `handleList()` clears and redraws the screen, so transient warnings or status messages for menu actions must be passed through the redraw path (for example via `inlineMessage`) instead of being printed with `console.log()` immediately before calling `handleList()` again. If a TUI message "flashes" and disappears, inspect the redraw flow before changing the action logic.
 
 **FerretDB v1 vs v2:** FerretDB is a single engine (`Engine.FerretDB`) with version-branched behavior via `isV1(version)` in `engines/ferretdb/version-maps.ts`. Key differences:
 - **Backend:** v1 uses plain PostgreSQL (shared with standalone PG containers). v2 uses postgresql-documentdb (separate binary).

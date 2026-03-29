@@ -50,10 +50,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -147,10 +147,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -211,10 +211,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -273,10 +273,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -353,10 +353,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -414,10 +414,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -475,10 +475,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -538,10 +538,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           # Windows not supported - postgresql-documentdb has startup issues
     steps:
@@ -620,10 +620,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -717,10 +717,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -779,10 +779,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -843,10 +843,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           # Note: Windows excluded - ClickHouse not available on hostdb for Windows
     steps:
@@ -920,10 +920,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -965,6 +965,7 @@ jobs:
 
       - name: Show Qdrant logs on failure
         if: failure()
+        shell: bash
         run: |
           echo "=== Qdrant container directories ==="
           ls -la ~/.spindb/containers/qdrant/ 2>/dev/null || echo "No Qdrant containers directory"
@@ -998,10 +999,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1074,10 +1075,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1151,10 +1152,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1242,10 +1243,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1332,10 +1333,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1422,10 +1423,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1516,10 +1517,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1604,10 +1605,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1692,10 +1693,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1780,10 +1781,10 @@ jobs:
             icon: 🐧
             label: Linux x64 24.04
           - os: macos-15-intel
-            icon: 🍎
+            icon: 🍏
             label: macOS x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1843,7 +1844,7 @@ jobs:
             icon: 🐧
             label: Linux x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -1989,7 +1990,7 @@ jobs:
             icon: 🐧
             label: Linux x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
     steps:
       - name: Checkout
@@ -2115,7 +2116,7 @@ jobs:
             icon: 🐧
             label: Linux x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -2199,7 +2200,7 @@ jobs:
             icon: 🐧
             label: Linux x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟
@@ -2297,7 +2298,7 @@ jobs:
             icon: 🐧
             label: Linux x64
           - os: macos-14
-            icon: 🍎
+            icon: 🍏
             label: macOS ARM64
           - os: windows-latest
             icon: 🪟

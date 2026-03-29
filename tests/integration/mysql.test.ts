@@ -28,6 +28,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { paths } from '../../config/paths'
 
 const ENGINE = Engine.MySQL
 const DATABASE = 'testdb'
@@ -679,6 +680,184 @@ describe('MySQL Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   ✓ Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated local root credentials', async () => {
+    console.log(`\n🔐 Testing auth-aware MySQL backup/restore on local containers...`)
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.mysql.base + 40,
+    )
+    const sourceName = generateTestName('mysql-auth-test-source')
+    const targetName = generateTestName('mysql-auth-test-target')
+    const sourcePassword = 'sourcepass123'
+    const targetPassword = 'targetpass456'
+    const { tmpdir } = await import('os')
+    const { mkdir, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `mysql-auth-backup-${Date.now()}.sql.gz`)
+    const engine = getEngine(ENGINE)
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const connectionString = `mysql://root:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE}`
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          'DB_USER=root',
+          `DB_PASSWORD=${password}`,
+          'DB_HOST=127.0.0.1',
+          `DB_PORT=${port}`,
+          `DB_NAME=${DATABASE}`,
+          `DB_URL=${connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    const waitForAuthedReady = async (containerName: string, timeoutMs = 30000) => {
+      const start = Date.now()
+      let lastError: string | null = null
+
+      while (Date.now() - start < timeoutMs) {
+        try {
+          const config = await containerManager.getConfig(containerName)
+          if (config) {
+            const result = await engine.executeQuery(
+              config,
+              'SELECT 1 AS ok',
+              { database: DATABASE },
+            )
+            if (result.rowCount === 1) {
+              return { ready: true, lastError: null }
+            }
+          }
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error.message : 'unknown auth-ready error'
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+
+      return { ready: false, lastError }
+    }
+
+    const enableRootPasswordAuth = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const escapedPassword = password.replace(/'/g, "''")
+      await runScriptSQL(
+        containerName,
+        [
+          `CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${escapedPassword}'`,
+          `ALTER USER 'root'@'%' IDENTIFIED BY '${escapedPassword}'`,
+          `ALTER USER 'root'@'localhost' IDENTIFIED BY '${escapedPassword}'`,
+          "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION",
+          "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION",
+          'FLUSH PRIVILEGES',
+        ].join('; ') + ';',
+      )
+
+      await writeDefaultCredentialFile(containerName, port, password)
+
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist before auth restart')
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
+      const stopped = await waitForStopped(containerName, ENGINE)
+      assert(stopped, 'Container should stop before auth restart')
+
+      const stoppedConfig = await containerManager.getConfig(containerName)
+      assert(stoppedConfig !== null, 'Stopped config should exist')
+      await engine.start(stoppedConfig!)
+      await containerManager.updateConfig(containerName, { status: 'running' })
+      const { ready, lastError } = await waitForAuthedReady(containerName)
+      assert(
+        ready,
+        `MySQL should be ready with password auth${lastError ? ` (${lastError})` : ''}`,
+      )
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, { superuser: 'root' })
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(await waitForReady(ENGINE, sourcePort), 'Source MySQL should be ready')
+      await engine.createDatabase(sourceConfig!, DATABASE)
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+
+      await enableRootPasswordAuth(sourceName, sourcePort, sourcePassword)
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, TEST_VERSION, { superuser: 'root' })
+
+      const targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(await waitForReady(ENGINE, targetPort), 'Target MySQL should be ready')
+      await engine.createDatabase(targetConfig!, DATABASE)
+
+      await enableRootPasswordAuth(targetName, targetPort, targetPassword)
+
+      const authedSource = await containerManager.getConfig(sourceName)
+      assert(authedSource !== null, 'Authed source config should exist')
+      await engine.backup(authedSource!, backupPath, {
+        database: DATABASE,
+        format: 'compressed',
+      })
+
+      const authedTarget = await containerManager.getConfig(targetName)
+      assert(authedTarget !== null, 'Authed target config should exist')
+      const restoreResult = await engine.restore(authedTarget!, backupPath, {
+        database: DATABASE,
+      })
+      assert(
+        restoreResult.code === 0 || restoreResult.code === undefined,
+        `Restore should succeed, got code ${restoreResult.code}`,
+      )
+
+      const verifyResult = await engine.executeQuery(
+        authedTarget!,
+        'SELECT COUNT(*) AS count FROM test_user',
+        { database: DATABASE },
+      )
+      assertEqual(
+        String(verifyResult.rows[0]?.count),
+        String(EXPECTED_ROW_COUNT),
+        'Restored MySQL row count should match source under password auth',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+      await containerManager.delete(sourceName, { force: true }).catch(() => {})
+      await containerManager.delete(targetName, { force: true }).catch(() => {})
+    }
   })
 
   it('should have no test containers remaining', async () => {

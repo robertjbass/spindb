@@ -9,8 +9,48 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { buildMongoUri } from '../mongo-uri'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+
+function redactMongoUri(uri: string): string {
+  try {
+    const url = new URL(uri)
+    if (!url.username && !url.password) {
+      return uri
+    }
+    return `${url.protocol}//<redacted>@${url.host}${url.pathname}${url.search}`
+  } catch {
+    return 'mongodb://<redacted>'
+  }
+}
+
+function sanitizeMongoArgs(args: string[]): string[] {
+  const sanitized = [...args]
+  const uriIndex = sanitized.indexOf('--uri')
+  if (uriIndex >= 0 && uriIndex + 1 < sanitized.length) {
+    sanitized[uriIndex + 1] = redactMongoUri(sanitized[uriIndex + 1])
+  }
+  return sanitized
+}
+
+async function getDirectorySize(dirPath: string): Promise<number> {
+  const { readdir } = await import('fs/promises')
+  const entries = await readdir(dirPath, { withFileTypes: true })
+  let total = 0
+
+  for (const entry of entries) {
+    const entryPath = join(dirPath, entry.name)
+    if (entry.isDirectory()) {
+      total += await getDirectorySize(entryPath)
+    } else if (entry.isFile()) {
+      total += (await stat(entryPath)).size
+    }
+  }
+
+  return total
+}
 
 /**
  * Create a backup of a MongoDB database using mongodump
@@ -24,7 +64,7 @@ export async function createBackup(
   outputPath: string,
   options: BackupOptions,
 ): Promise<BackupResult> {
-  const { port, database, version } = container
+  const { name, port, database, version } = container
   const db = options.database || database
 
   const mongodump = await getMongodumpPath(version)
@@ -38,14 +78,31 @@ export async function createBackup(
     await mkdir(outputDir, { recursive: true })
   }
 
-  const args: string[] = [
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(port),
-    '--db',
-    db,
-  ]
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.MongoDB,
+    getDefaultUsername(Engine.MongoDB),
+  )
+
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, db, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }, container.bindAddress ?? '127.0.0.1'),
+        '--db',
+        db,
+      ]
+    : [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--db',
+        db,
+      ]
 
   // Determine output format (default to 'archive' as per backup-formats.ts)
   const format = options.format ?? 'archive'
@@ -57,7 +114,7 @@ export async function createBackup(
     args.push('--out', outputPath)
   }
 
-  logDebug(`Running mongodump with args: ${args.join(' ')}`)
+  logDebug(`Running mongodump with args: ${sanitizeMongoArgs(args).join(' ')}`)
 
   // Note: Don't use shell mode - spawn handles paths with spaces correctly
   // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
@@ -89,11 +146,10 @@ export async function createBackup(
             const stats = await stat(outputPath)
             size = stats.size
           } else {
-            // Directory - sum up all files (simplified)
+            // Directory - sum up all dumped files
             const dbDir = join(outputPath, db)
             if (existsSync(dbDir)) {
-              const stats = await stat(dbDir)
-              size = stats.size
+              size = await getDirectorySize(dbDir)
             }
           }
         } catch {

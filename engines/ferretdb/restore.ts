@@ -5,25 +5,52 @@
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync, statSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import { containerManager } from '../../core/container-manager'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
+import { buildMongoUri } from '../mongo-uri'
 import { ferretdbBinaryManager } from './binary-manager'
+import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
   isV1,
 } from './version-maps'
-import type {
-  ContainerConfig,
-  BinaryTool,
-  BackupFormat,
-  RestoreResult,
+import {
+  Engine,
+  type ContainerConfig,
+  type BinaryTool,
+  type BackupFormat,
+  type RestoreResult,
 } from '../../types'
+
+function redactMongoUri(uri: string): string {
+  try {
+    const url = new URL(uri)
+    if (!url.username && !url.password) {
+      return uri
+    }
+
+    return `${url.protocol}//<redacted>@${url.host}${url.pathname}${url.search}`
+  } catch {
+    return 'mongodb://<redacted>'
+  }
+}
+
+function sanitizeMongoArgs(args: string[]): string[] {
+  const sanitized = [...args]
+  const uriIndex = sanitized.indexOf('--uri')
+  if (uriIndex >= 0 && uriIndex + 1 < sanitized.length) {
+    sanitized[uriIndex + 1] = redactMongoUri(sanitized[uriIndex + 1])
+  }
+  return sanitized
+}
 
 /**
  * Resolve the path to a PostgreSQL client binary (pg_restore, psql, etc.)
@@ -117,6 +144,25 @@ async function getPsqlPath(container: ContainerConfig): Promise<string> {
   return findBackendBinary(container, 'psql')
 }
 
+function addNamespaceRemapArgs(
+  args: string[],
+  sourceDatabase: string | undefined,
+  targetDatabase: string,
+): void {
+  if (sourceDatabase) {
+    args.push(
+      `--nsFrom=${sourceDatabase}.$collection$`,
+      `--nsTo=${targetDatabase}.$collection$`,
+    )
+    return
+  }
+
+  args.push(
+    '--nsFrom=$db$.$collection$',
+    `--nsTo=${targetDatabase}.$collection$`,
+  )
+}
+
 /**
  * Detect the format of a backup file
  */
@@ -132,8 +178,8 @@ export async function detectBackupFormat(
   if (stats.isDirectory()) {
     return {
       format: 'directory',
-      description: 'PostgreSQL directory format backup',
-      restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d DATABASE ${filePath}`,
+      description: 'MongoDB directory dump (BSON files)',
+      restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE ${filePath}`,
     }
   }
 
@@ -154,8 +200,25 @@ export async function detectBackupFormat(
     if (header === 'PGDMP') {
       return {
         format: 'custom',
-        description: 'PostgreSQL custom format backup',
-        restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d DATABASE ${filePath}`,
+        description: 'Legacy PostgreSQL custom format backup',
+        restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d ferretdb ${filePath}`,
+      }
+    }
+
+    if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
+      return {
+        format: 'archive-gzip',
+        description: 'MongoDB archive (gzip compressed)',
+        restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath} --gzip`,
+      }
+    }
+
+    const mongoHeader = buffer.toString('utf8', 0, 16)
+    if (mongoHeader.startsWith('mtools') || mongoHeader.includes('mongo')) {
+      return {
+        format: 'archive',
+        description: 'MongoDB archive',
+        restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath}`,
       }
     }
 
@@ -177,51 +240,225 @@ export async function detectBackupFormat(
     if (isSqlFormat) {
       return {
         format: 'sql',
-        description: 'Plain SQL backup',
-        restoreCommand: `psql -h 127.0.0.1 -p PORT -U postgres -d DATABASE -f ${filePath}`,
+        description: 'Legacy plain SQL backup',
+        restoreCommand: `psql -h 127.0.0.1 -p PORT -U postgres -d ferretdb -f ${filePath}`,
       }
     }
 
     // Check file extension as fallback
+    if (filePath.endsWith('.bson')) {
+      return {
+        format: 'bson',
+        description: 'MongoDB BSON file',
+        restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE ${filePath}`,
+      }
+    }
+
     if (filePath.endsWith('.dump')) {
       return {
         format: 'custom',
-        description: 'PostgreSQL custom format backup (by extension)',
-        restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d DATABASE ${filePath}`,
+        description: 'Legacy PostgreSQL custom format backup (by extension)',
+        restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d ferretdb ${filePath}`,
       }
     }
 
     if (filePath.endsWith('.sql')) {
       return {
         format: 'sql',
-        description: 'Plain SQL backup (by extension)',
-        restoreCommand: `psql -h 127.0.0.1 -p PORT -U postgres -d DATABASE -f ${filePath}`,
+        description: 'Legacy plain SQL backup (by extension)',
+        restoreCommand: `psql -h 127.0.0.1 -p PORT -U postgres -d ferretdb -f ${filePath}`,
       }
     }
 
     return {
       format: 'unknown',
-      description: 'Unknown format - attempting as custom format',
-      restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d DATABASE ${filePath}`,
+      description: 'Unknown format - attempting MongoDB archive restore',
+      restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath}`,
     }
   } catch {
     return {
       format: 'unknown',
       description: 'Could not detect format',
-      restoreCommand: `pg_restore -h 127.0.0.1 -p PORT -U postgres -d DATABASE ${filePath}`,
+      restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath}`,
     }
   }
 }
 
 // Restore options
 export type RestoreOptions = {
+  containerName?: string
+  port: number
   database: string
   drop?: boolean
   timeoutMs?: number // Timeout in milliseconds (default: 5 minutes)
+  sourceDatabase?: string
+  containerVersion?: string
 }
 
 // Default timeout for restore operations (5 minutes)
 const DEFAULT_RESTORE_TIMEOUT_MS = 5 * 60 * 1000
+
+async function restoreViaMongo(
+  backupPath: string,
+  options: RestoreOptions,
+  format: BackupFormat,
+): Promise<RestoreResult> {
+  const { port, database, drop = true, sourceDatabase, containerVersion } =
+    options
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RESTORE_TIMEOUT_MS
+  const backupDatabase = sourceDatabase ?? database
+
+  const mongorestore = await getMongorestorePath(containerVersion)
+  if (!mongorestore) {
+    throw new Error(MONGORESTORE_NOT_FOUND_ERROR)
+  }
+
+  const savedCreds = options.containerName
+    ? await loadCredentials(
+        options.containerName,
+        Engine.FerretDB,
+        getDefaultUsername(Engine.FerretDB),
+      )
+    : null
+  const container =
+    options.containerName
+      ? await containerManager.getConfig(options.containerName)
+      : null
+  const host = container?.bindAddress ?? '127.0.0.1'
+
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, database, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }, host),
+      ]
+    : ['--host', '127.0.0.1', '--port', String(port)]
+
+  if (drop) {
+    args.push('--drop')
+  }
+
+  const isArchiveFormat =
+    format.format === 'archive-gzip' ||
+    format.format === 'archive' ||
+    format.format === 'unknown'
+
+  if (!isArchiveFormat) {
+    args.push('--db', database)
+  }
+
+  if (format.format === 'directory') {
+    const backupDbDir = join(backupPath, backupDatabase)
+    if (existsSync(backupDbDir)) {
+      args.push(backupDbDir)
+    } else {
+      let restorePath = backupPath
+
+      try {
+        const entries = readdirSync(backupPath, { withFileTypes: true })
+        const dbDirs = entries.filter((entry) => entry.isDirectory())
+
+        if (dbDirs.length === 1) {
+          restorePath = join(backupPath, dbDirs[0].name)
+        } else if (dbDirs.length > 1) {
+          const dbWithBson = dbDirs.find((entry) => {
+            const files = readdirSync(join(backupPath, entry.name))
+            return files.some((file) => file.endsWith('.bson'))
+          })
+          if (dbWithBson) {
+            restorePath = join(backupPath, dbWithBson.name)
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        logWarning(
+          `Failed to inspect FerretDB backup directory "${backupPath}": ${message}. Falling back to root directory restore.`,
+        )
+      }
+
+      args.push(restorePath)
+    }
+  } else if (format.format === 'archive-gzip') {
+    args.push('--archive=' + backupPath, '--gzip')
+    addNamespaceRemapArgs(args, sourceDatabase, database)
+  } else if (format.format === 'archive') {
+    args.push('--archive=' + backupPath)
+    addNamespaceRemapArgs(args, sourceDatabase, database)
+  } else if (format.format === 'bson') {
+    const collectionName = basename(backupPath).replace(/\.bson$/i, '')
+    if (!args.some((arg) => arg === '--db' || arg.startsWith('--db='))) {
+      args.push(`--db=${database}`)
+    }
+    args.push(`--collection=${collectionName}`)
+    args.push(backupPath)
+  } else {
+    args.push('--archive=' + backupPath, '--gzip')
+    addNamespaceRemapArgs(args, sourceDatabase, database)
+  }
+
+  logDebug(`Running mongorestore with args: ${sanitizeMongoArgs(args).join(' ')}`)
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(mongorestore, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const cleanup = (): void => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      settled = true
+    }
+
+    timeoutId = setTimeout(() => {
+      if (settled) return
+      cleanup()
+      try {
+        if (proc.exitCode === null && !proc.killed) {
+          proc.kill('SIGTERM')
+        }
+      } catch {
+        // Ignore kill races
+      }
+      reject(
+        new Error(
+          `Restore timed out after ${timeoutMs}ms. The mongorestore process was killed.`,
+        ),
+      )
+    }, timeoutMs)
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('error', (error) => {
+      if (settled) return
+      cleanup()
+      reject(error)
+    })
+    proc.on('close', (code) => {
+      if (settled) return
+      cleanup()
+      if (code === 0) {
+        resolve({ format: format.format, stdout, stderr, code })
+      } else {
+        reject(new Error(stderr || `mongorestore exited with code ${code}`))
+      }
+    })
+  })
+}
 
 /**
  * Restore a backup to a FerretDB container
@@ -234,11 +471,22 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { backendPort } = container
-  const {
-    database,
-    drop = true,
-    timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS,
-  } = options
+  const { database, drop = true, timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS } =
+    options
+
+  // Detect backup format
+  const format = await detectBackupFormat(backupPath)
+  logDebug(`Detected backup format: ${format.format}`)
+
+  if (
+    format.format === 'archive-gzip' ||
+    format.format === 'archive' ||
+    format.format === 'directory' ||
+    format.format === 'bson' ||
+    format.format === 'unknown'
+  ) {
+    return restoreViaMongo(backupPath, options, format)
+  }
 
   if (!backendPort) {
     throw new Error(
@@ -246,12 +494,12 @@ export async function restoreBackup(
     )
   }
 
-  // Detect backup format
-  const format = await detectBackupFormat(backupPath)
-  logDebug(`Detected backup format: ${format.format}`)
-
   // Choose restore tool based on format
   const isSqlFormat = format.format === 'sql'
+  const targetDb =
+    format.format === 'custom' || format.format === 'sql'
+      ? 'ferretdb'
+      : database
   const toolPath = isSqlFormat
     ? await getPsqlPath(container)
     : await getPgRestorePath(container)
@@ -264,7 +512,7 @@ export async function restoreBackup(
     '-U',
     'postgres',
     '-d',
-    database,
+    targetDb,
   ]
 
   if (isSqlFormat) {

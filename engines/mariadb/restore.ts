@@ -12,8 +12,17 @@ import { createGunzip } from 'zlib'
 import { validateRestoreCompatibility } from './version-validator'
 import { getEngineDefaults } from '../../config/defaults'
 import { logDebug, SpinDBError, ErrorCodes } from '../../core/error-handler'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { platformService } from '../../core/platform-service'
-import { Platform, type BackupFormat, type RestoreResult } from '../../types'
+import {
+  Engine,
+  Platform,
+  type BackupFormat,
+  type RestoreResult,
+} from '../../types'
 
 const engineDef = getEngineDefaults('mariadb')
 
@@ -141,9 +150,11 @@ export function assertCompatibleFormat(format: BackupFormat): void {
 // =============================================================================
 
 export type RestoreOptions = {
+  containerName?: string
   port: number
   database: string
   user?: string
+  password?: string
   createDatabase?: boolean
   validateVersion?: boolean
   binPath: string
@@ -198,11 +209,20 @@ function doRestore(
   port: number,
   database: string,
   user: string,
+  password: string | undefined,
   format: BackupFormat,
   withCompatSettings: boolean,
 ): Promise<RestoreResult & { rawStderr?: string }> {
+  const env = { ...process.env }
+  if (password) {
+    env.MYSQL_PWD = password
+  } else {
+    delete env.MYSQL_PWD
+  }
+
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env,
   }
 
   return new Promise((resolve, reject) => {
@@ -319,9 +339,11 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const {
+    containerName,
     port,
     database,
-    user = engineDef.superuser,
+    user: requestedUser = engineDef.superuser,
+    password: requestedPassword,
     validateVersion = true,
     binPath,
   } = options
@@ -342,6 +364,18 @@ export async function restoreBackup(
   }
 
   const mysql = getMysqlClientPath(binPath)
+  const savedCreds =
+    containerName &&
+    requestedPassword === undefined &&
+    requestedUser === engineDef.superuser
+      ? await loadCredentials(
+          containerName,
+          Engine.MariaDB,
+          getDefaultUsername(Engine.MariaDB),
+        )
+      : null
+  const user = savedCreds?.username || requestedUser
+  const password = requestedPassword ?? savedCreds?.password
 
   // Detect format and check for wrong engine
   const format = await detectBackupFormat(backupPath)
@@ -355,6 +389,7 @@ export async function restoreBackup(
     port,
     database,
     user,
+    password,
     format,
     false,
   )
@@ -380,6 +415,7 @@ export async function restoreBackup(
       port,
       database,
       user,
+      password,
       format,
       true,
     )

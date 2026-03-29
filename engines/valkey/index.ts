@@ -1,13 +1,17 @@
-import { spawn, exec, type SpawnOptions } from 'child_process'
-import { promisify } from 'util'
+import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+  saveCredentials,
+} from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -29,6 +33,7 @@ import {
 import { createBackup } from './backup'
 import { getValkeyCliPath, VALKEY_CLI_NOT_FOUND_ERROR } from './cli-utils'
 import {
+  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -47,9 +52,118 @@ import {
 import { parseRedisResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
-const execAsync = promisify(exec)
-
 const ENGINE = 'valkey'
+
+type ValkeyCliAuth = {
+  username?: string
+  password?: string
+}
+
+function shouldPassValkeyCliUsername(
+  username?: string,
+): username is string {
+  if (!username) {
+    return false
+  }
+
+  const trimmed = username.trim()
+  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
+}
+
+function buildValkeyCliEnv(
+  libraryEnv: Record<string, string | undefined> = {},
+  password?: string,
+): Record<string, string | undefined> {
+  const env = { ...process.env, ...libraryEnv }
+  if (password) {
+    env.REDISCLI_AUTH = password
+  } else {
+    delete env.REDISCLI_AUTH
+  }
+  return env
+}
+
+function getValkeyCliBaseDir(valkeyCli: string): string {
+  return dirname(dirname(valkeyCli))
+}
+
+function getResolvedValkeyCliLibraryEnv(
+  valkeyCli: string,
+): Record<string, string> | undefined {
+  return getLibraryEnv(getValkeyCliBaseDir(valkeyCli))
+}
+
+function getLocalCliHost(container: ContainerConfig): string {
+  return container.bindAddress ?? '127.0.0.1'
+}
+
+async function runValkeyCliCommand(
+  valkeyCli: string,
+  args: string[],
+  options: {
+    password?: string
+    timeout?: number
+    libraryEnv?: Record<string, string | undefined>
+  } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(valkeyCli, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildValkeyCliEnv(options.libraryEnv, options.password),
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    let timeoutId: NodeJS.Timeout | undefined
+    let timeoutError: Error | null = null
+
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (error) {
+        reject(error)
+      } else {
+        resolve({ stdout, stderr })
+      }
+    }
+
+    if (options.timeout && options.timeout > 0) {
+      timeoutId = setTimeout(() => {
+        timeoutError = new Error(
+          `valkey-cli command timed out after ${options.timeout}ms`,
+        )
+        proc.kill()
+      }, options.timeout)
+    }
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+
+    proc.on('error', (error) => {
+      finish(error)
+    })
+
+    proc.on('close', (code) => {
+      if (timeoutError) {
+        finish(timeoutError)
+        return
+      }
+      if (code === 0) {
+        finish()
+        return
+      }
+      finish(new Error(stderr || `valkey-cli exited with code ${code}`))
+    })
+  })
+}
 
 /**
  * Escape a Valkey key for use in CLI commands.
@@ -301,6 +415,18 @@ export class ValkeyEngine extends BaseEngine {
   displayName = 'Valkey'
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
+
+  private async getLocalAuth(containerName: string): Promise<ValkeyCliAuth> {
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.Valkey,
+      getDefaultUsername(Engine.Valkey),
+    )
+
+    return savedCreds
+      ? { username: savedCreds.username, password: savedCreds.password }
+      : {}
+  }
 
   // Get platform info for binary operations
   getPlatformInfo(): { platform: Platform; arch: Arch } {
@@ -600,7 +726,7 @@ export class ValkeyEngine extends BaseEngine {
       // This follows the pattern used by MySQL which works on Windows
       return new Promise((resolve, reject) => {
         const spawnOpts: SpawnOptions = {
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['ignore', 'ignore', 'ignore'],
           detached: true,
           windowsHide: true,
           env: { ...process.env, ...libraryEnv },
@@ -610,25 +736,12 @@ export class ValkeyEngine extends BaseEngine {
         const cygwinConfigPath = toCygwinPath(configPath)
         const proc = spawn(valkeyServer, [cygwinConfigPath], spawnOpts)
         let settled = false
-        let stderrOutput = ''
-        let stdoutOutput = ''
 
         // Handle spawn errors (binary not found, DLL issues, etc.)
         proc.on('error', (err) => {
           if (settled) return
           settled = true
           reject(new Error(`Failed to spawn Valkey server: ${err.message}`))
-        })
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stdoutOutput += str
-          logDebug(`valkey-server stdout: ${str}`)
-        })
-        proc.stderr?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stderrOutput += str
-          logDebug(`valkey-server stderr: ${str}`)
         })
 
         // Detach the process so it continues running after parent exits
@@ -653,7 +766,12 @@ export class ValkeyEngine extends BaseEngine {
           }
 
           // Wait for Valkey to be ready
-          const ready = await this.waitForReady(port, version)
+          const ready = await this.waitForReady(
+            name,
+            port,
+            version,
+            bindAddress,
+          )
           if (settled) return
 
           if (ready) {
@@ -690,7 +808,7 @@ export class ValkeyEngine extends BaseEngine {
 
             // Check for library loading errors first
             const libError = detectLibraryError(
-              stderrOutput + logContent,
+              logContent,
               'Valkey',
             )
             if (libError) {
@@ -704,8 +822,6 @@ export class ValkeyEngine extends BaseEngine {
               `Config: ${configPath}`,
               `Log file: ${logFile}`,
               `Log content:\n${logContent || '(empty)'}`,
-              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
-              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
             ]
               .filter(Boolean)
               .join('\n')
@@ -752,7 +868,12 @@ export class ValkeyEngine extends BaseEngine {
           }
 
           // Wait for Valkey to be ready
-          const ready = await this.waitForReady(port, version)
+          const ready = await this.waitForReady(
+            name,
+            port,
+            version,
+            bindAddress,
+          )
           if (ready) {
             resolve({
               port,
@@ -805,8 +926,10 @@ export class ValkeyEngine extends BaseEngine {
   // Wait for Valkey to be ready to accept connections
   // TODO - consider copying the mongodb logic for this
   private async waitForReady(
+    containerName: string,
     port: number,
     version: string,
+    bindAddress = '127.0.0.1',
     timeoutMs = 60000,
   ): Promise<boolean> {
     const startTime = Date.now()
@@ -823,11 +946,21 @@ export class ValkeyEngine extends BaseEngine {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       return true
     }
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = `"${valkeyCli}" -h 127.0.0.1 -p ${port} PING`
-        const { stdout } = await execAsync(cmd, { timeout: 5000 })
+        const auth = await this.getLocalAuth(containerName)
+        const args = ['-h', bindAddress, '-p', String(port)]
+        if (shouldPassValkeyCliUsername(auth.username)) {
+          args.push('--user', auth.username)
+        }
+        args.push('PING')
+        const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
+          timeout: 5000,
+          password: auth.password,
+          libraryEnv,
+        })
         if (stdout.trim() === 'PONG') {
           logDebug(`Valkey ready on port ${port}`)
           return true
@@ -854,10 +987,21 @@ export class ValkeyEngine extends BaseEngine {
 
     // Try graceful shutdown via valkey-cli
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const host = getLocalCliHost(container)
     if (valkeyCli) {
       try {
-        const cmd = `"${valkeyCli}" -h 127.0.0.1 -p ${port} SHUTDOWN SAVE`
-        await execAsync(cmd, { timeout: 10000 })
+        const auth = await this.getLocalAuth(name)
+        const args = ['-h', host, '-p', String(port)]
+        if (shouldPassValkeyCliUsername(auth.username)) {
+          args.push('--user', auth.username)
+        }
+        args.push('SHUTDOWN', 'SAVE')
+        await runValkeyCliCommand(valkeyCli, args, {
+          timeout: 10000,
+          password: auth.password,
+          libraryEnv,
+        })
         logDebug('Valkey shutdown command sent')
         // Wait a bit for process to exit
         await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -915,10 +1059,21 @@ export class ValkeyEngine extends BaseEngine {
 
     // Try pinging with valkey-cli
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const host = getLocalCliHost(container)
     if (valkeyCli) {
       try {
-        const cmd = `"${valkeyCli}" -h 127.0.0.1 -p ${port} PING`
-        const { stdout } = await execAsync(cmd, { timeout: 5000 })
+        const auth = await this.getLocalAuth(name)
+        const args = ['-h', host, '-p', String(port)]
+        if (shouldPassValkeyCliUsername(auth.username)) {
+          args.push('--user', auth.username)
+        }
+        args.push('PING')
+        const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
+          timeout: 5000,
+          password: auth.password,
+          libraryEnv,
+        })
         if (stdout.trim() === 'PONG') {
           return { running: true, message: 'Valkey is running' }
         }
@@ -994,21 +1149,25 @@ export class ValkeyEngine extends BaseEngine {
 
   // Open valkey-cli interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = database || container.database || '0'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
+    const args = ['-h', host, '-p', String(port), '-n', db]
+    if (shouldPassValkeyCliUsername(auth.username)) {
+      args.push('--user', auth.username)
+    }
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
+      env: buildValkeyCliEnv(libraryEnv, auth.password),
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        valkeyCli,
-        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
-        spawnOptions,
-      )
+      const proc = spawn(valkeyCli, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())
@@ -1040,6 +1199,7 @@ export class ValkeyEngine extends BaseEngine {
   ): Promise<void> {
     const { port } = container
     const db = database || container.database || '0'
+    const host = getLocalCliHost(container)
 
     const iredis = await this.getIredisPath()
     if (!iredis) {
@@ -1057,7 +1217,7 @@ export class ValkeyEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(
         iredis,
-        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
+        ['-h', host, '-p', String(port), '-n', db],
         spawnOptions,
       )
 
@@ -1095,7 +1255,7 @@ export class ValkeyEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const dbNum = parseInt(database, 10)
     if (isNaN(dbNum) || dbNum < 0 || dbNum > 15) {
       throw new Error(
@@ -1104,12 +1264,23 @@ export class ValkeyEngine extends BaseEngine {
     }
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
 
     // SELECT the database and FLUSHDB
-    const cmd = `"${valkeyCli}" -h 127.0.0.1 -p ${port} -n ${database} FLUSHDB`
+    const args = ['-h', host, '-p', String(port), '-n', database]
+    if (shouldPassValkeyCliUsername(auth.username)) {
+      args.push('--user', auth.username)
+    }
+    args.push('FLUSHDB')
 
     try {
-      await execAsync(cmd, { timeout: 10000 })
+      await runValkeyCliCommand(valkeyCli, args, {
+        timeout: 10000,
+        password: auth.password,
+        libraryEnv,
+      })
       logDebug(`Flushed Valkey database ${database}`)
     } catch (error) {
       const err = error as Error
@@ -1129,14 +1300,25 @@ export class ValkeyEngine extends BaseEngine {
    * This is acceptable for SpinDB since each container runs one Valkey server.
    */
   async getDatabaseSize(container: ContainerConfig): Promise<number | null> {
-    const { port, version } = container
+    const { name, port, version } = container
 
     try {
       const valkeyCli = await this.getValkeyCliPathForVersion(version)
+      const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+      const auth = await this.getLocalAuth(name)
+      const host = getLocalCliHost(container)
       // INFO memory returns server-wide stats (database selection has no effect)
-      const cmd = `"${valkeyCli}" -h 127.0.0.1 -p ${port} INFO memory`
+      const args = ['-h', host, '-p', String(port)]
+      if (shouldPassValkeyCliUsername(auth.username)) {
+        args.push('--user', auth.username)
+      }
+      args.push('INFO', 'memory')
 
-      const { stdout } = await execAsync(cmd, { timeout: 10000 })
+      const { stdout } = await runValkeyCliCommand(valkeyCli, args, {
+        timeout: 10000,
+        password: auth.password,
+        libraryEnv,
+      })
 
       // Parse used_memory (total server memory) from INFO output
       const match = stdout.match(/used_memory:(\d+)/)
@@ -1456,19 +1638,27 @@ export class ValkeyEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = options.database || container.database || '0'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
+    const args = ['-h', host, '-p', String(port), '-n', db]
+    if (shouldPassValkeyCliUsername(auth.username)) {
+      args.push('--user', auth.username)
+    }
+    const env = buildValkeyCliEnv(libraryEnv, auth.password)
 
     if (options.file) {
       // Read file and pipe to valkey-cli via stdin (avoids shell interpolation issues)
       const fileContent = await readFile(options.file, 'utf-8')
-      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(valkeyCli, args, {
           stdio: ['pipe', 'inherit', 'inherit'],
+          env,
         })
 
         let rejected = false
@@ -1493,11 +1683,10 @@ export class ValkeyEngine extends BaseEngine {
       })
     } else if (options.sql) {
       // Run inline command by piping to valkey-cli stdin (avoids shell quoting issues on Windows)
-      const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
-
       await new Promise<void>((resolve, reject) => {
         const proc = spawn(valkeyCli, args, {
           stdio: ['pipe', 'inherit', 'inherit'],
+          env,
         })
 
         let rejected = false
@@ -1530,32 +1719,34 @@ export class ValkeyEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = options?.database || container.database || '0'
     const host = options?.host ?? '127.0.0.1'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const binBaseDir = this.getBinaryPath(version)
-    const libraryEnv = getLibraryEnv(binBaseDir)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const localAuth =
+      !options?.username &&
+      !options?.password &&
+      (host === '127.0.0.1' || host === 'localhost')
+        ? await this.getLocalAuth(name)
+        : null
 
     return new Promise((resolve, reject) => {
       const args = ['-h', host, '-p', String(port), '-n', db, '--raw']
 
-      if (options?.username) {
-        args.push('--user', options.username)
+      const username = options?.username || localAuth?.username
+      if (shouldPassValkeyCliUsername(username)) {
+        args.push('--user', username)
       }
       if (options?.ssl) {
         args.push('--tls')
       }
 
-      // Pass password via REDISCLI_AUTH env to avoid exposing it in process listings
-      const env: Record<string, string | undefined> = {
-        ...process.env,
-        ...libraryEnv,
-      }
-      if (options?.password) {
-        env.REDISCLI_AUTH = options.password
-      }
+      const env = buildValkeyCliEnv(
+        libraryEnv,
+        options?.password ?? localAuth?.password,
+      )
 
       const proc = spawn(valkeyCli, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -1611,9 +1802,12 @@ export class ValkeyEngine extends BaseEngine {
   ): Promise<UserCredentials> {
     const { username, password } = options
     assertValidUsername(username)
-    const { port, version } = container
+    const { name, port, version } = container
     const db = options.database ?? container.database ?? '0'
     const valkeyCli = await this.getValkeyCliPath(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
 
     // Reject passwords with characters that break ACL SETUSER syntax:
     // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.
@@ -1626,11 +1820,15 @@ export class ValkeyEngine extends BaseEngine {
 
     // ACL SETUSER is idempotent - sets user with full access
     // Send ACL command via stdin to avoid leaking password in process argv
-    const cliArgs = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+    const cliArgs = ['-h', host, '-p', String(port), '-n', db]
+    if (shouldPassValkeyCliUsername(auth.username)) {
+      cliArgs.push('--user', auth.username)
+    }
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(valkeyCli, cliArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildValkeyCliEnv(libraryEnv, auth.password),
       })
 
       let stderr = ''
@@ -1650,9 +1848,9 @@ export class ValkeyEngine extends BaseEngine {
     logDebug(`Created Valkey user: ${username}`)
 
     // Valkey uses redis:// scheme for compatibility
-    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${db}`
 
-    return {
+    const credentials: UserCredentials = {
       username,
       password,
       connectionString,
@@ -1660,6 +1858,8 @@ export class ValkeyEngine extends BaseEngine {
       container: container.name,
       database: db,
     }
+    await saveCredentials(name, Engine.Valkey, credentials)
+    return credentials
   }
 }
 

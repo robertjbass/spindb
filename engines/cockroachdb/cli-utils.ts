@@ -82,6 +82,146 @@ export async function requireCockroachPath(version?: string): Promise<string> {
   throw new Error(COCKROACH_NOT_FOUND_ERROR)
 }
 
+export function getCockroachCertsDir(containerName: string): string {
+  return join(paths.getContainerPath(containerName, { engine: 'cockroachdb' }), 'certs')
+}
+
+export function getCockroachCaCertPath(containerName: string): string {
+  return join(getCockroachCertsDir(containerName), 'ca.crt')
+}
+
+export function getCockroachCaKeyPath(containerName: string): string {
+  return join(getCockroachCertsDir(containerName), 'ca.key')
+}
+
+export function getCockroachClientCertPath(
+  containerName: string,
+  username: string,
+): string {
+  return join(getCockroachCertsDir(containerName), `client.${username}.crt`)
+}
+
+export function getCockroachClientKeyPath(
+  containerName: string,
+  username: string,
+): string {
+  return join(getCockroachCertsDir(containerName), `client.${username}.key`)
+}
+
+export function buildSecureCockroachConnectionString(options: {
+  containerName: string
+  port: number
+  database?: string
+  username?: string
+  password?: string
+  host?: string
+}): string {
+  const {
+    containerName,
+    port,
+    database = 'defaultdb',
+    username = 'root',
+    password,
+    host = '127.0.0.1',
+  } = options
+
+  const url = new URL(
+    `postgresql://${encodeURIComponent(username)}@${host}:${port}/${database}`,
+  )
+
+  if (password) {
+    url.password = password
+  }
+
+  url.searchParams.set('sslmode', 'verify-full')
+  url.searchParams.set('sslrootcert', getCockroachCaCertPath(containerName))
+
+  if (!password && username === 'root') {
+    url.searchParams.set(
+      'sslcert',
+      getCockroachClientCertPath(containerName, username),
+    )
+    url.searchParams.set(
+      'sslkey',
+      getCockroachClientKeyPath(containerName, username),
+    )
+  }
+
+  return url.toString()
+}
+
+export function buildInsecureCockroachConnectionString(options: {
+  port: number
+  database?: string
+  username?: string
+  password?: string
+  host?: string
+}): string {
+  const {
+    port,
+    database = 'defaultdb',
+    username = 'root',
+    password,
+    host = '127.0.0.1',
+  } = options
+
+  const url = new URL(
+    `postgresql://${encodeURIComponent(username)}@${host}:${port}/${database}`,
+  )
+
+  if (password) {
+    url.password = password
+  }
+
+  url.searchParams.set('sslmode', 'disable')
+  return url.toString()
+}
+
+export function buildLocalCockroachSqlArgs(options: {
+  containerName: string
+  port: number
+  database?: string
+  username?: string
+  password?: string
+  host?: string
+}): string[] {
+  const {
+    containerName,
+    port,
+    database = 'defaultdb',
+    username = 'root',
+    password,
+    host = '127.0.0.1',
+  } = options
+
+  if (!password && username === 'root') {
+    return [
+      'sql',
+      '--certs-dir',
+      getCockroachCertsDir(containerName),
+      '--user',
+      'root',
+      '--host',
+      `${host}:${port}`,
+      '--database',
+      database,
+    ]
+  }
+
+  return [
+    'sql',
+    '--url',
+    buildSecureCockroachConnectionString({
+      containerName,
+      port,
+      database,
+      username,
+      password,
+      host,
+    }),
+  ]
+}
+
 /**
  * Validate a CockroachDB identifier (database, table name)
  * CockroachDB uses PostgreSQL-style identifiers

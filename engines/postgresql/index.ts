@@ -29,12 +29,17 @@ import {
 } from './version-validator'
 import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   assertValidDatabaseName,
   assertValidUsername,
   SpinDBError,
   ErrorCodes,
 } from '../../core/error-handler'
 import { parseCSVToQueryResult } from '../../core/query-parser'
+import { Engine } from '../../types'
 import type {
   Platform,
   Arch,
@@ -492,16 +497,22 @@ export class PostgreSQLEngine extends BaseEngine {
     const { version, port } = container
     const binPath = this.getBinaryPath(version)
     const database = (options.database as string) || container.name
+    const savedCreds = await loadCredentials(
+      container.name,
+      Engine.PostgreSQL,
+      getDefaultUsername(Engine.PostgreSQL),
+    )
 
     // First create the database if it doesn't exist
     if (options.createDatabase !== false) {
-      await this.createDatabase(container, database)
+      await this.createDatabase(container, database, savedCreds)
     }
 
     return restoreBackup(binPath, backupPath, {
       port,
       database,
-      user: defaults.superuser,
+      user: savedCreds?.username || defaults.superuser,
+      password: savedCreds?.password,
       pgRestorePath: options.pgRestorePath as string, // Use custom path if provided
       containerVersion: version, // Pass container version for version-matched binary lookup
       ...(options as { format?: string }),
@@ -705,6 +716,7 @@ export class PostgreSQLEngine extends BaseEngine {
   async createDatabase(
     container: ContainerConfig,
     database: string,
+    auth?: { username?: string; password?: string } | null,
   ): Promise<void> {
     assertValidDatabaseName(database)
     const { port } = container
@@ -717,7 +729,9 @@ export class PostgreSQLEngine extends BaseEngine {
       : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
 
     try {
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: auth?.password ? { ...process.env, PGPASSWORD: auth.password } : process.env,
+      })
     } catch (error) {
       const err = error as Error
       // Ignore "database already exists" error

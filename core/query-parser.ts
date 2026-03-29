@@ -195,7 +195,8 @@ export function parseClickHouseJSONResult(json: string): QueryResult {
  * Legacy format: [{ result: [...], status: "OK", time: "..." }]
  */
 export function parseSurrealDBResult(json: string): QueryResult {
-  const parsed = JSON.parse(json) as unknown[]
+  const normalized = normalizeSurrealJSONOutput(json)
+  const parsed = JSON.parse(normalized) as unknown[]
 
   // SurrealDB returns an array of statement results
   // For single query, take the first result
@@ -254,6 +255,75 @@ export function parseSurrealDBResult(json: string): QueryResult {
     rowCount: rows.length,
     executionTimeMs,
   }
+}
+
+function normalizeSurrealJSONOutput(output: string): string {
+  const trimmed = output.trim()
+  if (!trimmed) {
+    return '[]'
+  }
+
+  const bracketIndices = [trimmed.indexOf('['), trimmed.indexOf('{')].filter(
+    (index) => index >= 0,
+  )
+  if (bracketIndices.length > 0) {
+    const start = Math.min(...bracketIndices)
+    const extracted = extractFirstJsonDocument(trimmed, start)
+    if (extracted) {
+      return extracted
+    }
+  }
+
+  return trimmed
+}
+
+function extractFirstJsonDocument(
+  input: string,
+  startIndex: number,
+): string | null {
+  const opening = input[startIndex]
+  const closing = opening === '[' ? ']' : opening === '{' ? '}' : null
+  if (!closing) {
+    return null
+  }
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = startIndex; i < input.length; i++) {
+    const char = input[i]
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      escaped = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) {
+      continue
+    }
+
+    if (char === opening) {
+      depth++
+    } else if (char === closing) {
+      depth--
+      if (depth === 0) {
+        return input.slice(startIndex, i + 1)
+      }
+    }
+  }
+
+  return null
 }
 
 /**

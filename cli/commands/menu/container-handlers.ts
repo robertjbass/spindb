@@ -93,6 +93,7 @@ import {
   parseConnectionString,
   detectEngineFromConnectionString,
   detectProvider,
+  isLayerbaseCloudRemote,
   isLocalhost,
   generateRemoteContainerName,
   redactConnectionString,
@@ -683,7 +684,7 @@ export async function handleLinkRemote(): Promise<string | void> {
 
 export async function handleList(
   showMainMenu: () => Promise<void>,
-  options?: { focusContainer?: string },
+  options?: { focusContainer?: string; inlineMessage?: string },
 ): Promise<void> {
   console.clear()
   console.log(header('Containers'))
@@ -726,6 +727,11 @@ export async function handleList(
 
   spinner.stop()
 
+  if (options?.inlineMessage) {
+    console.log(options.inlineMessage)
+    console.log()
+  }
+
   // Column widths for formatting
   const COL_NAME = 16
   const COL_ENGINE = 13
@@ -742,7 +748,9 @@ export async function handleList(
 
     // Status display
     const statusDisplay = isLinked
-      ? chalk.magenta('↔ linked')
+      ? isLayerbaseCloudRemote(c.remote)
+        ? chalk.cyan('☁ cloud')
+        : chalk.magenta('↔ linked')
       : isFileBased
         ? c.status === 'running'
           ? chalk.blue('● available')
@@ -793,6 +801,10 @@ export async function handleList(
   // Calculate summary
   const linkedContainers = containers.filter((c) => c.status === 'linked')
   const localContainers = containers.filter((c) => c.status !== 'linked')
+  const cloudLinked = linkedContainers.filter((c) =>
+    isLayerbaseCloudRemote(c.remote),
+  ).length
+  const externalLinked = linkedContainers.length - cloudLinked
   const serverContainers = localContainers.filter(
     (c) => !isFileBasedEngine(c.engine),
   )
@@ -818,7 +830,12 @@ export async function handleList(
     )
   }
   if (linkedContainers.length > 0) {
-    parts.push(`${linkedContainers.length} linked`)
+    if (cloudLinked > 0) {
+      parts.push(`${cloudLinked} cloud`)
+    }
+    if (externalLinked > 0) {
+      parts.push(`${externalLinked} linked`)
+    }
   }
 
   // Check if there are any server-based (toggleable) containers (exclude linked)
@@ -866,12 +883,13 @@ export async function handleList(
   if (selectedContainer.startsWith(TOGGLE_PREFIX)) {
     const containerName = selectedContainer.slice(TOGGLE_PREFIX.length)
     const config = await containerManager.getConfig(containerName)
+    let inlineMessage: string | undefined
 
-    if (
-      config &&
-      !isFileBasedEngine(config.engine) &&
-      !isRemoteContainer(config)
-    ) {
+    if (config && isRemoteContainer(config)) {
+      inlineMessage = uiWarning(
+        `"${containerName}" is a linked remote database — managed externally.`,
+      )
+    } else if (config && !isFileBasedEngine(config.engine)) {
       const isRunning = await processManager.isRunning(containerName, {
         engine: config.engine,
       })
@@ -890,7 +908,10 @@ export async function handleList(
     }
 
     // Refresh the container list with cursor on the same container
-    await handleList(showMainMenu, { focusContainer: containerName })
+    await handleList(showMainMenu, {
+      focusContainer: containerName,
+      inlineMessage,
+    })
     return
   }
 

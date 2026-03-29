@@ -403,11 +403,26 @@ describe('remote-container', () => {
         provider: 'neon',
       })
       assertEqual(config.host, 'db.neon.tech', 'host should match')
+      assertEqual(config.origin, 'external', 'origin should default to external')
       assertEqual(config.ssl, true, 'SSL should be true for remote host')
       assertEqual(config.provider, 'neon', 'provider should be neon')
       assert(
         !config.connectionString.includes('pass'),
         'connection string should be redacted',
+      )
+    })
+
+    it('should mark layerbase links as cloud origin', () => {
+      const config = buildRemoteConfig({
+        host: 'pg-1.dev.cloud.layerbase.dev',
+        connectionString:
+          'postgresql://user:pass@pg-1.dev.cloud.layerbase.dev/mydb',
+        provider: 'layerbase-staging',
+      })
+      assertEqual(
+        config.origin,
+        'layerbase-cloud',
+        'origin should mark layerbase hosts as cloud links',
       )
     })
 

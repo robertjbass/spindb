@@ -1,4 +1,4 @@
-import { spawn, exec, type SpawnOptions } from 'child_process'
+import { spawn, exec, execFile, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
@@ -8,6 +8,10 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -28,6 +32,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
+import { Engine } from '../../types'
 import {
   type Platform,
   type Arch,
@@ -48,6 +53,7 @@ import { parseRedisResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 const ENGINE = 'redis'
 
@@ -65,6 +71,14 @@ function escapeKeyForCommand(key: string): string {
     .replace(/\t/g, '\\t') // Tab
 }
 const engineDef = getEngineDefaults(ENGINE)
+
+function buildRedisCliEnv(
+  password?: string,
+): NodeJS.ProcessEnv {
+  return password
+    ? { ...process.env, REDISCLI_AUTH: password }
+    : { ...process.env }
+}
 
 /**
  * Shell metacharacters that indicate potential command injection
@@ -657,7 +671,7 @@ export class RedisEngine extends BaseEngine {
           }
 
           // Wait for Redis to be ready
-          const ready = await this.waitForReady(port, version)
+          const ready = await this.waitForReady(name, port, version)
           if (settled) return
 
           if (ready) {
@@ -756,7 +770,7 @@ export class RedisEngine extends BaseEngine {
           }
 
           // Wait for Redis to be ready
-          const ready = await this.waitForReady(port, version)
+          const ready = await this.waitForReady(name, port, version)
           if (ready) {
             resolve({
               port,
@@ -832,6 +846,7 @@ export class RedisEngine extends BaseEngine {
 
   // Wait for Redis to be ready to accept connections
   private async waitForReady(
+    containerName: string,
     port: number,
     version: string,
     timeoutMs = 60000,
@@ -846,11 +861,22 @@ export class RedisEngine extends BaseEngine {
       logWarning('redis-cli not found, cannot verify Redis is ready')
       return false
     }
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.Redis,
+      getDefaultUsername(Engine.Redis),
+    )
+    const cliArgs = ['-h', '127.0.0.1', '-p', String(port)]
+    if (shouldPassRedisCliUsername(savedCreds?.username)) {
+      cliArgs.push('--user', savedCreds.username)
+    }
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} PING`
-        const { stdout } = await execAsync(cmd, { timeout: 5000 })
+        const { stdout } = await execFileAsync(redisCli, [...cliArgs, 'PING'], {
+          timeout: 5000,
+          env: buildRedisCliEnv(savedCreds?.password),
+        })
         if (stdout.trim() === 'PONG') {
           logDebug(`Redis ready on port ${port}`)
           return true
@@ -879,8 +905,20 @@ export class RedisEngine extends BaseEngine {
     const redisCli = await this.getRedisCliPathForVersion(version)
     if (redisCli) {
       try {
-        const cmd = `"${redisCli}" -h 127.0.0.1 -p ${port} SHUTDOWN SAVE`
-        await execAsync(cmd, { timeout: 10000 })
+        const savedCreds = await loadCredentials(
+          name,
+          Engine.Redis,
+          getDefaultUsername(Engine.Redis),
+        )
+        const args = ['-h', '127.0.0.1', '-p', String(port)]
+        if (shouldPassRedisCliUsername(savedCreds?.username)) {
+          args.push('--user', savedCreds.username)
+        }
+        args.push('SHUTDOWN', 'SAVE')
+        await execFileAsync(redisCli, args, {
+          timeout: 10000,
+          env: buildRedisCliEnv(savedCreds?.password),
+        })
         logDebug('Redis shutdown command sent')
         // Wait a bit for process to exit
         await new Promise((resolve) => setTimeout(resolve, 2000))

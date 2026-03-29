@@ -7,8 +7,16 @@ import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  addSurrealAuthArgs,
+  getBootstrapSurrealAuth,
+  inferSurrealAuthLevel,
+  parseSurrealConnectionString,
+  sanitizeSurrealAuthArgs,
+} from './auth'
 import { requireSurrealPath } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 /**
  * SurrealQL keywords that indicate a SurrealDB backup
@@ -146,30 +154,50 @@ export type RestoreOptions = {
  */
 async function restoreSurqlBackup(
   backupPath: string,
+  containerName: string,
   port: number,
   namespace: string,
   database: string,
   version?: string,
 ): Promise<RestoreResult> {
   const surrealPath = await requireSurrealPath(version)
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.SurrealDB,
+    getDefaultUsername(Engine.SurrealDB),
+  )
+  const savedAuthLevel = savedCreds
+    ? inferSurrealAuthLevel({
+        username: savedCreds.username,
+        database: savedCreds.database,
+        connectionString: savedCreds.connectionString,
+      })
+    : null
+  const auth =
+    savedCreds && savedAuthLevel === 'root'
+      ? {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authLevel: savedAuthLevel,
+        }
+      : getBootstrapSurrealAuth()
 
   return new Promise<RestoreResult>((resolve, reject) => {
-    const args = [
-      'import',
-      '--endpoint',
-      `http://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--db',
-      database,
-      backupPath,
-    ]
+    const args = addSurrealAuthArgs(
+      [
+        'import',
+        '--endpoint',
+        `http://127.0.0.1:${port}`,
+        '--ns',
+        namespace,
+        '--db',
+        database,
+        backupPath,
+      ],
+      auth,
+    )
 
-    logDebug(`Running: surreal ${args.join(' ')}`)
+    logDebug(`Running: surreal ${sanitizeSurrealAuthArgs(args).join(' ')}`)
 
     const proc = spawn(surrealPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -231,7 +259,14 @@ export async function restoreBackup(
   logDebug(`Detected backup format: ${format.format}`)
 
   if (format.format === 'surql') {
-    return restoreSurqlBackup(backupPath, port, namespace, database, version)
+    return restoreSurqlBackup(
+      backupPath,
+      containerName,
+      port,
+      namespace,
+      database,
+      version,
+    )
   }
 
   throw new Error(
@@ -258,9 +293,16 @@ export function parseConnectionString(connectionString: string): {
     )
   }
 
-  let url: URL
   try {
-    url = new URL(connectionString)
+    const parsed = parseSurrealConnectionString(connectionString)
+    return {
+      host: parsed.host,
+      port: parsed.port,
+      namespace: parsed.namespace,
+      database: parsed.database,
+      user: parsed.username,
+      password: parsed.password,
+    }
   } catch (error) {
     // Mask credentials in error message if present
     const sanitized = connectionString.replace(
@@ -272,31 +314,5 @@ export function parseConnectionString(connectionString: string): {
         `Expected format: surrealdb://[user:password@]host[:port][/namespace/database]`,
       { cause: error },
     )
-  }
-
-  // Validate protocol
-  const validProtocols = ['surrealdb:', 'ws:', 'wss:', 'http:', 'https:']
-  if (!validProtocols.includes(url.protocol)) {
-    throw new Error(
-      `Invalid SurrealDB connection string: unsupported protocol "${url.protocol}". ` +
-        `Expected one of: ${validProtocols.join(', ')}`,
-    )
-  }
-
-  const host = url.hostname || '127.0.0.1'
-  const port = parseInt(url.port, 10) || 8000
-
-  // Parse namespace/database from pathname (e.g., /myns/mydb)
-  const pathParts = url.pathname.split('/').filter(Boolean)
-  const namespace = pathParts[0] || 'test'
-  const database = pathParts[1] || 'test'
-
-  return {
-    host,
-    port,
-    namespace,
-    database,
-    user: url.username || undefined,
-    password: url.password || undefined,
   }
 }

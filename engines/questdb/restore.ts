@@ -9,7 +9,8 @@ import { open, readFile } from 'fs/promises'
 import { spawn, spawnSync } from 'child_process'
 import { configManager } from '../../core/config-manager'
 import { logDebug } from '../../core/error-handler'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { type BackupFormat, type RestoreResult } from '../../types'
+import { loadLocalQuestAuth } from './auth'
 
 // Read only the first 8KB for format detection
 const HEADER_SIZE = 8192
@@ -119,7 +120,8 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { port, database, clean } = options
+  const { containerName, port, database, clean } = options
+  const auth = await loadLocalQuestAuth(containerName)
 
   // Detect backup format
   const format = await detectBackupFormat(backupPath)
@@ -146,7 +148,7 @@ export async function restoreBackup(
     '-p',
     String(port),
     '-U',
-    'admin',
+    auth.user,
     '-d',
     database,
     '-v',
@@ -190,14 +192,14 @@ export async function restoreBackup(
             '-p',
             String(port),
             '-U',
-            'admin',
+            auth.user,
             '-d',
             database,
             '-c',
             dropQuery,
           ],
           {
-            env: { ...process.env, PGPASSWORD: 'quest' },
+            env: { ...process.env, PGPASSWORD: auth.password },
           },
         )
 
@@ -219,7 +221,7 @@ export async function restoreBackup(
   return new Promise((resolve, reject) => {
     const proc = spawn(psqlPath!, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PGPASSWORD: 'quest' },
+      env: { ...process.env, PGPASSWORD: auth.password },
     })
 
     let stdout = ''

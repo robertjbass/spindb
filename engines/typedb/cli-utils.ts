@@ -29,15 +29,16 @@ export function getConsoleBaseArgs(
   port: number,
   host = '127.0.0.1',
   tlsDisabled = true,
+  auth?: { username?: string; password?: string },
 ): string[] {
   const args = [
     '--address',
     `${host}:${port}`,
     ...(tlsDisabled ? ['--tls-disabled'] : []),
     '--username',
-    TYPEDB_DEFAULT_USERNAME,
+    auth?.username || TYPEDB_DEFAULT_USERNAME,
     '--password',
-    TYPEDB_DEFAULT_PASSWORD,
+    auth?.password || TYPEDB_DEFAULT_PASSWORD,
   ]
   return args
 }

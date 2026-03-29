@@ -28,6 +28,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
+import { paths } from '../../config/paths'
 
 const ENGINE = Engine.PostgreSQL
 const DATABASE = 'testdb'
@@ -771,6 +772,244 @@ describe('PostgreSQL Integration Tests', () => {
     assert(!found, 'Container should not be in list')
 
     console.log('   ✓ Container force deleted')
+  })
+
+  it('should backup and restore with password-authenticated local superuser credentials', async () => {
+    console.log(
+      `\n🔐 Testing auth-aware PostgreSQL backup/restore on local containers...`,
+    )
+
+    const [sourcePort, targetPort] = await findConsecutiveFreePorts(
+      2,
+      TEST_PORTS.postgresql.base + 40,
+    )
+    const sourceName = generateTestName('pg-auth-test-source')
+    const targetName = generateTestName('pg-auth-test-target')
+    const sourcePassword = 'sourcepass123'
+    const targetPassword = 'targetpass456'
+    const { tmpdir } = await import('os')
+    const { mkdir, readFile, rm, writeFile } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `pg-auth-backup-${Date.now()}.dump`)
+    const engine = getEngine(ENGINE)
+
+    const writeDefaultCredentialFile = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const credentialsDir = join(
+        paths.getContainerPath(containerName, { engine: ENGINE }),
+        'credentials',
+      )
+      await mkdir(credentialsDir, { recursive: true })
+      const connectionString = `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE}`
+      await writeFile(
+        join(credentialsDir, '.env.spindb'),
+        [
+          'DB_USER=postgres',
+          `DB_PASSWORD=${password}`,
+          'DB_HOST=127.0.0.1',
+          `DB_PORT=${port}`,
+          `DB_NAME=${DATABASE}`,
+          `DB_URL=${connectionString}`,
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+    }
+
+    const waitForAuthedReady = async (
+      containerName: string,
+      password: string,
+      timeoutMs = 30000,
+    ): Promise<{ ready: boolean; lastError: string | null }> => {
+      const startTime = Date.now()
+      let lastError: string | null = null
+      while (Date.now() - startTime < timeoutMs) {
+        try {
+          const config = await containerManager.getConfig(containerName)
+          if (config) {
+            const result = await engine.executeQuery(config, 'SELECT 1 AS ok', {
+              database: 'postgres',
+              username: 'postgres',
+              password,
+            })
+            if (result.rowCount === 1) {
+              return { ready: true, lastError: null }
+            }
+          }
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error.message : 'unknown auth-ready error'
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      return { ready: false, lastError }
+    }
+
+    const enablePasswordAuth = async (
+      containerName: string,
+      port: number,
+      password: string,
+    ) => {
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Container config should exist')
+
+      await runScriptSQL(
+        containerName,
+        // Test-only controlled constant; direct interpolation keeps the setup path simple here.
+        `ALTER ROLE postgres WITH PASSWORD '${password}'`,
+        'postgres',
+      )
+
+      const passwordState = await engine.executeQuery(
+        config!,
+        "SELECT rolpassword IS NOT NULL AS has_password FROM pg_authid WHERE rolname = 'postgres'",
+        {
+          database: 'postgres',
+        },
+      )
+      const hasPassword = String(passwordState.rows[0]?.has_password)
+      assert(
+        hasPassword === 'true' || hasPassword === 't',
+        `Superuser password should be set before enabling auth (got ${hasPassword})`,
+      )
+
+      const dataDir = paths.getContainerDataPath(containerName, {
+        engine: ENGINE,
+      })
+      const pgHbaPath = join(dataDir, 'pg_hba.conf')
+      const pgHbaContent = await readFile(pgHbaPath, 'utf-8')
+      await writeFile(
+        pgHbaPath,
+        pgHbaContent.replace(/\btrust\b/g, 'md5'),
+        'utf-8',
+      )
+
+      await writeDefaultCredentialFile(containerName, port, password)
+
+      await engine.stop(config!)
+      await containerManager.updateConfig(containerName, { status: 'stopped' })
+      const stopped = await waitForStopped(containerName, ENGINE)
+      assert(stopped, 'Container should stop before auth restart')
+
+      const stoppedConfig = await containerManager.getConfig(containerName)
+      assert(stoppedConfig !== null, 'Stopped config should exist')
+      await engine.start(stoppedConfig!)
+      await containerManager.updateConfig(containerName, { status: 'running' })
+      const { ready, lastError } = await waitForAuthedReady(
+        containerName,
+        password,
+      )
+      assert(
+        ready,
+        `Auth-enabled PostgreSQL should be ready${lastError ? `: ${lastError}` : ''}`,
+      )
+    }
+
+    try {
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: '18',
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, '18', { superuser: 'postgres' })
+
+      let sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(await waitForReady(ENGINE, sourcePort), 'Source should be ready')
+      sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source config should still exist')
+      await engine.createDatabase(sourceConfig!, DATABASE)
+      await runScriptFile(sourceName, SEED_FILE, DATABASE)
+      await enablePasswordAuth(sourceName, sourcePort, sourcePassword)
+
+      const sourceAuthedConfig = await containerManager.getConfig(sourceName)
+      assert(sourceAuthedConfig !== null, 'Source auth config should exist')
+      const sourceRows = await engine.executeQuery(
+        sourceAuthedConfig!,
+        'SELECT id FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+          username: 'postgres',
+          password: sourcePassword,
+        },
+      )
+      assertEqual(
+        sourceRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Auth-enabled source should still be queryable',
+      )
+
+      await containerManager.create(targetName, {
+        engine: ENGINE,
+        version: '18',
+        port: targetPort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(targetName, '18', { superuser: 'postgres' })
+
+      let targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should exist')
+      await engine.start(targetConfig!)
+      await containerManager.updateConfig(targetName, { status: 'running' })
+      assert(await waitForReady(ENGINE, targetPort), 'Target should be ready')
+      targetConfig = await containerManager.getConfig(targetName)
+      assert(targetConfig !== null, 'Target config should still exist')
+      await engine.createDatabase(targetConfig!, DATABASE)
+      await enablePasswordAuth(targetName, targetPort, targetPassword)
+
+      const backupResult = await engine.backup(sourceAuthedConfig!, backupPath, {
+        database: DATABASE,
+        format: 'custom',
+      })
+      assertEqual(backupResult.format, 'custom', 'Backup should use custom format')
+
+      const targetAuthedConfig = await containerManager.getConfig(targetName)
+      assert(targetAuthedConfig !== null, 'Target auth config should exist')
+      await engine.restore(targetAuthedConfig!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+      })
+
+      const restoredRows = await engine.executeQuery(
+        targetAuthedConfig!,
+        'SELECT id FROM test_user ORDER BY id',
+        {
+          database: DATABASE,
+          username: 'postgres',
+          password: targetPassword,
+        },
+      )
+      assertEqual(
+        restoredRows.rowCount,
+        EXPECTED_ROW_COUNT,
+        'Restore should succeed against an auth-enabled target',
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+
+      for (const containerName of [sourceName, targetName]) {
+        const config = await containerManager.getConfig(containerName)
+        if (config) {
+          const running = await processManager.isRunning(containerName, {
+            engine: ENGINE,
+          }).catch(() => false)
+          if (running) {
+            await engine.stop(config).catch(() => {})
+            await containerManager
+              .updateConfig(containerName, { status: 'stopped' })
+              .catch(() => {})
+          }
+        }
+        await containerManager.delete(containerName, { force: true }).catch(() => {})
+      }
+    }
+
+    console.log('   ✓ Backup and restore work with password-authenticated PostgreSQL')
   })
 
   it('should have no test containers remaining', async () => {

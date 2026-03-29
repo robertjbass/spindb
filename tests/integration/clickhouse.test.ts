@@ -39,6 +39,7 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
+import { getDefaultUsername, saveCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -418,6 +419,130 @@ describe(
       )
 
       console.log(`   Verified ${rowCount} rows in restored container`)
+    })
+
+    it('should backup and restore with password-authenticated saved local user credentials', async () => {
+      console.log(
+        `\n🔐 Testing auth-aware ClickHouse backup/restore on local containers...`,
+      )
+
+      const allPorts = await findConsecutiveFreePorts(
+        4,
+        TEST_PORTS.clickhouse.base + 40,
+      )
+      const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
+      const sourceName = generateTestName('clickhouse-auth-test-source')
+      const targetName = generateTestName('clickhouse-auth-test-target')
+      const sourcePassword = 'sourcepass123'
+      const targetPassword = 'targetpass456'
+      const username = getDefaultUsername(ENGINE)
+      const { tmpdir } = await import('os')
+      const { rm } = await import('fs/promises')
+      const backupPath = join(
+        tmpdir(),
+        `clickhouse-auth-backup-${Date.now()}.sql`,
+      )
+      const engine = getEngine(ENGINE)
+
+      try {
+        await containerManager.create(sourceName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: sourcePort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(sourceName, TEST_VERSION, { port: sourcePort })
+
+        const sourceConfig = await containerManager.getConfig(sourceName)
+        assert(sourceConfig !== null, 'Source container config should exist')
+        await engine.start(sourceConfig!)
+        await containerManager.updateConfig(sourceName, { status: 'running' })
+
+        const sourceReady = await waitForReady(ENGINE, sourcePort, 120000)
+        assert(sourceReady, 'Source ClickHouse should be ready')
+
+        await runScriptFile(sourceName, SEED_FILE, DATABASE)
+
+        const sourceCreds = await engine.createUser(sourceConfig!, {
+          username,
+          password: sourcePassword,
+          database: DATABASE,
+        })
+        await saveCredentials(sourceName, ENGINE, sourceCreds)
+
+        await containerManager.create(targetName, {
+          engine: ENGINE,
+          version: TEST_VERSION,
+          port: targetPort,
+          database: DATABASE,
+        })
+        await engine.initDataDir(targetName, TEST_VERSION, { port: targetPort })
+
+        const targetConfig = await containerManager.getConfig(targetName)
+        assert(targetConfig !== null, 'Target container config should exist')
+        await engine.start(targetConfig!)
+        await containerManager.updateConfig(targetName, { status: 'running' })
+
+        const targetReady = await waitForReady(ENGINE, targetPort, 120000)
+        assert(targetReady, 'Target ClickHouse should be ready')
+
+        const targetCreds = await engine.createUser(targetConfig!, {
+          username,
+          password: targetPassword,
+          database: DATABASE,
+        })
+        await saveCredentials(targetName, ENGINE, targetCreds)
+
+        await engine.backup(sourceConfig!, backupPath, {
+          database: DATABASE,
+          format: 'sql',
+        })
+
+        await engine.restore(targetConfig!, backupPath, {
+          database: DATABASE,
+        })
+
+        const result = await engine.executeQuery(
+          targetConfig!,
+          'SELECT count() AS count FROM test_user',
+          {
+            database: DATABASE,
+            username: targetCreds.username,
+            password: targetCreds.password,
+          },
+        )
+
+        assertEqual(result.rowCount, 1, 'Should return a single count row')
+        assertEqual(
+          Number(result.rows[0].count),
+          EXPECTED_ROW_COUNT,
+          'Restored auth-backed ClickHouse data should match source row count',
+        )
+
+        console.log(
+          '   ✓ Backup and restore work with password-authenticated ClickHouse',
+        )
+      } finally {
+        await rm(backupPath, { force: true }).catch(() => {})
+
+        const sourceConfig = await containerManager.getConfig(sourceName)
+        if (sourceConfig) {
+          await engine.stop(sourceConfig).catch(() => {})
+          await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
+          await containerManager.delete(sourceName, { force: true }).catch(
+            () => {},
+          )
+        }
+
+        const targetConfig = await containerManager.getConfig(targetName)
+        if (targetConfig) {
+          await engine.stop(targetConfig).catch(() => {})
+          await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
+          await containerManager.delete(targetName, { force: true }).catch(
+            () => {},
+          )
+        }
+      }
     })
 
     it('should stop and delete the restored container', async () => {

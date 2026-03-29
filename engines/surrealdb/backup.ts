@@ -7,12 +7,71 @@
  */
 
 import { spawn } from 'child_process'
-import { stat, mkdir } from 'fs/promises'
+import { readFile, rename, rm, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  addSurrealAuthArgs,
+  getBootstrapSurrealAuth,
+  inferSurrealAuthLevel,
+  sanitizeSurrealAuthArgs,
+} from './auth'
 import { requireSurrealPath } from './cli-utils'
-import type { ContainerConfig, BackupOptions, BackupResult } from '../../types'
+import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+
+function shouldStripSurrealStatement(statement: string): boolean {
+  const normalized = statement.trim().replace(/\s+/g, ' ').toUpperCase()
+  return (
+    normalized.startsWith('DEFINE USER ') ||
+    normalized.startsWith('DEFINE ACCESS ') ||
+    normalized === 'OPTION IMPORT;' ||
+    normalized.startsWith('USE NS ') ||
+    normalized.startsWith('USE DB ')
+  )
+}
+
+export function sanitizeBackupContent(content: string): string {
+  let result = ''
+  let current = ''
+  let quote: "'" | '"' | null = null
+  let escaped = false
+
+  for (const char of content) {
+    current += char
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (quote) {
+      if (char === '\\') {
+        escaped = true
+      } else if (char === quote) {
+        quote = null
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+
+    if (char === ';') {
+      result += shouldStripSurrealStatement(current) ? '\n' : current
+      current = ''
+    }
+  }
+
+  if (current.length > 0) {
+    result += shouldStripSurrealStatement(current) ? '\n' : current
+  }
+
+  return result
+}
 
 /**
  * Create a SurrealQL backup using surreal export
@@ -22,9 +81,25 @@ async function createSurqlBackup(
   outputPath: string,
   database: string,
 ): Promise<BackupResult> {
-  const { port, version } = container
+  const { name, port, version } = container
   // SurrealDB uses namespace/database hierarchy - use container name as namespace
   const namespace = container.name.replace(/-/g, '_')
+  const savedCreds = await loadCredentials(
+    name,
+    Engine.SurrealDB,
+    getDefaultUsername(Engine.SurrealDB),
+  )
+  const auth = savedCreds
+    ? {
+        username: savedCreds.username,
+        password: savedCreds.password,
+        authLevel: inferSurrealAuthLevel({
+          username: savedCreds.username,
+          database: savedCreds.database,
+          connectionString: savedCreds.connectionString,
+        }),
+      }
+    : getBootstrapSurrealAuth()
 
   const surrealPath = await requireSurrealPath(version)
 
@@ -36,22 +111,21 @@ async function createSurqlBackup(
 
   return new Promise<BackupResult>((resolve, reject) => {
     // surreal export command
-    const args = [
-      'export',
-      '--endpoint',
-      `http://127.0.0.1:${port}`,
-      '--user',
-      'root',
-      '--pass',
-      'root',
-      '--ns',
-      namespace,
-      '--db',
-      database,
-      outputPath,
-    ]
+    const args = addSurrealAuthArgs(
+      [
+        'export',
+        '--endpoint',
+        `http://127.0.0.1:${port}`,
+        '--ns',
+        namespace,
+        '--db',
+        database,
+        outputPath,
+      ],
+      auth,
+    )
 
-    logDebug(`Running: surreal ${args.join(' ')}`)
+    logDebug(`Running: surreal ${sanitizeSurrealAuthArgs(args).join(' ')}`)
 
     const proc = spawn(surrealPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -72,6 +146,17 @@ async function createSurqlBackup(
     proc.on('close', async (code) => {
       if (code === 0) {
         try {
+          const sanitized = sanitizeBackupContent(
+            await readFile(outputPath, 'utf-8'),
+          )
+          const tempPath = `${outputPath}.tmp`
+          try {
+            await writeFile(tempPath, sanitized, 'utf-8')
+            await rename(tempPath, outputPath)
+          } catch (error) {
+            await rm(tempPath, { force: true }).catch(() => {})
+            throw error
+          }
           const stats = await stat(outputPath)
           resolve({
             path: outputPath,

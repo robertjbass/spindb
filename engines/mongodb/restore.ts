@@ -8,8 +8,11 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
+import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import { containerManager } from '../../core/container-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
-import type { BackupFormat, RestoreResult } from '../../types'
+import { buildMongoUri } from '../mongo-uri'
+import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 // Detect the format of a MongoDB backup
 export async function detectBackupFormat(
@@ -86,6 +89,7 @@ export async function detectBackupFormat(
 
 // Restore options
 export type RestoreOptions = {
+  containerName?: string
   port: number
   database: string
   drop?: boolean // Drop existing data before restore
@@ -141,7 +145,29 @@ export async function restoreBackup(
   const format = await detectBackupFormat(backupPath)
   logDebug(`Detected backup format: ${format.format}`)
 
-  const args: string[] = ['--host', '127.0.0.1', '--port', String(port)]
+  const savedCreds = options.containerName
+    ? await loadCredentials(
+        options.containerName,
+        Engine.MongoDB,
+        getDefaultUsername(Engine.MongoDB),
+      )
+    : null
+  const container =
+    options.containerName
+      ? await containerManager.getConfig(options.containerName)
+      : null
+  const host = container?.bindAddress ?? '127.0.0.1'
+
+  const args: string[] = savedCreds
+    ? [
+        '--uri',
+        buildMongoUri(port, database, {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authDatabase: savedCreds.database || 'admin',
+        }, host),
+      ]
+    : ['--host', '127.0.0.1', '--port', String(port)]
 
   if (drop) {
     args.push('--drop')

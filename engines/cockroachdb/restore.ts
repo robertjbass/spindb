@@ -11,6 +11,7 @@ import {
   requireCockroachPath,
   validateCockroachIdentifier,
   escapeCockroachIdentifier,
+  buildLocalCockroachSqlArgs,
 } from './cli-utils'
 import type { BackupFormat, RestoreResult } from '../../types'
 
@@ -150,21 +151,18 @@ export type RestoreOptions = {
  */
 async function executeQuery(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
   query: string,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--database',
+    const args = buildLocalCockroachSqlArgs({
+      containerName,
+      port,
       database,
-      '--execute',
-      query,
-    ]
+    })
+    args.push('--execute', query)
 
     const proc = spawn(cockroachPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -198,6 +196,7 @@ async function executeQuery(
  */
 async function getTablesInDatabase(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
 ): Promise<string[]> {
@@ -206,6 +205,7 @@ async function getTablesInDatabase(
 
     const result = await executeQuery(
       cockroachPath,
+      containerName,
       port,
       database,
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`,
@@ -234,10 +234,16 @@ async function getTablesInDatabase(
  */
 async function dropAllTables(
   cockroachPath: string,
+  containerName: string,
   port: number,
   database: string,
 ): Promise<void> {
-  const tables = await getTablesInDatabase(cockroachPath, port, database)
+  const tables = await getTablesInDatabase(
+    cockroachPath,
+    containerName,
+    port,
+    database,
+  )
 
   if (tables.length === 0) {
     logDebug('No existing tables to drop')
@@ -255,6 +261,7 @@ async function dropAllTables(
 
       await executeQuery(
         cockroachPath,
+        containerName,
         port,
         database,
         `DROP TABLE IF EXISTS ${escapedTable} CASCADE`,
@@ -272,6 +279,7 @@ async function dropAllTables(
  */
 async function restoreSqlBackup(
   backupPath: string,
+  containerName: string,
   port: number,
   database: string,
   version?: string,
@@ -282,18 +290,15 @@ async function restoreSqlBackup(
   // If clean mode, drop existing tables first
   if (clean) {
     logDebug('Clean mode: dropping existing tables before restore')
-    await dropAllTables(cockroachPath, port, database)
+    await dropAllTables(cockroachPath, containerName, port, database)
   }
 
   return new Promise<RestoreResult>((resolve, reject) => {
-    const args = [
-      'sql',
-      '--insecure',
-      '--host',
-      `127.0.0.1:${port}`,
-      '--database',
+    const args = buildLocalCockroachSqlArgs({
+      containerName,
+      port,
       database,
-    ]
+    })
 
     const proc = spawn(cockroachPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -387,7 +392,14 @@ export async function restoreBackup(
   logDebug(`Detected backup format: ${format.format}`)
 
   if (format.format === 'sql') {
-    return restoreSqlBackup(backupPath, port, database, version, clean)
+    return restoreSqlBackup(
+      backupPath,
+      options.containerName,
+      port,
+      database,
+      version,
+      clean,
+    )
   }
 
   throw new Error(
