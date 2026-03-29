@@ -406,8 +406,14 @@ describe('Weaviate Integration Tests', () => {
         const created = await createWeaviateClass(sourcePort, TEST_CLASS)
         assert(created, 'Should create source class')
         const inserted = await insertWeaviateObjects(sourcePort, TEST_CLASS, [
-          { properties: { text: 'alpha document', value: 1 } },
-          { properties: { text: 'beta document', value: 2 } },
+          {
+            properties: { content: 'alpha document' },
+            vector: [0.1, 0.2, 0.3],
+          },
+          {
+            properties: { content: 'beta document' },
+            vector: [0.4, 0.5, 0.6],
+          },
         ])
         assert(inserted, 'Should insert source objects')
 

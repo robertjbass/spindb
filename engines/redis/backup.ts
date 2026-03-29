@@ -73,10 +73,25 @@ async function execRedisCommand(
     proc.on('error', reject)
 
     proc.on('close', (code) => {
-      if (code === 0 || code === null) {
+      const combinedOutput = `${stdout}\n${stderr}`.trim()
+      const errorMarkers = [
+        'NOAUTH',
+        'WRONGPASS',
+        'NOPERM',
+        'ACL',
+      ]
+      const hasCliError =
+        /^ERR\b/m.test(combinedOutput) ||
+        errorMarkers.some((marker) => combinedOutput.includes(marker))
+
+      if ((code === 0 || code === null) && !hasCliError) {
         resolve(stdout)
       } else {
-        reject(new Error(stderr || `redis-cli exited with code ${code}`))
+        reject(
+          new Error(
+            combinedOutput || `redis-cli exited with code ${code}`,
+          ),
+        )
       }
     })
 

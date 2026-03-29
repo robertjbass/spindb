@@ -1260,13 +1260,28 @@ export class CockroachDBEngine extends BaseEngine {
     const cockroach = await this.getCockroachPath(version)
 
     return new Promise((resolve, reject) => {
-      const args = buildLocalCockroachSqlArgs({
-        containerName: name,
-        port,
-        database: db,
-        username: options?.username,
-        password: options?.password,
-      })
+      const args = options?.host
+        ? (() => {
+            const username = options.username || 'root'
+            const remoteUrl = new URL(
+              `postgresql://${encodeURIComponent(username)}@${options.host}:${port}/${db}`,
+            )
+            if (options.password) {
+              remoteUrl.password = options.password
+            }
+            remoteUrl.searchParams.set(
+              'sslmode',
+              options.ssl === false ? 'disable' : 'require',
+            )
+            return ['sql', '--url', remoteUrl.toString()]
+          })()
+        : buildLocalCockroachSqlArgs({
+            containerName: name,
+            port,
+            database: db,
+            username: options?.username,
+            password: options?.password,
+          })
       args.push('--execute', query, '--format=csv')
 
       const proc = spawn(cockroach, args, {
@@ -1376,16 +1391,18 @@ export class CockroachDBEngine extends BaseEngine {
     const sql = [
       `CREATE USER IF NOT EXISTS ${escapedUser}`,
       `ALTER USER ${escapedUser} WITH PASSWORD '${escapedPassword}'`,
-      `GRANT admin TO ${escapedUser}`,
       `GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser}`,
       `GRANT ALL ON SCHEMA public TO ${escapedUser}`,
       `GRANT ALL ON ALL TABLES IN SCHEMA public TO ${escapedUser}`,
       `GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${escapedUser}`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${escapedUser}`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${escapedUser}`,
     ].join('; ') + ';'
 
     const args = buildLocalCockroachSqlArgs({
       containerName: name,
       port,
+      database: db,
     })
 
     await new Promise<void>((resolve, reject) => {

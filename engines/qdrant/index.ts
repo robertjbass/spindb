@@ -528,11 +528,13 @@ export class QdrantEngine extends BaseEngine {
     }
 
     const args = ['--config-path', configPath]
+    let snapshotApplied = false
     if (existsSync(pendingSnapshotMarker)) {
       try {
         const snapshotPath = (await readFile(pendingSnapshotMarker, 'utf-8')).trim()
         if (snapshotPath && existsSync(snapshotPath)) {
           args.push('--storage-snapshot', snapshotPath)
+          snapshotApplied = true
           logDebug(`Starting Qdrant with storage snapshot: ${snapshotPath}`)
         }
       } catch (error) {
@@ -611,7 +613,7 @@ export class QdrantEngine extends BaseEngine {
           if (settled) return
 
           if (ready) {
-            if (existsSync(pendingSnapshotMarker)) {
+            if (snapshotApplied && existsSync(pendingSnapshotMarker)) {
               await unlink(pendingSnapshotMarker).catch(() => {})
             }
             settled = true
@@ -672,7 +674,7 @@ export class QdrantEngine extends BaseEngine {
     const ready = await this.waitForReady(port)
 
     if (ready) {
-      if (existsSync(pendingSnapshotMarker)) {
+      if (snapshotApplied && existsSync(pendingSnapshotMarker)) {
         await unlink(pendingSnapshotMarker).catch(() => {})
       }
       return {

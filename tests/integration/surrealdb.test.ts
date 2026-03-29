@@ -753,7 +753,10 @@ describe('SurrealDB Integration Tests', () => {
     ) => {
       const credentials = buildSavedRootScopedCredentials(containerName, port)
       await engine.runScript(config, {
-        sql: `DEFINE USER OVERWRITE ${credentials.username} ON ROOT PASSWORD '${credentials.password}' ROLES OWNER;`,
+        sql: [
+          `DEFINE USER OVERWRITE ${credentials.username} ON ROOT PASSWORD '${credentials.password}' ROLES OWNER;`,
+          `DEFINE USER OVERWRITE root ON ROOT PASSWORD 'rotated-bootstrap-pass-123' ROLES OWNER;`,
+        ].join(' '),
         database: DATABASE,
       })
       await writeDefaultCredentialFile(containerName, credentials)

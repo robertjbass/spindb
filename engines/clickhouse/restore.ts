@@ -34,6 +34,23 @@ type ClickHouseLocalAuth = {
   password?: string
 }
 
+function buildClickHouseEnv(
+  auth?: ClickHouseLocalAuth,
+): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (auth?.user) {
+    env.CLICKHOUSE_USER = auth.user
+  } else {
+    delete env.CLICKHOUSE_USER
+  }
+  if (auth?.password) {
+    env.CLICKHOUSE_PASSWORD = auth.password
+  } else {
+    delete env.CLICKHOUSE_PASSWORD
+  }
+  return env
+}
+
 async function loadLocalClickHouseAuth(
   containerName: string,
 ): Promise<ClickHouseLocalAuth> {
@@ -192,15 +209,10 @@ async function executeQuery(
       '--query',
       query,
     ]
-    if (auth?.user) {
-      args.push('--user', auth.user)
-    }
-    if (auth?.password) {
-      args.push('--password', auth.password)
-    }
 
     const proc = spawn(clickhousePath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildClickHouseEnv(auth),
     })
 
     let stdout = ''
@@ -335,15 +347,10 @@ async function restoreSqlBackup(
       database,
       '--multiquery',
     ]
-    if (auth.user) {
-      args.push('--user', auth.user)
-    }
-    if (auth.password) {
-      args.push('--password', auth.password)
-    }
 
     const proc = spawn(clickhousePath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildClickHouseEnv(auth),
     })
 
     let stdout = ''

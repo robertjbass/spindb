@@ -367,7 +367,7 @@ describe('TypeDB Integration Tests', () => {
 
     const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.typedb.base + 20)
     const targetPort = allPorts[2]
-    const targetName = generateTestName('typedb-auth-target')
+    const targetName = generateTestName('typedb-auth-test-target')
     const username = getDefaultUsername(ENGINE)
     const sourcePassword = 'typedbSourcePass123'
     const targetPassword = 'typedbTargetPass456'
@@ -377,6 +377,14 @@ describe('TypeDB Integration Tests', () => {
     const engine = getEngine(ENGINE)
 
     try {
+      const { portManager } = await import('../../core/port-manager')
+      const targetHttpPort = targetPort + 6271
+      const targetHttpFree = await portManager.isPortAvailable(targetHttpPort)
+      assert(
+        targetHttpFree,
+        `TypeDB sidecar HTTP port ${targetHttpPort} should be free`,
+      )
+
       const sourceConfig = await containerManager.getConfig(containerName)
       assert(sourceConfig !== null, 'Source container config should exist')
 

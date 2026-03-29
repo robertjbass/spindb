@@ -25,6 +25,23 @@ type ClickHouseLocalAuth = {
   password?: string
 }
 
+function buildClickHouseEnv(
+  auth?: ClickHouseLocalAuth,
+): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (auth?.user) {
+    env.CLICKHOUSE_USER = auth.user
+  } else {
+    delete env.CLICKHOUSE_USER
+  }
+  if (auth?.password) {
+    env.CLICKHOUSE_PASSWORD = auth.password
+  } else {
+    delete env.CLICKHOUSE_PASSWORD
+  }
+  return env
+}
+
 async function loadLocalClickHouseAuth(
   container: ContainerConfig,
 ): Promise<ClickHouseLocalAuth> {
@@ -66,15 +83,10 @@ async function execClickHouseQuery(
       '--query',
       query,
     ]
-    if (auth?.user) {
-      args.push('--user', auth.user)
-    }
-    if (auth?.password) {
-      args.push('--password', auth.password)
-    }
 
     const proc = spawn(clickhousePath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildClickHouseEnv(auth),
     })
 
     let stdout = ''
@@ -289,6 +301,7 @@ async function _createNativeBackup(
   const { port, version } = container
 
   const clickhousePath = await requireClickHousePath(version)
+  const auth = await loadLocalClickHouseAuth(container)
 
   // Ensure output directory exists
   const outputDir = dirname(outputPath)
@@ -297,7 +310,7 @@ async function _createNativeBackup(
   }
 
   // Get list of tables
-  const tables = await getTables(clickhousePath, port, database)
+  const tables = await getTables(clickhousePath, port, database, auth)
   logDebug(`Found ${tables.length} tables to backup`)
 
   // Create a combined backup with all tables
@@ -318,6 +331,7 @@ async function _createNativeBackup(
         port,
         database,
         table,
+        auth,
       )
       fileStream.write(`-- CREATE:\n${createStmt};\n`)
     } catch (error) {
@@ -348,6 +362,7 @@ async function _createNativeBackup(
 
       const proc = spawn(clickhousePath, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: buildClickHouseEnv(auth),
       })
 
       let stderr = ''

@@ -7,7 +7,7 @@
  */
 
 import { spawn } from 'child_process'
-import { readFile, stat, mkdir, writeFile } from 'fs/promises'
+import { readFile, rename, rm, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
@@ -149,7 +149,14 @@ async function createSurqlBackup(
           const sanitized = sanitizeBackupContent(
             await readFile(outputPath, 'utf-8'),
           )
-          await writeFile(outputPath, sanitized, 'utf-8')
+          const tempPath = `${outputPath}.tmp`
+          try {
+            await writeFile(tempPath, sanitized, 'utf-8')
+            await rename(tempPath, outputPath)
+          } catch (error) {
+            await rm(tempPath, { force: true }).catch(() => {})
+            throw error
+          }
           const stats = await stat(outputPath)
           resolve({
             path: outputPath,

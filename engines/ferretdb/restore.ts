@@ -7,9 +7,10 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import { containerManager } from '../../core/container-manager'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
@@ -319,6 +320,11 @@ async function restoreViaMongo(
         getDefaultUsername(Engine.FerretDB),
       )
     : null
+  const container =
+    options.containerName
+      ? await containerManager.getConfig(options.containerName)
+      : null
+  const host = container?.bindAddress ?? '127.0.0.1'
 
   const args: string[] = savedCreds
     ? [
@@ -327,7 +333,7 @@ async function restoreViaMongo(
           username: savedCreds.username,
           password: savedCreds.password,
           authDatabase: savedCreds.database || 'admin',
-        }),
+        }, host),
       ]
     : ['--host', '127.0.0.1', '--port', String(port)]
 
@@ -382,6 +388,11 @@ async function restoreViaMongo(
     args.push('--archive=' + backupPath)
     addNamespaceRemapArgs(args, sourceDatabase, database)
   } else if (format.format === 'bson') {
+    const collectionName = basename(backupPath).replace(/\.bson$/i, '')
+    if (!args.some((arg) => arg === '--db' || arg.startsWith('--db='))) {
+      args.push(`--db=${database}`)
+    }
+    args.push(`--collection=${collectionName}`)
     args.push(backupPath)
   } else {
     args.push('--archive=' + backupPath, '--gzip')

@@ -366,7 +366,7 @@ export async function restoreBackup(
   const mysql = getMysqlClientPath(binPath)
   const savedCreds =
     containerName &&
-    !requestedPassword &&
+    requestedPassword === undefined &&
     requestedUser === engineDef.superuser
       ? await loadCredentials(
           containerName,

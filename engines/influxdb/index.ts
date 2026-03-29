@@ -207,6 +207,37 @@ export class InfluxDBEngine extends BaseEngine {
   defaultPort = engineDef.defaultPort
   supportedVersions = SUPPORTED_MAJOR_VERSIONS
 
+  private async getStoredAuthToken(
+    containerName: string,
+    username?: string,
+  ): Promise<string | undefined> {
+    const adminToken = await readAdminToken(containerName).catch(() => null)
+    if (adminToken) {
+      return adminToken.token
+    }
+
+    const lookupUsername = username ?? getDefaultUsername(Engine.InfluxDB)
+    const savedCreds = await loadCredentials(
+      containerName,
+      Engine.InfluxDB,
+      lookupUsername,
+    )
+    return savedCreds?.apiKey
+  }
+
+  private async requestLocal(
+    containerName: string,
+    port: number,
+    method: string,
+    path: string,
+    body?: Record<string, unknown> | string,
+    timeoutMs = 30000,
+    username?: string,
+  ): Promise<{ status: number; data: unknown }> {
+    const token = await this.getStoredAuthToken(containerName, username)
+    return influxdbApiRequest(port, method, path, body, timeoutMs, token)
+  }
+
   // Get platform info for binary operations
   getPlatformInfo(): { platform: Platform; arch: Arch } {
     return platformService.getPlatformInfo()
@@ -902,11 +933,12 @@ export class InfluxDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port } = container
+    const { name, port } = container
 
     // InfluxDB 3.x creates databases implicitly when data is written
     // Verify server is accessible and write a test record to create the database
-    const response = await influxdbApiRequest(
+    const response = await this.requestLocal(
+      name,
       port,
       'POST',
       `/api/v3/write_lp?db=${encodeURIComponent(database)}`,
@@ -932,10 +964,11 @@ export class InfluxDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port } = container
+    const { name, port } = container
 
     // Try to delete tables in the database
-    const tablesResponse = await influxdbApiRequest(
+    const tablesResponse = await this.requestLocal(
+      name,
       port,
       'POST',
       '/api/v3/query_sql',
@@ -958,7 +991,7 @@ export class InfluxDBEngine extends BaseEngine {
             (row.name as string) ||
             (Object.values(row)[0] as string)
           if (tableName) {
-            await influxdbApiRequest(port, 'POST', '/api/v3/query_sql', {
+            await this.requestLocal(name, port, 'POST', '/api/v3/query_sql', {
               db: database,
               q: `DROP TABLE "${tableName}"`,
               format: 'json',
@@ -1139,7 +1172,7 @@ export class InfluxDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: { file?: string; sql?: string; database?: string },
   ): Promise<void> {
-    const { port } = container
+    const { name, port } = container
     const database = options.database || container.database
 
     if (options.file) {
@@ -1147,7 +1180,8 @@ export class InfluxDBEngine extends BaseEngine {
 
       // Ensure the database exists (InfluxDB creates DBs implicitly on write,
       // but SQL queries fail if the DB doesn't exist yet)
-      const createDbResp = await influxdbApiRequest(
+      const createDbResp = await this.requestLocal(
+        name,
         port,
         'POST',
         '/api/v3/configure/database',
@@ -1165,7 +1199,8 @@ export class InfluxDBEngine extends BaseEngine {
           .split('\n')
           .filter((line) => line.trim().length > 0 && !line.startsWith('#'))
           .join('\n')
-        const response = await influxdbApiRequest(
+        const response = await this.requestLocal(
+          name,
           port,
           'POST',
           `/api/v3/write_lp?db=${encodeURIComponent(database)}`,
@@ -1187,7 +1222,8 @@ export class InfluxDBEngine extends BaseEngine {
         .filter((s) => s.length > 0)
 
       for (const sql of statements) {
-        const response = await influxdbApiRequest(
+        const response = await this.requestLocal(
+          name,
           port,
           'POST',
           '/api/v3/query_sql',
@@ -1209,7 +1245,8 @@ export class InfluxDBEngine extends BaseEngine {
 
     if (options.sql) {
       // Ensure database exists for inline SQL too
-      const createDbResp2 = await influxdbApiRequest(
+      const createDbResp2 = await this.requestLocal(
+        name,
         port,
         'POST',
         '/api/v3/configure/database',
@@ -1220,7 +1257,8 @@ export class InfluxDBEngine extends BaseEngine {
           `Failed to create database "${database}": HTTP ${createDbResp2.status} — ${JSON.stringify(createDbResp2.data)}`,
         )
       }
-      const response = await influxdbApiRequest(
+      const response = await this.requestLocal(
+        name,
         port,
         'POST',
         '/api/v3/query_sql',
@@ -1260,15 +1298,12 @@ export class InfluxDBEngine extends BaseEngine {
   ): Promise<QueryResult> {
     const { name, port } = container
     const database = options?.database || container.database
-    const savedCreds =
-      options?.password
-        ? null
-        : await loadCredentials(
-            name,
-            Engine.InfluxDB,
-            getDefaultUsername(Engine.InfluxDB),
-          )
-    const authToken = options?.password || savedCreds?.apiKey
+    const authToken =
+      options?.password ||
+      (await this.getStoredAuthToken(
+        name,
+        options?.username ?? getDefaultUsername(Engine.InfluxDB),
+      ))
     const trimmed = query.trim()
 
     // Check if this is a REST API-style query (starts with HTTP method)
@@ -1356,11 +1391,7 @@ export class InfluxDBEngine extends BaseEngine {
    */
   async listDatabases(container: ContainerConfig): Promise<string[]> {
     const { name, port } = container
-    const savedCreds = await loadCredentials(
-      name,
-      Engine.InfluxDB,
-      getDefaultUsername(Engine.InfluxDB),
-    )
+    const authToken = await this.getStoredAuthToken(name)
 
     try {
       const response = await influxdbApiRequest(
@@ -1369,7 +1400,7 @@ export class InfluxDBEngine extends BaseEngine {
         '/api/v3/configure/database?format=json',
         undefined,
         30000,
-        savedCreds?.apiKey,
+        authToken,
       )
 
       if (response.status === 200 && response.data) {

@@ -711,7 +711,7 @@ export class ValkeyEngine extends BaseEngine {
       // This follows the pattern used by MySQL which works on Windows
       return new Promise((resolve, reject) => {
         const spawnOpts: SpawnOptions = {
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['ignore', 'ignore', 'ignore'],
           detached: true,
           windowsHide: true,
           env: { ...process.env, ...libraryEnv },
@@ -721,25 +721,12 @@ export class ValkeyEngine extends BaseEngine {
         const cygwinConfigPath = toCygwinPath(configPath)
         const proc = spawn(valkeyServer, [cygwinConfigPath], spawnOpts)
         let settled = false
-        let stderrOutput = ''
-        let stdoutOutput = ''
 
         // Handle spawn errors (binary not found, DLL issues, etc.)
         proc.on('error', (err) => {
           if (settled) return
           settled = true
           reject(new Error(`Failed to spawn Valkey server: ${err.message}`))
-        })
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stdoutOutput += str
-          logDebug(`valkey-server stdout: ${str}`)
-        })
-        proc.stderr?.on('data', (data: Buffer) => {
-          const str = data.toString()
-          stderrOutput += str
-          logDebug(`valkey-server stderr: ${str}`)
         })
 
         // Detach the process so it continues running after parent exits
@@ -801,7 +788,7 @@ export class ValkeyEngine extends BaseEngine {
 
             // Check for library loading errors first
             const libError = detectLibraryError(
-              stderrOutput + logContent,
+              logContent,
               'Valkey',
             )
             if (libError) {
@@ -815,8 +802,6 @@ export class ValkeyEngine extends BaseEngine {
               `Config: ${configPath}`,
               `Log file: ${logFile}`,
               `Log content:\n${logContent || '(empty)'}`,
-              stderrOutput ? `Stderr:\n${stderrOutput}` : '',
-              stdoutOutput ? `Stdout:\n${stdoutOutput}` : '',
             ]
               .filter(Boolean)
               .join('\n')
@@ -1136,21 +1121,24 @@ export class ValkeyEngine extends BaseEngine {
 
   // Open valkey-cli interactive shell
   async connect(container: ContainerConfig, database?: string): Promise<void> {
-    const { port, version } = container
+    const { name, port, version } = container
     const db = database || container.database || '0'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const auth = await this.getLocalAuth(name)
+    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+    if (shouldPassValkeyCliUsername(auth.username)) {
+      args.push('--user', auth.username)
+    }
 
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
+      env: buildValkeyCliEnv(libraryEnv, auth.password),
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        valkeyCli,
-        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
-        spawnOptions,
-      )
+      const proc = spawn(valkeyCli, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())

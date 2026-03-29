@@ -3,7 +3,7 @@
  * Manages MySQL database containers using pre-built binaries from hostdb
  */
 
-import { spawn, exec, type SpawnOptions } from 'child_process'
+import { spawn, exec, execFile, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
@@ -62,7 +62,7 @@ import {
 } from '../../types'
 import { parseTSVToQueryResult } from '../../core/query-parser'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 const ENGINE = 'mysql'
 const engineDef = getEngineDefaults(ENGINE)
@@ -73,7 +73,13 @@ type LocalMySqlAuth = {
 }
 
 function buildMysqlEnv(password?: string): NodeJS.ProcessEnv {
-  return password ? { ...process.env, MYSQL_PWD: password } : process.env
+  const env = { ...process.env }
+  if (password !== undefined) {
+    env.MYSQL_PWD = password
+  } else {
+    delete env.MYSQL_PWD
+  }
+  return env
 }
 
 /**
@@ -159,8 +165,9 @@ export class MySQLEngine extends BaseEngine {
     const mysql = await this.getMysqlClientPath()
     const auth = await this.getLocalAdminAuth(containerName)
 
-    await execAsync(
-      `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SELECT 1"`,
+    await execFileAsync(
+      mysql,
+      ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, '-N', '-e', 'SELECT 1'],
       {
         env: buildMysqlEnv(auth.password),
       },
@@ -174,8 +181,9 @@ export class MySQLEngine extends BaseEngine {
     const mysql = await this.getMysqlClientPath()
     const auth = await this.getLocalAdminAuth(containerName)
 
-    await execAsync(
-      `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SHUTDOWN"`,
+    await execFileAsync(
+      mysql,
+      ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, '-N', '-e', 'SHUTDOWN'],
       {
         env: buildMysqlEnv(auth.password),
         timeout: 5000,
@@ -927,13 +935,16 @@ export class MySQLEngine extends BaseEngine {
     const auth = await this.getLocalAdminAuth(name)
 
     try {
-      const cmd = buildMysqlInlineCommand(
-        mysql,
-        port,
+      await execFileAsync(mysql, [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
         auth.user,
+        '-e',
         `CREATE DATABASE IF NOT EXISTS \`${database}\``,
-      )
-      await execAsync(cmd, {
+      ], {
         env: buildMysqlEnv(auth.password),
       })
     } catch (error) {
@@ -955,13 +966,16 @@ export class MySQLEngine extends BaseEngine {
     const auth = await this.getLocalAdminAuth(name)
 
     try {
-      const cmd = buildMysqlInlineCommand(
-        mysql,
-        port,
+      await execFileAsync(mysql, [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
         auth.user,
+        '-e',
         `DROP DATABASE IF EXISTS \`${database}\``,
-      )
-      await execAsync(cmd, {
+      ], {
         env: buildMysqlEnv(auth.password),
       })
     } catch (error) {
@@ -982,12 +996,19 @@ export class MySQLEngine extends BaseEngine {
       const mysql = await this.getMysqlClientPath()
       const auth = await this.getLocalAdminAuth(name)
 
-      const { stdout } = await execAsync(
-        `"${mysql}" -h 127.0.0.1 -P ${port} -u ${auth.user} -N -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'"`,
-        {
-          env: buildMysqlEnv(auth.password),
-        },
-      )
+      const { stdout } = await execFileAsync(mysql, [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        auth.user,
+        '-N',
+        '-e',
+        `SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'`,
+      ], {
+        env: buildMysqlEnv(auth.password),
+      })
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
     } catch {
@@ -1004,27 +1025,6 @@ export class MySQLEngine extends BaseEngine {
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
 
-    if (isWindows()) {
-      const cmd = `"${dumpPath}" -h ${host} -P ${port} -u ${user} --result-file "${outputPath}" ${database}`
-      const execOptions: { env?: Record<string, string | undefined> } = {}
-
-      if (password) {
-        execOptions.env = { ...process.env, MYSQL_PWD: password }
-      }
-      try {
-        logDebug('Executing mysqldump command', { cmd })
-        await execAsync(cmd, execOptions)
-        return {
-          filePath: outputPath,
-          stdout: '',
-          stderr: '',
-          code: 0,
-        }
-      } catch (error) {
-        throw new Error((error as Error).message)
-      }
-    }
-
     const args = [
       '-h',
       host,
@@ -1039,7 +1039,6 @@ export class MySQLEngine extends BaseEngine {
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...getWindowsSpawnOptions(),
       env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
     }
 
@@ -1102,15 +1101,18 @@ export class MySQLEngine extends BaseEngine {
 
     // Get all connection IDs for the target database and kill them
     // We need to do this in two steps since MySQL doesn't support subqueries in KILL
-    const getIdsCmd = buildMysqlInlineCommand(
-      mysql,
-      port,
-      auth.user,
-      `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
-    )
-
     try {
-      const { stdout } = await execAsync(getIdsCmd, {
+      const { stdout } = await execFileAsync(mysql, [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        auth.user,
+        '-N',
+        '-e',
+        `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
+      ], {
         env: buildMysqlEnv(auth.password),
       })
       const lines = stdout
@@ -1124,14 +1126,17 @@ export class MySQLEngine extends BaseEngine {
         .filter((l) => /^\d+$/.test(l))
 
       for (const id of ids) {
-        const killCmd = buildMysqlInlineCommand(
-          mysql,
-          port,
-          auth.user,
-          `KILL CONNECTION ${id}`,
-        )
         try {
-          await execAsync(killCmd, {
+          await execFileAsync(mysql, [
+            '-h',
+            '127.0.0.1',
+            '-P',
+            String(port),
+            '-u',
+            auth.user,
+            '-e',
+            `KILL CONNECTION ${id}`,
+          ], {
             env: buildMysqlEnv(auth.password),
           })
         } catch {
@@ -1153,27 +1158,6 @@ export class MySQLEngine extends BaseEngine {
 
     const mysql = await this.getMysqlClientPath()
     const auth = await this.getLocalAdminAuth(name)
-
-    if (isWindows()) {
-      const cmd = buildWindowsMysqlCommand(
-        mysql,
-        port,
-        auth.user,
-        db,
-        options,
-      )
-      try {
-        const { stdout, stderr } = await execAsync(cmd, {
-          env: buildMysqlEnv(auth.password),
-        })
-        if (stdout) process.stdout.write(stdout)
-        if (stderr) process.stderr.write(stderr)
-        return
-      } catch (error) {
-        const err = error as Error
-        throw new Error(`mysql client failed: ${err.message}`)
-      }
-    }
 
     const args = [
       '-h',

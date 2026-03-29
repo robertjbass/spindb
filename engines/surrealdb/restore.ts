@@ -166,17 +166,21 @@ async function restoreSurqlBackup(
     Engine.SurrealDB,
     getDefaultUsername(Engine.SurrealDB),
   )
-  const auth = savedCreds
-    ? {
+  const savedAuthLevel = savedCreds
+    ? inferSurrealAuthLevel({
         username: savedCreds.username,
-        password: savedCreds.password,
-        authLevel: inferSurrealAuthLevel({
+        database: savedCreds.database,
+        connectionString: savedCreds.connectionString,
+      })
+    : null
+  const auth =
+    savedCreds && savedAuthLevel === 'root'
+      ? {
           username: savedCreds.username,
-          database: savedCreds.database,
-          connectionString: savedCreds.connectionString,
-        }),
-      }
-    : getBootstrapSurrealAuth()
+          password: savedCreds.password,
+          authLevel: savedAuthLevel,
+        }
+      : getBootstrapSurrealAuth()
 
   return new Promise<RestoreResult>((resolve, reject) => {
     const args = addSurrealAuthArgs(

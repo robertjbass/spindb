@@ -352,7 +352,7 @@ export class MongoDBEngine extends BaseEngine {
     if (useDetachedSpawn) {
       // macOS/Windows: spawn detached process
       const spawnOpts: SpawnOptions = {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
       }
       if (isWindows()) {
@@ -360,13 +360,6 @@ export class MongoDBEngine extends BaseEngine {
       }
 
       const proc = spawn(mongod, args, spawnOpts)
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`mongod stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`mongod stderr: ${data.toString()}`)
-      })
 
       proc.unref()
 
@@ -481,7 +474,14 @@ export class MongoDBEngine extends BaseEngine {
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
     const args = savedCreds
-      ? [buildMongoUri(container.port, database, savedCreds)]
+      ? [
+          buildMongoUri(
+            container.port,
+            database,
+            savedCreds,
+            container.bindAddress ?? '127.0.0.1',
+          ),
+        ]
       : ['--host', '127.0.0.1', '--port', String(container.port), database]
 
     if (options?.quiet) {
@@ -1024,13 +1024,23 @@ export class MongoDBEngine extends BaseEngine {
       const uri = buildMongoUri(port, db, {
         username: options.username || 'admin',
         password: options.password,
-        authDatabase: db,
-      })
+        authDatabase: 'admin',
+      }, container.bindAddress ?? '127.0.0.1')
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
       args = savedCreds
-        ? [buildMongoUri(port, db, savedCreds), '--quiet', '--eval', wrappedScript]
+        ? [
+            buildMongoUri(
+              port,
+              db,
+              savedCreds,
+              container.bindAddress ?? '127.0.0.1',
+            ),
+            '--quiet',
+            '--eval',
+            wrappedScript,
+          ]
         : [
             '--host',
             '127.0.0.1',

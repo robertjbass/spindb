@@ -9,7 +9,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
-import { dirname } from 'path'
+import { dirname, join } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
@@ -77,7 +77,7 @@ export async function createBackup(
           username: savedCreds.username,
           password: savedCreds.password,
           authDatabase: savedCreds.database || 'admin',
-        }),
+        }, container.bindAddress ?? '127.0.0.1'),
         '--db',
         database,
       ]
@@ -131,12 +131,35 @@ export async function createBackup(
 
       if (code === 0) {
         // Get backup size
-        stat(outputPath)
-          .then((stats) => {
+        const getBackupSize = async (): Promise<number> => {
+          if (format !== 'bson') {
+            return (await stat(outputPath)).size
+          }
+
+          const { readdir, stat: fileStat } = await import('fs/promises')
+          const sumDirectory = async (dirPath: string): Promise<number> => {
+            const entries = await readdir(dirPath, { withFileTypes: true })
+            let total = 0
+            for (const entry of entries) {
+              const entryPath = join(dirPath, entry.name)
+              if (entry.isDirectory()) {
+                total += await sumDirectory(entryPath)
+              } else if (entry.isFile()) {
+                total += (await fileStat(entryPath)).size
+              }
+            }
+            return total
+          }
+
+          return sumDirectory(outputPath)
+        }
+
+        getBackupSize()
+          .then((size) => {
             resolve({
               path: outputPath,
               format,
-              size: stats.size,
+              size,
             })
           })
           .catch(() => {

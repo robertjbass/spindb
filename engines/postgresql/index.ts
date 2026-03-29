@@ -505,7 +505,7 @@ export class PostgreSQLEngine extends BaseEngine {
 
     // First create the database if it doesn't exist
     if (options.createDatabase !== false) {
-      await this.createDatabase(container, database)
+      await this.createDatabase(container, database, savedCreds)
     }
 
     return restoreBackup(binPath, backupPath, {
@@ -716,6 +716,7 @@ export class PostgreSQLEngine extends BaseEngine {
   async createDatabase(
     container: ContainerConfig,
     database: string,
+    auth?: { username?: string; password?: string } | null,
   ): Promise<void> {
     assertValidDatabaseName(database)
     const { port } = container
@@ -728,7 +729,9 @@ export class PostgreSQLEngine extends BaseEngine {
       : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
 
     try {
-      await execAsync(cmd)
+      await execAsync(cmd, {
+        env: auth?.password ? { ...process.env, PGPASSWORD: auth.password } : process.env,
+      })
     } catch (error) {
       const err = error as Error
       // Ignore "database already exists" error

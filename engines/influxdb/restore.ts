@@ -5,10 +5,38 @@
 
 import { open, readFile as readFileAsync } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
+import { join } from 'path'
+import { paths } from '../../config/paths'
 import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
+
+const ADMIN_TOKEN_FILE = 'admin-token.json'
+
+async function loadInfluxAuthToken(
+  containerName: string,
+  username = getDefaultUsername(Engine.InfluxDB),
+): Promise<string | undefined> {
+  const adminTokenPath = join(
+    paths.getContainerPath(containerName, { engine: Engine.InfluxDB }),
+    ADMIN_TOKEN_FILE,
+  )
+
+  try {
+    const parsed = JSON.parse(await readFileAsync(adminTokenPath, 'utf-8')) as {
+      token?: unknown
+    }
+    if (typeof parsed.token === 'string' && parsed.token.length > 0) {
+      return parsed.token
+    }
+  } catch {
+    // Fall back to saved credentials
+  }
+
+  const savedCreds = await loadCredentials(containerName, Engine.InfluxDB, username)
+  return savedCreds?.apiKey
+}
 
 /**
  * Detect backup format from file
@@ -251,12 +279,7 @@ async function restoreSqlBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { containerName, port, database } = options
-  const savedCreds = await loadCredentials(
-    containerName,
-    Engine.InfluxDB,
-    getDefaultUsername(Engine.InfluxDB),
-  )
-  const token = savedCreds?.apiKey
+  const token = await loadInfluxAuthToken(containerName)
 
   logDebug(
     `Restoring SQL backup to InfluxDB on port ${port}, database ${database}`,

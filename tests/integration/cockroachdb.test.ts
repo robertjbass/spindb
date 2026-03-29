@@ -650,8 +650,8 @@ describe('CockroachDB Integration Tests', () => {
   })
 
   it('should backup and restore with password-authenticated secure local mode', async () => {
-    const sourceName = generateTestName('cockroachdb-auth-source')
-    const targetName = generateTestName('cockroachdb-auth-target')
+    const sourceName = generateTestName('cockroachdb-auth-source-test')
+    const targetName = generateTestName('cockroachdb-auth-target-test')
     const reservedPorts = await findConsecutiveFreePorts(
       4,
       TEST_PORTS.cockroachdb.base + 20,

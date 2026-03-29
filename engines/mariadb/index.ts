@@ -459,17 +459,10 @@ export class MariaDBEngine extends BaseEngine {
 
     if (isWindows()) {
       proc = spawn(mysqld, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
         windowsHide: true,
         env: { ...process.env, ...libraryEnv },
-      })
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        logDebug(`mariadbd stdout: ${data.toString()}`)
-      })
-      proc.stderr?.on('data', (data: Buffer) => {
-        logDebug(`mariadbd stderr: ${data.toString()}`)
       })
 
       proc.unref()

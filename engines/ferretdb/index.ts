@@ -1270,7 +1270,14 @@ export class FerretDBEngine extends BaseEngine {
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
     const args = savedCreds
-      ? [buildMongoUri(container.port, database, savedCreds)]
+      ? [
+          buildMongoUri(
+            container.port,
+            database,
+            savedCreds,
+            container.bindAddress ?? '127.0.0.1',
+          ),
+        ]
       : ['--host', '127.0.0.1', '--port', String(container.port), database]
 
     if (options?.quiet) {
@@ -1683,7 +1690,17 @@ export class FerretDBEngine extends BaseEngine {
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
       args = savedCreds
-        ? [buildMongoUri(port, db, savedCreds), '--quiet', '--eval', script]
+        ? [
+            buildMongoUri(
+              port,
+              db,
+              savedCreds,
+              container.bindAddress ?? '127.0.0.1',
+            ),
+            '--quiet',
+            '--eval',
+            script,
+          ]
         : [
             '--host',
             '127.0.0.1',

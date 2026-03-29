@@ -469,8 +469,9 @@ export class MeilisearchEngine extends BaseEngine {
     }
 
     const masterKey = await readMasterKey(name)
+    const processEnv = { ...process.env }
     if (masterKey) {
-      args.push('--master-key', masterKey)
+      processEnv.MEILI_MASTER_KEY = masterKey
       logDebug(`Using persisted Meilisearch master key for ${name}`)
     }
 
@@ -507,6 +508,7 @@ export class MeilisearchEngine extends BaseEngine {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
           windowsHide: true,
+          env: processEnv,
         }
 
         const proc = spawn(meilisearchServer, args, spawnOpts)
@@ -618,6 +620,7 @@ export class MeilisearchEngine extends BaseEngine {
       cwd: containerDir,
       stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
+      env: processEnv,
     })
     proc.unref()
 

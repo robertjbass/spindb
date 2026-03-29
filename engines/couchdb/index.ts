@@ -114,8 +114,8 @@ function patchCouchDBConfig(
   options: {
     port: number
     bindAddress?: string
-    adminUsername: string
-    adminPassword: string
+    adminUsername?: string
+    adminPassword?: string
   },
 ): string {
   let config = existingConfig
@@ -126,24 +126,26 @@ function patchCouchDBConfig(
       `bind_address = ${options.bindAddress}`,
     )
   }
-  const managedAdminLine = `${options.adminUsername} = ${options.adminPassword}`
-  const adminsSection = `[admins]\n${managedAdminLine}`
-  const adminsSectionPattern = /\[admins\][\s\S]*?(?=\n\[|$)/m
-  const escapedUsername = options.adminUsername.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    '\\$&',
-  )
-  const managedAdminPattern = new RegExp(`^${escapedUsername}\\s*=.*$`, 'm')
+  if (options.adminUsername && options.adminPassword) {
+    const managedAdminLine = `${options.adminUsername} = ${options.adminPassword}`
+    const adminsSection = `[admins]\n${managedAdminLine}`
+    const adminsSectionPattern = /\[admins\][\s\S]*?(?=\n\[|$)/m
+    const escapedUsername = options.adminUsername.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&',
+    )
+    const managedAdminPattern = new RegExp(`^${escapedUsername}\\s*=.*$`, 'm')
 
-  if (adminsSectionPattern.test(config)) {
-    config = config.replace(adminsSectionPattern, (section) => {
-      if (managedAdminPattern.test(section)) {
-        return section.replace(managedAdminPattern, managedAdminLine)
-      }
-      return `${section.trimEnd()}\n${managedAdminLine}`
-    })
-  } else {
-    config = `${config.trimEnd()}\n\n${adminsSection}\n`
+    if (adminsSectionPattern.test(config)) {
+      config = config.replace(adminsSectionPattern, (section) => {
+        if (managedAdminPattern.test(section)) {
+          return section.replace(managedAdminPattern, managedAdminLine)
+        }
+        return `${section.trimEnd()}\n${managedAdminLine}`
+      })
+    } else {
+      config = `${config.trimEnd()}\n\n${adminsSection}\n`
+    }
   }
   return config
 }
@@ -500,17 +502,30 @@ export class CouchDBEngine extends BaseEngine {
 
   private async getLocalAdminAuth(
     containerName: string,
-  ): Promise<LocalCouchDBAuth> {
+  ): Promise<LocalCouchDBAuth | null> {
     const savedCreds = await loadCredentials(
       containerName,
       Engine.CouchDB,
       getDefaultUsername(Engine.CouchDB),
     )
 
-    return {
-      username: savedCreds?.username || DEFAULT_ADMIN_USER,
-      password: savedCreds?.password || DEFAULT_ADMIN_PASSWORD,
-    }
+    return savedCreds
+      ? {
+          username: savedCreds.username,
+          password: savedCreds.password,
+        }
+      : null
+  }
+
+  private async getRuntimeAdminAuth(
+    containerName: string,
+  ): Promise<LocalCouchDBAuth> {
+    return (
+      (await this.getLocalAdminAuth(containerName)) ?? {
+        username: DEFAULT_ADMIN_USER,
+        password: DEFAULT_ADMIN_PASSWORD,
+      }
+    )
   }
 
   private async requestLocal(
@@ -527,7 +542,9 @@ export class CouchDBEngine extends BaseEngine {
       path,
       body,
       timeoutMs,
-      auth === null ? null : auth ?? (await this.getLocalAdminAuth(container.name)),
+      auth === null
+        ? null
+        : auth ?? (await this.getRuntimeAdminAuth(container.name)),
     )
   }
 
@@ -539,7 +556,12 @@ export class CouchDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
-    const localAuth = await this.getLocalAdminAuth(name)
+    const savedAdminAuth = await this.getLocalAdminAuth(name)
+    const startupAdminAuth =
+      savedAdminAuth ?? {
+        username: DEFAULT_ADMIN_USER,
+        password: DEFAULT_ADMIN_PASSWORD,
+      }
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
@@ -610,8 +632,8 @@ export class CouchDBEngine extends BaseEngine {
       const patchedConfig = patchCouchDBConfig(existingConfig, {
         port,
         bindAddress,
-        adminUsername: localAuth.username,
-        adminPassword: localAuth.password,
+        adminUsername: savedAdminAuth?.username,
+        adminPassword: savedAdminAuth?.password,
       })
       await writeFile(configPath, patchedConfig)
     } else {
@@ -620,8 +642,8 @@ export class CouchDBEngine extends BaseEngine {
         dataDir,
         logDir,
         bindAddress,
-        adminUsername: localAuth.username,
-        adminPassword: localAuth.password,
+        adminUsername: savedAdminAuth?.username,
+        adminPassword: savedAdminAuth?.password,
       })
       await writeFile(configPath, configContent)
     }
@@ -774,7 +796,7 @@ export class CouchDBEngine extends BaseEngine {
 
           const ready =
             (await this.waitForReady(port)) &&
-            (await this.waitForAdminReady(port, localAuth))
+            (await this.waitForAdminReady(port, startupAdminAuth))
           if (settled) return
 
           if (ready) {
@@ -828,7 +850,7 @@ export class CouchDBEngine extends BaseEngine {
 
     const ready =
       (await this.waitForReady(port)) &&
-      (await this.waitForAdminReady(port, localAuth))
+      (await this.waitForAdminReady(port, startupAdminAuth))
 
     if (ready) {
       return {
@@ -1404,7 +1426,7 @@ export class CouchDBEngine extends BaseEngine {
           username: options.username || DEFAULT_ADMIN_USER,
           password: options.password,
         }
-      : await this.getLocalAdminAuth(container.name)
+      : await this.getRuntimeAdminAuth(container.name)
 
     const response = await couchdbApiRequest(
       port,
