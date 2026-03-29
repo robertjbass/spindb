@@ -37,6 +37,38 @@ function getCredentialFilePath(
   return join(getCredentialsDir(containerName, engine), `.env.${username}`)
 }
 
+function isRedisFamilyDefaultAlias(engine: Engine, username: string): boolean {
+  return (
+    (engine === Engine.Redis || engine === Engine.Valkey) &&
+    username === 'default'
+  )
+}
+
+function getCredentialStorageUsername(
+  engine: Engine,
+  username: string,
+): string {
+  if (isRedisFamilyDefaultAlias(engine, username)) {
+    return getDefaultUsername(engine)
+  }
+  return username
+}
+
+function getCredentialLookupUsernames(
+  engine: Engine,
+  username: string,
+): string[] {
+  if (engine !== Engine.Redis && engine !== Engine.Valkey) {
+    return [username]
+  }
+
+  const alias = getDefaultUsername(engine)
+  if (username === alias || username === 'default') {
+    return [alias, 'default']
+  }
+  return [username]
+}
+
 /**
  * Format credentials as .env file content.
  */
@@ -174,7 +206,7 @@ export async function saveCredentials(
   const filePath = getCredentialFilePath(
     containerName,
     engine,
-    credentials.username,
+    getCredentialStorageUsername(engine, credentials.username),
   )
   await writeFile(filePath, formatCredentials(credentials), {
     encoding: 'utf-8',
@@ -198,16 +230,19 @@ export async function loadCredentials(
   engine: Engine,
   username: string,
 ): Promise<UserCredentials | null> {
-  const filePath = getCredentialFilePath(containerName, engine, username)
-  try {
-    const content = await readFile(filePath, 'utf-8')
-    return parseCredentialFile(content, containerName, engine)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null
+  for (const candidate of getCredentialLookupUsernames(engine, username)) {
+    const filePath = getCredentialFilePath(containerName, engine, candidate)
+    try {
+      const content = await readFile(filePath, 'utf-8')
+      return parseCredentialFile(content, containerName, engine)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue
+      }
+      throw error
     }
-    throw error
   }
+  return null
 }
 
 /**
@@ -238,7 +273,9 @@ export function credentialsExist(
   engine: Engine,
   username: string,
 ): boolean {
-  return existsSync(getCredentialFilePath(containerName, engine, username))
+  return getCredentialLookupUsernames(engine, username).some((candidate) =>
+    existsSync(getCredentialFilePath(containerName, engine, candidate)),
+  )
 }
 
 /**

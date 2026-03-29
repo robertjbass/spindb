@@ -27,18 +27,9 @@ import {
   getDefaultUsername,
   loadCredentials,
 } from '../../core/credential-manager'
+import { buildMariaDbEnv } from './env'
 
 const engineDef = getEngineDefaults('mariadb')
-
-function buildMariaDbEnv(password?: string): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  if (password) {
-    env.MYSQL_PWD = password
-  } else {
-    delete env.MYSQL_PWD
-  }
-  return env
-}
 
 // Get the path to mariadb-dump or mysqldump from the container's binary path
 async function getDumpPath(container: ContainerConfig): Promise<string> {

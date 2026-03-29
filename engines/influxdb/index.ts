@@ -15,6 +15,7 @@ import {
 import {
   getDefaultUsername,
   loadCredentials,
+  saveCredentials,
 } from '../../core/credential-manager'
 import { processManager } from '../../core/process-manager'
 import { portManager } from '../../core/port-manager'
@@ -198,6 +199,21 @@ async function readAdminToken(
     throw new Error(
       `Failed to read InfluxDB admin token file ${tokenPath}: ${message}`,
     )
+  }
+}
+
+function buildInfluxTokenCredentials(
+  container: ContainerConfig,
+  username: string,
+  token: string,
+): UserCredentials {
+  return {
+    username,
+    password: '',
+    connectionString: `http://127.0.0.1:${container.port}`,
+    engine: container.engine,
+    container: container.name,
+    apiKey: token,
   }
 }
 
@@ -1419,7 +1435,10 @@ export class InfluxDBEngine extends BaseEngine {
         }
       }
       return [container.database]
-    } catch {
+    } catch (error) {
+      logDebug(
+        `Failed to list InfluxDB databases for container "${name}" on port ${port}: ${error instanceof Error ? error.message : String(error)}`,
+      )
       return [container.database]
     }
   }
@@ -1428,20 +1447,19 @@ export class InfluxDBEngine extends BaseEngine {
     container: ContainerConfig,
     options: CreateUserOptions,
   ): Promise<UserCredentials> {
-    const { name, port, version } = container
+    const { name, version } = container
     const { username } = options
     assertValidUsername(username)
 
     const existingToken = await readAdminToken(name)
     if (existingToken) {
-      return {
+      const credentials = buildInfluxTokenCredentials(
+        container,
         username,
-        password: '',
-        connectionString: `http://127.0.0.1:${port}`,
-        engine: container.engine,
-        container: name,
-        apiKey: existingToken.token,
-      }
+        existingToken.token,
+      )
+      await saveCredentials(name, Engine.InfluxDB, credentials)
+      return credentials
     }
 
     const tokenPath = getAdminTokenPath(name)
@@ -1503,14 +1521,13 @@ export class InfluxDBEngine extends BaseEngine {
       await this.start(container)
     }
 
-    return {
+    const credentials = buildInfluxTokenCredentials(
+      container,
       username,
-      password: '',
-      connectionString: `http://127.0.0.1:${port}`,
-      engine: container.engine,
-      container: name,
-      apiKey: storedToken.token,
-    }
+      storedToken.token,
+    )
+    await saveCredentials(name, Engine.InfluxDB, credentials)
+    return credentials
   }
 }
 

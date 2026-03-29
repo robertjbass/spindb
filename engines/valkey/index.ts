@@ -1,7 +1,7 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
@@ -10,6 +10,7 @@ import { configManager } from '../../core/config-manager'
 import {
   getDefaultUsername,
   loadCredentials,
+  saveCredentials,
 } from '../../core/credential-manager'
 import {
   logDebug,
@@ -80,6 +81,20 @@ function buildValkeyCliEnv(
     delete env.REDISCLI_AUTH
   }
   return env
+}
+
+function getValkeyCliBaseDir(valkeyCli: string): string {
+  return dirname(dirname(valkeyCli))
+}
+
+function getResolvedValkeyCliLibraryEnv(
+  valkeyCli: string,
+): Record<string, string> | undefined {
+  return getLibraryEnv(getValkeyCliBaseDir(valkeyCli))
+}
+
+function getLocalCliHost(container: ContainerConfig): string {
+  return container.bindAddress ?? '127.0.0.1'
 }
 
 async function runValkeyCliCommand(
@@ -751,7 +766,12 @@ export class ValkeyEngine extends BaseEngine {
           }
 
           // Wait for Valkey to be ready
-          const ready = await this.waitForReady(name, port, version)
+          const ready = await this.waitForReady(
+            name,
+            port,
+            version,
+            bindAddress,
+          )
           if (settled) return
 
           if (ready) {
@@ -848,7 +868,12 @@ export class ValkeyEngine extends BaseEngine {
           }
 
           // Wait for Valkey to be ready
-          const ready = await this.waitForReady(name, port, version)
+          const ready = await this.waitForReady(
+            name,
+            port,
+            version,
+            bindAddress,
+          )
           if (ready) {
             resolve({
               port,
@@ -904,6 +929,7 @@ export class ValkeyEngine extends BaseEngine {
     containerName: string,
     port: number,
     version: string,
+    bindAddress = '127.0.0.1',
     timeoutMs = 60000,
   ): Promise<boolean> {
     const startTime = Date.now()
@@ -920,12 +946,12 @@ export class ValkeyEngine extends BaseEngine {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       return true
     }
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
 
     while (Date.now() - startTime < timeoutMs) {
       try {
         const auth = await this.getLocalAuth(containerName)
-        const args = ['-h', '127.0.0.1', '-p', String(port)]
+        const args = ['-h', bindAddress, '-p', String(port)]
         if (shouldPassValkeyCliUsername(auth.username)) {
           args.push('--user', auth.username)
         }
@@ -961,11 +987,12 @@ export class ValkeyEngine extends BaseEngine {
 
     // Try graceful shutdown via valkey-cli
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const host = getLocalCliHost(container)
     if (valkeyCli) {
       try {
         const auth = await this.getLocalAuth(name)
-        const args = ['-h', '127.0.0.1', '-p', String(port)]
+        const args = ['-h', host, '-p', String(port)]
         if (shouldPassValkeyCliUsername(auth.username)) {
           args.push('--user', auth.username)
         }
@@ -1032,11 +1059,12 @@ export class ValkeyEngine extends BaseEngine {
 
     // Try pinging with valkey-cli
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const host = getLocalCliHost(container)
     if (valkeyCli) {
       try {
         const auth = await this.getLocalAuth(name)
-        const args = ['-h', '127.0.0.1', '-p', String(port)]
+        const args = ['-h', host, '-p', String(port)]
         if (shouldPassValkeyCliUsername(auth.username)) {
           args.push('--user', auth.username)
         }
@@ -1125,9 +1153,10 @@ export class ValkeyEngine extends BaseEngine {
     const db = database || container.database || '0'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
     const auth = await this.getLocalAuth(name)
-    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+    const host = getLocalCliHost(container)
+    const args = ['-h', host, '-p', String(port), '-n', db]
     if (shouldPassValkeyCliUsername(auth.username)) {
       args.push('--user', auth.username)
     }
@@ -1170,6 +1199,7 @@ export class ValkeyEngine extends BaseEngine {
   ): Promise<void> {
     const { port } = container
     const db = database || container.database || '0'
+    const host = getLocalCliHost(container)
 
     const iredis = await this.getIredisPath()
     if (!iredis) {
@@ -1187,7 +1217,7 @@ export class ValkeyEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(
         iredis,
-        ['-h', '127.0.0.1', '-p', String(port), '-n', db],
+        ['-h', host, '-p', String(port), '-n', db],
         spawnOptions,
       )
 
@@ -1234,11 +1264,12 @@ export class ValkeyEngine extends BaseEngine {
     }
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
     const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
 
     // SELECT the database and FLUSHDB
-    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', database]
+    const args = ['-h', host, '-p', String(port), '-n', database]
     if (shouldPassValkeyCliUsername(auth.username)) {
       args.push('--user', auth.username)
     }
@@ -1273,10 +1304,11 @@ export class ValkeyEngine extends BaseEngine {
 
     try {
       const valkeyCli = await this.getValkeyCliPathForVersion(version)
-      const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+      const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
       const auth = await this.getLocalAuth(name)
+      const host = getLocalCliHost(container)
       // INFO memory returns server-wide stats (database selection has no effect)
-      const args = ['-h', '127.0.0.1', '-p', String(port)]
+      const args = ['-h', host, '-p', String(port)]
       if (shouldPassValkeyCliUsername(auth.username)) {
         args.push('--user', auth.username)
       }
@@ -1610,9 +1642,10 @@ export class ValkeyEngine extends BaseEngine {
     const db = options.database || container.database || '0'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
     const auth = await this.getLocalAuth(name)
-    const args = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+    const host = getLocalCliHost(container)
+    const args = ['-h', host, '-p', String(port), '-n', db]
     if (shouldPassValkeyCliUsername(auth.username)) {
       args.push('--user', auth.username)
     }
@@ -1691,8 +1724,7 @@ export class ValkeyEngine extends BaseEngine {
     const host = options?.host ?? '127.0.0.1'
 
     const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const binBaseDir = this.getBinaryPath(version)
-    const libraryEnv = getLibraryEnv(binBaseDir)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
     const localAuth =
       !options?.username &&
       !options?.password &&
@@ -1773,8 +1805,9 @@ export class ValkeyEngine extends BaseEngine {
     const { name, port, version } = container
     const db = options.database ?? container.database ?? '0'
     const valkeyCli = await this.getValkeyCliPath(version)
-    const libraryEnv = getLibraryEnv(this.getBinaryPath(version))
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
     const auth = await this.getLocalAuth(name)
+    const host = getLocalCliHost(container)
 
     // Reject passwords with characters that break ACL SETUSER syntax:
     // '>' sets password, '#' sets hash, '<' removes password — all are ACL delimiters.
@@ -1787,7 +1820,7 @@ export class ValkeyEngine extends BaseEngine {
 
     // ACL SETUSER is idempotent - sets user with full access
     // Send ACL command via stdin to avoid leaking password in process argv
-    const cliArgs = ['-h', '127.0.0.1', '-p', String(port), '-n', db]
+    const cliArgs = ['-h', host, '-p', String(port), '-n', db]
     if (shouldPassValkeyCliUsername(auth.username)) {
       cliArgs.push('--user', auth.username)
     }
@@ -1815,9 +1848,9 @@ export class ValkeyEngine extends BaseEngine {
     logDebug(`Created Valkey user: ${username}`)
 
     // Valkey uses redis:// scheme for compatibility
-    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@127.0.0.1:${port}/${db}`
+    const connectionString = `redis://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${db}`
 
-    return {
+    const credentials: UserCredentials = {
       username,
       password,
       connectionString,
@@ -1825,6 +1858,8 @@ export class ValkeyEngine extends BaseEngine {
       container: container.name,
       database: db,
     }
+    await saveCredentials(name, Engine.Valkey, credentials)
+    return credentials
   }
 }
 

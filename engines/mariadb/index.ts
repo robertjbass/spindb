@@ -37,6 +37,7 @@ import {
   parseConnectionString,
 } from './restore'
 import { createBackup } from './backup'
+import { buildMariaDbEnv } from './env'
 import {
   Engine,
   Platform,
@@ -63,16 +64,6 @@ const engineDef = getEngineDefaults(ENGINE)
 type LocalMariaDbAuth = {
   user: string
   password?: string
-}
-
-function buildMariaDbEnv(password?: string): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  if (password) {
-    env.MYSQL_PWD = password
-  } else {
-    delete env.MYSQL_PWD
-  }
-  return env
 }
 
 async function runMariaDbBinary(
