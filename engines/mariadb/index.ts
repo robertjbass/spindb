@@ -13,7 +13,6 @@ import { getEngineDefaults } from '../../config/defaults'
 import {
   platformService,
   isWindows,
-  getWindowsSpawnOptions,
 } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
@@ -67,7 +66,13 @@ type LocalMariaDbAuth = {
 }
 
 function buildMariaDbEnv(password?: string): NodeJS.ProcessEnv {
-  return password ? { ...process.env, MYSQL_PWD: password } : process.env
+  const env = { ...process.env }
+  if (password) {
+    env.MYSQL_PWD = password
+  } else {
+    delete env.MYSQL_PWD
+  }
+  return env
 }
 
 async function runMariaDbBinary(
@@ -82,7 +87,6 @@ async function runMariaDbBinary(
     const proc = spawn(binaryPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: buildMariaDbEnv(options.password),
-      ...getWindowsSpawnOptions(),
     })
 
     let stdout = ''
@@ -854,7 +858,6 @@ export class MariaDBEngine extends BaseEngine {
     const spawnOptions: SpawnOptions = {
       stdio: 'inherit',
       env: buildMariaDbEnv(auth.password),
-      ...getWindowsSpawnOptions(),
     }
 
     return new Promise((resolve, reject) => {
@@ -996,8 +999,7 @@ export class MariaDBEngine extends BaseEngine {
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...getWindowsSpawnOptions(),
-      env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
+      env: buildMariaDbEnv(password),
     }
 
     return new Promise((resolve, reject) => {
@@ -1137,7 +1139,6 @@ export class MariaDBEngine extends BaseEngine {
       const spawnOptions: SpawnOptions = {
         stdio: 'inherit',
         env: buildMariaDbEnv(auth.password),
-        ...getWindowsSpawnOptions(),
       }
 
       return new Promise((resolve, reject) => {
@@ -1156,7 +1157,6 @@ export class MariaDBEngine extends BaseEngine {
       const spawnOptions: SpawnOptions = {
         stdio: ['pipe', 'inherit', 'inherit'],
         env: buildMariaDbEnv(auth.password),
-        ...getWindowsSpawnOptions(),
       }
 
       return new Promise((resolve, reject) => {

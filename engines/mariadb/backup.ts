@@ -11,8 +11,6 @@ import { join } from 'path'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import {
-  getWindowsSpawnOptions,
-  isWindows,
   platformService,
 } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
@@ -31,6 +29,16 @@ import {
 } from '../../core/credential-manager'
 
 const engineDef = getEngineDefaults('mariadb')
+
+function buildMariaDbEnv(password?: string): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (password) {
+    env.MYSQL_PWD = password
+  } else {
+    delete env.MYSQL_PWD
+  }
+  return env
+}
 
 // Get the path to mariadb-dump or mysqldump from the container's binary path
 async function getDumpPath(container: ContainerConfig): Promise<string> {
@@ -136,14 +144,10 @@ async function createSqlBackup(
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: auth.password
-        ? { ...process.env, MYSQL_PWD: auth.password }
-        : process.env,
-      ...getWindowsSpawnOptions(),
+      env: buildMariaDbEnv(auth.password),
     }
 
-    const command = isWindows() ? `"${dumpPath}"` : dumpPath
-    const proc = spawn(command, args, spawnOptions)
+    const proc = spawn(dumpPath, args, spawnOptions)
 
     let stderr = ''
 
@@ -199,14 +203,10 @@ async function createCompressedBackup(
 
   const spawnOptions: SpawnOptions = {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: auth.password
-      ? { ...process.env, MYSQL_PWD: auth.password }
-      : process.env,
-    ...getWindowsSpawnOptions(),
+    env: buildMariaDbEnv(auth.password),
   }
 
-  const command = isWindows() ? `"${dumpPath}"` : dumpPath
-  const proc = spawn(command, args, spawnOptions)
+  const proc = spawn(dumpPath, args, spawnOptions)
 
   const gzip = createGzip()
   const output = createWriteStream(outputPath)

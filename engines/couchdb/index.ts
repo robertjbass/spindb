@@ -772,7 +772,9 @@ export class CouchDBEngine extends BaseEngine {
             // Non-fatal
           }
 
-          const ready = await this.waitForReady(port)
+          const ready =
+            (await this.waitForReady(port)) &&
+            (await this.waitForAdminReady(port, localAuth))
           if (settled) return
 
           if (ready) {
@@ -824,7 +826,9 @@ export class CouchDBEngine extends BaseEngine {
       // Non-fatal
     }
 
-    const ready = await this.waitForReady(port)
+    const ready =
+      (await this.waitForReady(port)) &&
+      (await this.waitForAdminReady(port, localAuth))
 
     if (ready) {
       return {
@@ -870,6 +874,38 @@ export class CouchDBEngine extends BaseEngine {
     }
 
     logDebug(`CouchDB did not become ready within ${timeoutMs}ms`)
+    return false
+  }
+
+  private async waitForAdminReady(
+    port: number,
+    auth: LocalCouchDBAuth,
+    timeoutMs = 30000,
+  ): Promise<boolean> {
+    const startTime = Date.now()
+    const checkInterval = 500
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const response = await couchdbApiRequest(
+          port,
+          'GET',
+          '/_all_dbs',
+          undefined,
+          undefined,
+          auth,
+        )
+        if (response.status === 200) {
+          logDebug(`CouchDB admin auth ready on port ${port}`)
+          return true
+        }
+      } catch {
+        // Admin auth not ready yet, wait and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, checkInterval))
+    }
+
+    logDebug(`CouchDB admin auth did not become ready within ${timeoutMs}ms`)
     return false
   }
 

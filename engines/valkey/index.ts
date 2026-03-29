@@ -73,9 +73,13 @@ function buildValkeyCliEnv(
   libraryEnv: Record<string, string | undefined> = {},
   password?: string,
 ): Record<string, string | undefined> {
-  return password
-    ? { ...process.env, ...libraryEnv, REDISCLI_AUTH: password }
-    : { ...process.env, ...libraryEnv }
+  const env = { ...process.env, ...libraryEnv }
+  if (password) {
+    env.REDISCLI_AUTH = password
+  } else {
+    delete env.REDISCLI_AUTH
+  }
+  return env
 }
 
 async function runValkeyCliCommand(

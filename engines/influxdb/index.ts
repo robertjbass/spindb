@@ -550,7 +550,9 @@ export class InfluxDBEngine extends BaseEngine {
             // Non-fatal
           }
 
-          const ready = await this.waitForReady(port)
+          const ready =
+            (await this.waitForReady(port)) &&
+            (!adminToken || (await this.waitForAuthReady(port, adminToken.token)))
           if (settled) return
 
           if (ready) {
@@ -608,7 +610,9 @@ export class InfluxDBEngine extends BaseEngine {
     }
 
     // Wait for InfluxDB to be ready
-    const ready = await this.waitForReady(port)
+    const ready =
+      (await this.waitForReady(port)) &&
+      (!adminToken || (await this.waitForAuthReady(port, adminToken.token)))
 
     if (ready) {
       return {
@@ -677,6 +681,38 @@ export class InfluxDBEngine extends BaseEngine {
     }
 
     logDebug(`InfluxDB did not become ready within ${timeoutMs}ms`)
+    return false
+  }
+
+  private async waitForAuthReady(
+    port: number,
+    apiKey: string,
+    timeoutMs = 30000,
+  ): Promise<boolean> {
+    const startTime = Date.now()
+    const checkInterval = 500
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const response = await influxdbApiRequest(
+          port,
+          'GET',
+          '/api/v3/configure/database?format=json',
+          undefined,
+          30000,
+          apiKey,
+        )
+        if (response.status === 200) {
+          logDebug(`InfluxDB auth ready on port ${port}`)
+          return true
+        }
+      } catch {
+        // Auth not ready yet, wait and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, checkInterval))
+    }
+
+    logDebug(`InfluxDB auth did not become ready within ${timeoutMs}ms`)
     return false
   }
 

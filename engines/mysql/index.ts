@@ -706,7 +706,7 @@ export class MySQLEngine extends BaseEngine {
     containerName: string,
     port: number,
     pid?: number,
-    timeoutMs = 10000,
+    timeoutMs = 30000,
   ): Promise<boolean> {
     try {
       logDebug('Attempting authenticated MySQL shutdown')
@@ -747,7 +747,7 @@ export class MySQLEngine extends BaseEngine {
       return false
     }
 
-    return false
+    return true
   }
 
   private async forceKillWithEscalation(
