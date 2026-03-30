@@ -965,6 +965,7 @@ export class MongoDBEngine extends BaseEngine {
   ): Promise<QueryResult> {
     const { port } = container
     const db = options?.database || container.database || 'test'
+    const normalizedHost = normalizeMongoHost(container.bindAddress)
 
     const mongosh = await this.getMongoshPath()
 
@@ -1026,7 +1027,7 @@ export class MongoDBEngine extends BaseEngine {
         username: options.username || 'admin',
         password: options.password,
         authDatabase: 'admin',
-      }, container.bindAddress ?? '127.0.0.1')
+      }, normalizedHost)
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
@@ -1036,7 +1037,7 @@ export class MongoDBEngine extends BaseEngine {
               port,
               db,
               savedCreds,
-              container.bindAddress ?? '127.0.0.1',
+              normalizedHost,
             ),
             '--quiet',
             '--eval',
@@ -1044,7 +1045,7 @@ export class MongoDBEngine extends BaseEngine {
           ]
         : [
             '--host',
-            '127.0.0.1',
+            normalizedHost,
             '--port',
             String(port),
             db,

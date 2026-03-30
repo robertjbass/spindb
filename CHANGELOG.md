@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MongoDB local host normalization** — `listDatabases` now normalizes `0.0.0.0` bind addresses to `127.0.0.1`, consistent with the FerretDB fix in 0.47.1.
 
+## [0.47.3] - 2026-04-01
+
+### Fixed
+
+- **MongoDB executeQuery host handling** — All local `executeQuery` flows now normalize the bind address before calling `buildMongoUri`, preventing `mongosh` from seeing `0.0.0.0` when credentials are enforced and ensuring the stored `.env.spindb` credentials match the requested host.
+
 ## [0.47.1] - 2026-03-29
 
 ### Fixed
