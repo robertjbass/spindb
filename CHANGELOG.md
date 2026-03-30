@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-03-30
+
+### Fixed
+
+- **MongoDB local host normalization** — `listDatabases` now normalizes `0.0.0.0` bind addresses to `127.0.0.1`, consistent with the FerretDB fix in 0.47.1.
+
 ## [0.47.1] - 2026-03-29
 
 ### Fixed
