@@ -31,7 +31,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import { buildMongoUri, type MongoWireAuth } from '../mongo-uri'
+import { buildMongoUri, normalizeMongoHost, type MongoWireAuth } from '../mongo-uri'
 import {
   Engine,
   Platform,
@@ -473,16 +473,17 @@ export class MongoDBEngine extends BaseEngine {
     options?: { quiet?: boolean },
   ): Promise<string[]> {
     const savedCreds = await this.getLocalAuth(container.name)
+    const host = normalizeMongoHost(container.bindAddress)
     const args = savedCreds
       ? [
           buildMongoUri(
             container.port,
             database,
             savedCreds,
-            container.bindAddress ?? '127.0.0.1',
+            host,
           ),
         ]
-      : ['--host', '127.0.0.1', '--port', String(container.port), database]
+      : ['--host', host, '--port', String(container.port), database]
 
     if (options?.quiet) {
       args.push('--quiet')
