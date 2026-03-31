@@ -126,7 +126,7 @@ export class DuckDBEngine extends BaseEngine {
 
   async initDataDir(
     containerName: string,
-    _version: string,
+    version: string,
     options: Record<string, unknown> = {},
   ): Promise<string> {
     // Determine file path - default to container directory (not CWD)
@@ -156,7 +156,7 @@ export class DuckDBEngine extends BaseEngine {
     }
 
     // Create empty database by running a simple query
-    const duckdb = await this.requireDuckDBPath()
+    const duckdb = await this.requireDuckDBPath(version)
 
     await execFileAsync(duckdb, [absolutePath, '-c', 'SELECT 1'])
 
@@ -681,8 +681,8 @@ export class DuckDBEngine extends BaseEngine {
   }
 
   // Helper to get duckdb path or throw a helpful error
-  private async requireDuckDBPath(): Promise<string> {
-    const duckdb = await this.getDuckDBPath()
+  private async requireDuckDBPath(version?: string): Promise<string> {
+    const duckdb = await this.getDuckDBPath(version)
     if (!duckdb) {
       throw new Error(
         'duckdb not found. Ensure DuckDB binaries are downloaded:\n' +

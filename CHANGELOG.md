@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.5] - 2026-03-31
+
+### Fixed
+
+- **DuckDB initDataDir binary lookup** — `initDataDir` now passes the version to `getDuckDBPath()` so it can locate the downloaded binary. Previously the version was unused (`_version`), causing `requireDuckDBPath()` to fail when no cached path existed (e.g. in cloud containers).
+
 ## [0.47.4] - 2026-03-30
 
 ### Fixed
