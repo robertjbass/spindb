@@ -517,6 +517,10 @@ export class WeaviateEngine extends BaseEngine {
       }
     }
 
+    // Use a stable node identity so RAFT state survives restarts.
+    // Must match across all start paths (SpinDB, setup-database.sh, etc.)
+    const nodeHostname = 'node1'
+
     const env = {
       ...process.env,
       // Defaults from weaviate.env file (includes auth settings from createUser)
@@ -525,7 +529,11 @@ export class WeaviateEngine extends BaseEngine {
       PERSISTENCE_DATA_PATH: dataDir,
       BACKUP_FILESYSTEM_PATH: backupsDir,
       ENABLE_MODULES: 'backup-filesystem',
-      CLUSTER_HOSTNAME: `node-${port}`,
+      CLUSTER_HOSTNAME: nodeHostname,
+      CLUSTER_ADVERTISE_ADDR: currentBind,
+      CLUSTER_JOIN: '',
+      RAFT_JOIN: nodeHostname,
+      RAFT_BOOTSTRAP_EXPECT: '1',
       GRPC_PORT: String(grpcPort),
       CLUSTER_GOSSIP_BIND_PORT: String(gossipPort),
       CLUSTER_DATA_BIND_PORT: String(dataPort),
