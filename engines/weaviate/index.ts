@@ -609,7 +609,7 @@ export class WeaviateEngine extends BaseEngine {
   // Wait for Weaviate to be ready to accept connections
   private async waitForReady(
     port: number,
-    timeoutMs = 30000,
+    timeoutMs = 90000,
   ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500
