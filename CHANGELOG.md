@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.4] - 2026-03-30
+
+### Fixed
+
+- **CouchDB start with external credentials** — Skip admin auth verification during `start()` when no saved credentials exist, preventing 401 failures and account lockout after credentials are changed externally (e.g. cloud setup).
+- **ClickHouse cold start timeout** — Increased health check timeout from 120s to 240s to accommodate cold starts on resource-constrained VMs.
+
 ## [0.47.2] - 2026-03-30
 
 ### Fixed
