@@ -454,27 +454,29 @@ export class WeaviateEngine extends BaseEngine {
       return null
     }
 
-    // Clean up RAFT state if the bind address changed since last start.
-    // RAFT persists the cluster advertise address; a stale address causes
-    // Weaviate to hang trying to rejoin the old node on restart.
-    const bindFile = join(containerDir, '.last-bind-address')
+    // Clean up RAFT state if the cluster identity changed since last start.
+    // RAFT persists the cluster advertise address and node name; stale state
+    // causes Weaviate to hang trying to rejoin the old node on restart.
+    // Track both bind address and port since RAFT ports derive from the HTTP port.
+    const bindFile = join(containerDir, '.last-cluster-identity')
     const currentBind = container.bindAddress ?? '127.0.0.1'
+    const currentIdentity = `${currentBind}:${port}`
     try {
-      const lastBind = existsSync(bindFile)
+      const lastIdentity = existsSync(bindFile)
         ? (await readFile(bindFile, 'utf-8')).trim()
         : null
-      if (lastBind && lastBind !== currentBind) {
+      if (lastIdentity && lastIdentity !== currentIdentity) {
         const raftDir = join(dataDir, 'raft')
         if (existsSync(raftDir)) {
           logDebug(
-            `Bind address changed (${lastBind} → ${currentBind}), wiping RAFT state`,
+            `Cluster identity changed (${lastIdentity} → ${currentIdentity}), wiping RAFT state`,
           )
           await rm(raftDir, { recursive: true, force: true })
         }
       }
-      await writeFile(bindFile, currentBind)
+      await writeFile(bindFile, currentIdentity)
     } catch (error) {
-      logDebug(`RAFT bind check failed: ${error}`)
+      logDebug(`RAFT identity check failed: ${error}`)
     }
 
     // Weaviate uses environment variables for configuration
