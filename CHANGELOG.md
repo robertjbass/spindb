@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.9] - 2026-03-31
+
+### Fixed
+
+- **Weaviate start timeout** — Increased `waitForReady` from 90s to 120s for resource-constrained servers (2GB RAM).
+
 ## [0.47.8] - 2026-03-31
 
 ### Fixed
