@@ -277,12 +277,13 @@ async function createDuckDBContainer(
     }
   }
 
-  // Determine file path
-  const defaultPath = `./${containerName}.duckdb`
-  const absolutePath = resolve(filePath || defaultPath)
+  // Determine file path — use explicit --path if given, otherwise let
+  // initDataDir default to the container directory (not CWD, which varies
+  // between local CLI and cloud docker exec contexts).
+  const absolutePath = filePath ? resolve(filePath) : undefined
 
-  // Check if file already exists
-  if (existsSync(absolutePath)) {
+  // Check if file already exists (when explicit path is given)
+  if (absolutePath && existsSync(absolutePath)) {
     return exitWithError({
       message: `File already exists: ${absolutePath}`,
       json,
@@ -296,7 +297,11 @@ async function createDuckDBContainer(
 
   try {
     // Initialize the DuckDB database file and register in registry
-    await dbEngine.initDataDir(containerName, version, { path: absolutePath })
+    await dbEngine.initDataDir(
+      containerName,
+      version,
+      absolutePath ? { path: absolutePath } : {},
+    )
     createSpinnerInstance?.succeed('DuckDB database created')
   } catch (error) {
     createSpinnerInstance?.fail('Failed to create DuckDB database')
@@ -329,7 +334,12 @@ async function createDuckDBContainer(
     }
   }
 
-  const connectionString = `duckdb:///${absolutePath}`
+  // Get the actual file path from the registry (initDataDir may have defaulted)
+  const registryEntry = await (
+    await import('../../engines/duckdb/registry.js')
+  ).duckdbRegistry.get(containerName)
+  const actualPath = registryEntry?.filePath || absolutePath || containerName
+  const connectionString = `duckdb:///${actualPath}`
 
   // Display success
   if (json) {

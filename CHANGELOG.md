@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.6] - 2026-03-31
+
+### Fixed
+
+- **DuckDB create uses container directory** — `spindb create --engine duckdb` now defaults the `.duckdb` file path to the SpinDB container directory instead of the current working directory. Fixes cloud containers where CWD is `/` and the file was created at the wrong location.
+
 ## [0.47.5] - 2026-03-31
 
 ### Fixed
