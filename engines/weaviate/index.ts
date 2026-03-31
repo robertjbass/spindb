@@ -517,9 +517,9 @@ export class WeaviateEngine extends BaseEngine {
       }
     }
 
-    // Use a stable node identity so RAFT state survives restarts.
-    // Must match across all start paths (SpinDB, setup-database.sh, etc.)
-    const nodeHostname = 'node1'
+    // Node identity must be consistent across all starts AND restores.
+    // Use port-based naming for uniqueness when multiple containers run.
+    const nodeHostname = `node-${port}`
 
     const env = {
       ...process.env,
