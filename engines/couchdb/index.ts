@@ -557,11 +557,10 @@ export class CouchDBEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
     const savedAdminAuth = await this.getLocalAdminAuth(name)
-    const startupAdminAuth =
-      savedAdminAuth ?? {
-        username: DEFAULT_ADMIN_USER,
-        password: DEFAULT_ADMIN_PASSWORD,
-      }
+    // Use saved credentials if available; skip admin auth check otherwise.
+    // Falling back to admin:admin causes 401 failures when credentials were
+    // changed externally (e.g. cloud setup), eventually locking the account.
+    const startupAdminAuth = savedAdminAuth
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
@@ -796,7 +795,8 @@ export class CouchDBEngine extends BaseEngine {
 
           const ready =
             (await this.waitForReady(port)) &&
-            (await this.waitForAdminReady(port, startupAdminAuth))
+            (!startupAdminAuth ||
+              (await this.waitForAdminReady(port, startupAdminAuth)))
           if (settled) return
 
           if (ready) {
@@ -850,7 +850,8 @@ export class CouchDBEngine extends BaseEngine {
 
     const ready =
       (await this.waitForReady(port)) &&
-      (await this.waitForAdminReady(port, startupAdminAuth))
+      (!startupAdminAuth ||
+        (await this.waitForAdminReady(port, startupAdminAuth)))
 
     if (ready) {
       return {

@@ -567,11 +567,11 @@ export class ClickHouseEngine extends BaseEngine {
   }
 
   // Wait for ClickHouse to be ready
-  // ClickHouse can take longer to start on CI runners due to resource constraints
+  // ClickHouse can take 2-4 minutes on cold start (CI runners, low-memory VMs)
   private async waitForReady(
     port: number,
     version: string,
-    timeoutMs = 120000,
+    timeoutMs = 240000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for port ${port}, version ${version}`)
     const startTime = Date.now()
