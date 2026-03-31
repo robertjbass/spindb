@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, openSync, closeSync } from 'fs'
-import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -454,10 +454,33 @@ export class WeaviateEngine extends BaseEngine {
       return null
     }
 
+    // Clean up RAFT state if the bind address changed since last start.
+    // RAFT persists the cluster advertise address; a stale address causes
+    // Weaviate to hang trying to rejoin the old node on restart.
+    const bindFile = join(containerDir, '.last-bind-address')
+    const currentBind = container.bindAddress ?? '127.0.0.1'
+    try {
+      const lastBind = existsSync(bindFile)
+        ? (await readFile(bindFile, 'utf-8')).trim()
+        : null
+      if (lastBind && lastBind !== currentBind) {
+        const raftDir = join(dataDir, 'raft')
+        if (existsSync(raftDir)) {
+          logDebug(
+            `Bind address changed (${lastBind} → ${currentBind}), wiping RAFT state`,
+          )
+          await rm(raftDir, { recursive: true, force: true })
+        }
+      }
+      await writeFile(bindFile, currentBind)
+    } catch (error) {
+      logDebug(`RAFT bind check failed: ${error}`)
+    }
+
     // Weaviate uses environment variables for configuration
     const args = [
       '--host',
-      container.bindAddress ?? '127.0.0.1',
+      currentBind,
       '--port',
       String(port),
       '--scheme',

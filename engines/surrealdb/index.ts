@@ -14,7 +14,7 @@
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import { mkdir, writeFile, unlink, stat, readdir } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
@@ -277,9 +277,12 @@ export class SurrealDBEngine extends BaseEngine {
 
     logDebug(`Starting SurrealDB with data dir: ${dataDir}`)
 
-    // SurrealDB start command
-    // Using SurrealKV for file-based storage
-    // Setting root credentials for authentication
+    // SurrealDB start command — SurrealKV for file-based storage
+    // --user/--pass only work on first boot (empty data); on restart they're
+    // silently ignored. Only pass them when the data directory is fresh.
+    const dataExists =
+      existsSync(dataDir) &&
+      readdirSync(dataDir).some((f) => !f.startsWith('.'))
     const args = [
       'start',
       `surrealkv://${dataDir}`,
@@ -287,11 +290,10 @@ export class SurrealDBEngine extends BaseEngine {
       `${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--log',
       'warn',
-      '--user',
-      startupAuth.username,
-      '--pass',
-      startupAuth.password,
     ]
+    if (!dataExists) {
+      args.push('--user', startupAuth.username, '--pass', startupAuth.password)
+    }
 
     // Spawn the server process
     // SurrealDB doesn't have a --background flag, so we detach it manually

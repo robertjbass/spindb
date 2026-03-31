@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.7] - 2026-03-31
+
+### Fixed
+
+- **Weaviate RAFT cleanup on bind address change** — `start()` now tracks the last-used bind address and wipes RAFT state when it changes, preventing startup hangs from stale cluster state.
+- **SurrealDB credential flags on restart** — `--user/--pass` flags are now only passed on first boot (empty data dir). On restart with existing data, the flags are skipped since SurrealDB ignores them anyway and credentials are already persisted in SurrealKV.
+
 ## [0.47.6] - 2026-03-31
 
 ### Fixed
