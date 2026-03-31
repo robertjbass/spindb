@@ -517,6 +517,10 @@ export class WeaviateEngine extends BaseEngine {
       }
     }
 
+    // Node identity must be consistent across all starts AND restores.
+    // Use port-based naming for uniqueness when multiple containers run.
+    const nodeHostname = `node-${port}`
+
     const env = {
       ...process.env,
       // Defaults from weaviate.env file (includes auth settings from createUser)
@@ -525,7 +529,11 @@ export class WeaviateEngine extends BaseEngine {
       PERSISTENCE_DATA_PATH: dataDir,
       BACKUP_FILESYSTEM_PATH: backupsDir,
       ENABLE_MODULES: 'backup-filesystem',
-      CLUSTER_HOSTNAME: `node-${port}`,
+      CLUSTER_HOSTNAME: nodeHostname,
+      CLUSTER_ADVERTISE_ADDR: currentBind,
+      CLUSTER_JOIN: '',
+      RAFT_JOIN: nodeHostname,
+      RAFT_BOOTSTRAP_EXPECT: '1',
       GRPC_PORT: String(grpcPort),
       CLUSTER_GOSSIP_BIND_PORT: String(gossipPort),
       CLUSTER_DATA_BIND_PORT: String(dataPort),
@@ -601,7 +609,7 @@ export class WeaviateEngine extends BaseEngine {
   // Wait for Weaviate to be ready to accept connections
   private async waitForReady(
     port: number,
-    timeoutMs = 30000,
+    timeoutMs = 90000,
   ): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 500

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.8] - 2026-03-31
+
+### Fixed
+
+- **Weaviate RAFT cluster identity** — Use stable `node1` hostname and set `RAFT_BOOTSTRAP_EXPECT=1`, `CLUSTER_ADVERTISE_ADDR`, `RAFT_JOIN`, and `CLUSTER_JOIN` env vars on start. Previously the hostname was `node-{port}` which mismatched the identity from setup-database.sh, causing RAFT to treat restarts as new node joins.
+
 ## [0.47.7] - 2026-03-31
 
 ### Fixed
