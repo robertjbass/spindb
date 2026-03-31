@@ -1133,6 +1133,7 @@ jobs:
 
       - name: Show CouchDB logs on failure
         if: failure()
+        shell: bash
         run: |
           echo "=== CouchDB container directories ==="
           ls -la ~/.spindb/containers/couchdb/ 2>/dev/null || echo "No CouchDB containers directory"
