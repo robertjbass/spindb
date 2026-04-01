@@ -84,12 +84,13 @@ export const queryCommand = new Command('query')
   .argument('<name>', 'Container name')
   .argument('<query>', 'Query to execute')
   .option('-d, --database <name>', 'Target database (defaults to primary)')
+  .option('-n, --namespace <name>', 'Target namespace (SurrealDB)')
   .option('--json', 'Output results as JSON')
   .action(
     async (
       name: string,
       query: string,
-      options: { database?: string; json?: boolean },
+      options: { database?: string; namespace?: string; json?: boolean },
     ) => {
       try {
         const containerName = name
@@ -245,6 +246,7 @@ export const queryCommand = new Command('query')
         // Execute the query
         const result = await engine.executeQuery(config, query, {
           database,
+          namespace: options.namespace,
           ...remoteQueryOptions,
         })
 

@@ -262,6 +262,7 @@ export type QueryResult = {
 
 export type QueryOptions = {
   database?: string
+  namespace?: string // For SurrealDB namespace override
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' // For REST API engines
   body?: Record<string, unknown> // For REST API engines
   host?: string // For remote containers (overrides 127.0.0.1)
