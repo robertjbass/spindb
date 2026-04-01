@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.12] - 2026-04-01
+
+### Fixed
+
+- **SurrealDB namespace via CLI** — Added `--namespace` flag to `spindb query`. `executeQuery` now accepts `options.namespace` to override the default container-name-derived namespace. Cloud passes `--namespace default`.
+
+## [0.47.11] - 2026-04-01
+
+### Fixed
+
+- **SurrealDB query uses 'default' namespace** — `executeQuery` now defaults to `'default'` namespace instead of deriving from container name. Cloud environments use `'default'` as the standard namespace.
+
 ## [0.47.10] - 2026-03-31
 
 ### Fixed

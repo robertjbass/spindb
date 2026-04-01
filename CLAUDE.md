@@ -215,3 +215,21 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 **Commits:** Conventional commits (`feat:`, `fix:`, `chore:`). Never mention AI tools as co-authors.
 
 **Publishing:** npm via GitHub Actions OIDC. Bump version, update CHANGELOG.md, merge to main.
+
+## Planned Improvements
+
+### 1. Normalize `executeQuery` output across all engines
+
+**Current state:** Each engine's `executeQuery` returns a different shape. SQL engines return `{ columns, rows }`, MongoDB returns raw mongosh JSON, HTTP engines (CouchDB, Qdrant, Meilisearch, Weaviate) return raw API responses, Redis returns plain text/arrays.
+
+**Target:** All engines return `{ columns: string[], rows: Record<string, unknown>[], rowCount: number }`. Define edge cases: Redis scalar results → single-column row, Qdrant vector results → flattened payload, MongoDB documents → rows with `_id` column.
+
+**Impact:** Layerbase Cloud currently normalizes in `src/api/databases.ts` `handleQuery`. Layerbase Desktop would need the same normalization. Moving it into SpinDB means all consumers get consistent output.
+
+### 2. Accept credentials at `spindb create` time
+
+**Current state:** `spindb create` + `spindb start` are separate steps. Some engines (SurrealDB, InfluxDB, Weaviate) need config files (credential files, admin tokens, auth env) written BEFORE the first `start`. Layerbase Cloud's `setup-database.sh` fills this gap.
+
+**Target:** `spindb create --username X --password Y` writes all engine-specific config files during create (admin-token.json for InfluxDB, weaviate.env for Weaviate, `--user/--pass` persistence for SurrealDB). Then `spindb start` reads the config and works correctly from the first call.
+
+**Impact:** Eliminates `SETUP_FIRST_ENGINES` / `setupHandlesStart` in Layerbase Cloud. Simplifies `setup-database.sh` to just `spindb create --username X --password Y --bind 127.0.0.1` + health check.
