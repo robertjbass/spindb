@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.13] - 2026-04-01
+
+### Fixed
+
+- **MongoDB waitForReady with --auth** — Health check falls back to TCP port probe when `mongosh` fails due to auth requirements, so PID tracking works correctly for auth-enabled instances.
+
 ## [0.47.12] - 2026-04-01
 
 ### Fixed
