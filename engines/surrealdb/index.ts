@@ -231,7 +231,20 @@ export class SurrealDBEngine extends BaseEngine {
     onProgress?: ProgressCallback,
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
-    const startupAuth = getBootstrapSurrealAuth()
+    // Use saved credentials if available (e.g. cloud setup writes them),
+    // fall back to hardcoded root/root for local development.
+    const savedCreds = await loadCredentials(
+      name,
+      Engine.SurrealDB,
+      getDefaultUsername(Engine.SurrealDB),
+    )
+    const startupAuth = savedCreds
+      ? {
+          username: savedCreds.username,
+          password: savedCreds.password,
+          authLevel: 'root' as const,
+        }
+      : getBootstrapSurrealAuth()
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
