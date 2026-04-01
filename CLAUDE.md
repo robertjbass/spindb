@@ -228,8 +228,19 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 
 ### 2. Accept credentials at `spindb create` time
 
-**Current state:** `spindb create` + `spindb start` are separate steps. Some engines (SurrealDB, InfluxDB, Weaviate) need config files (credential files, admin tokens, auth env) written BEFORE the first `start`. Layerbase Cloud's `setup-database.sh` fills this gap.
+**Current state:** `spindb create` + `spindb start` are separate steps. Some engines (SurrealDB, InfluxDB, Weaviate, MongoDB, QuestDB) need config files (credential files, admin tokens, auth env) written BEFORE the first `start`. Layerbase Cloud's `setup-database.sh` fills this gap via `SETUP_FIRST_ENGINES`.
 
-**Target:** `spindb create --username X --password Y` writes all engine-specific config files during create (admin-token.json for InfluxDB, weaviate.env for Weaviate, `--user/--pass` persistence for SurrealDB). Then `spindb start` reads the config and works correctly from the first call.
+**Target:** `spindb create --username X --password Y` writes all engine-specific config files during create (admin-token.json for InfluxDB, weaviate.env for Weaviate, `--user/--pass` persistence for SurrealDB, admin user for MongoDB). Then `spindb start` reads the config and works correctly from the first call.
 
-**Impact:** Eliminates `SETUP_FIRST_ENGINES` / `setupHandlesStart` in Layerbase Cloud. Simplifies `setup-database.sh` to just `spindb create --username X --password Y --bind 127.0.0.1` + health check.
+**Impact:** Eliminates `SETUP_FIRST_ENGINES` in Layerbase Cloud. Simplifies `setup-database.sh` to just `spindb create --username X --password Y --bind 127.0.0.1` + health check.
+
+## Recent Fixes (0.47.3 → 0.47.13)
+
+Key fixes from the E2E stabilization session:
+- **0.47.4:** CouchDB skip admin auth when no saved credentials, ClickHouse 240s timeout
+- **0.47.5/6:** DuckDB binary lookup + file path in cloud containers
+- **0.47.7:** Weaviate RAFT cleanup on bind change, SurrealDB skip --user/--pass on restart
+- **0.47.8/9:** Weaviate RAFT cluster identity + 120s timeout
+- **0.47.10:** SurrealDB reads saved credentials from credential file
+- **0.47.12:** `--namespace` flag for `spindb query`, type-safe `QueryOptions`
+- **0.47.13:** MongoDB `waitForReady` falls back to TCP when auth rejects mongosh
