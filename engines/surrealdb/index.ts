@@ -233,10 +233,13 @@ export class SurrealDBEngine extends BaseEngine {
     const { name, port, version, binaryPath } = container
     // Use saved credentials if available (e.g. cloud setup writes them),
     // fall back to hardcoded root/root for local development.
-    const savedCreds = await loadCredentials(
-      name,
-      Engine.SurrealDB,
-      getDefaultUsername(Engine.SurrealDB),
+    const defaultUser = getDefaultUsername(Engine.SurrealDB)
+    logDebug(
+      `Loading credentials for ${name} engine=${Engine.SurrealDB} username=${defaultUser}`,
+    )
+    const savedCreds = await loadCredentials(name, Engine.SurrealDB, defaultUser)
+    logDebug(
+      `loadCredentials result: ${savedCreds ? `user=${savedCreds.username}` : 'null (using root/root fallback)'}`,
     )
     const startupAuth = savedCreds
       ? {
