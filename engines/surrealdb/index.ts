@@ -1011,7 +1011,9 @@ export class SurrealDBEngine extends BaseEngine {
   ): Promise<QueryResult> {
     const { port, version, name } = container
     const db = options?.database || container.database || 'default'
-    const namespace = name.replace(/-/g, '_')
+    // Default to 'default' namespace (cloud uses this). Local SpinDB can
+    // override via options.namespace if needed in the future.
+    const namespace = 'default'
     const localAuth =
       options?.username && options?.password
         ? {
