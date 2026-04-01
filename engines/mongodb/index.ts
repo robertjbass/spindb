@@ -594,6 +594,10 @@ export class MongoDBEngine extends BaseEngine {
         })
         return true
       } catch {
+        // mongosh may fail due to --auth. Fall back to TCP port check —
+        // any listener on the port means mongod is up, even if auth is required.
+        const isOpen = await this.checkPortOpen(port)
+        if (isOpen) return true
         await new Promise((resolve) => setTimeout(resolve, checkInterval))
       }
     }
