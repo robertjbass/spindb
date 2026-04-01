@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.10] - 2026-03-31
+
+### Fixed
+
+- **SurrealDB start reads saved credentials** — `start()` now reads credentials from the SpinDB credential file (written by cloud setup) instead of hardcoding `root/root`. Falls back to `root/root` for local development when no credential file exists.
+
 ## [0.47.9] - 2026-03-31
 
 ### Fixed
