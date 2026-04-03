@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.14] - 2026-04-03
+
+### Fixed
+
+- **Query command JSON output** — `spindb query --json` now outputs the full result object (`{ columns, rows, rowCount, commandTag }`) instead of just the rows array. Consumers like Layerbase Cloud can distinguish SELECT results from write operation confirmations.
+- **PostgreSQL write query parsing** — `parseCSVToQueryResult` now detects PostgreSQL command tags (`INSERT 0 1`, `CREATE TABLE`, `UPDATE 3`, etc.) instead of misinterpreting them as CSV column headers. Affected all PG-wire engines: PostgreSQL, CockroachDB, DuckDB, SQLite, QuestDB.
+
 ## [0.47.13] - 2026-04-01
 
 ### Fixed

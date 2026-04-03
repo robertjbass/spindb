@@ -258,6 +258,7 @@ export type QueryResult = {
   rows: QueryResultRow[]
   rowCount: number
   executionTimeMs?: number
+  commandTag?: string
 }
 
 export type QueryOptions = {
