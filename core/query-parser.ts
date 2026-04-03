@@ -6,14 +6,35 @@
 import type { QueryResult, QueryResultRow } from '../types'
 
 /**
+ * PostgreSQL command tag pattern.
+ * psql --csv outputs these for write/DDL operations instead of CSV data.
+ * Examples: "INSERT 0 1", "UPDATE 3", "DELETE 5", "CREATE TABLE", "ALTER TABLE", "DROP INDEX"
+ */
+const PG_COMMAND_TAG =
+  /^(INSERT \d+ \d+|UPDATE \d+|DELETE \d+|MERGE \d+|COPY \d+|SELECT \d+|CREATE\b.*|ALTER\b.*|DROP\b.*|TRUNCATE\b.*|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|SET|RESET|GRANT|REVOKE|DO|COMMENT|VACUUM|ANALYZE|DISCARD|CLUSTER|REINDEX|REFRESH MATERIALIZED VIEW|LOCK|NOTIFY|LISTEN|UNLISTEN|PREPARE|EXECUTE|DEALLOCATE)$/
+
+/**
  * Parse CSV output into QueryResult
- * Handles quoted fields and escaped quotes
+ * Handles quoted fields, escaped quotes, and PostgreSQL command tags
  */
 export function parseCSVToQueryResult(csv: string): QueryResult {
   const lines = csv.trim().split(/\r?\n/)
 
   if (lines.length === 0 || (lines.length === 1 && !lines[0].trim())) {
     return { columns: [], rows: [], rowCount: 0 }
+  }
+
+  // Detect PostgreSQL command tags (write/DDL operations output these instead of CSV)
+  const nonEmptyLines = lines.filter((l) => l.trim())
+  if (nonEmptyLines.every((l) => PG_COMMAND_TAG.test(l.trim()))) {
+    const lastTag = nonEmptyLines[nonEmptyLines.length - 1].trim()
+    const countMatch = lastTag.match(/^(?:INSERT \d+ |UPDATE |DELETE |MERGE |COPY |SELECT )(\d+)$/)
+    return {
+      columns: [],
+      rows: [],
+      rowCount: countMatch ? parseInt(countMatch[1], 10) : 0,
+      commandTag: nonEmptyLines.join('; '),
+    }
   }
 
   // Parse header row

@@ -252,8 +252,19 @@ export const queryCommand = new Command('query')
 
         // Output results
         if (options.json) {
-          // JSON mode: output just the rows array
-          console.log(JSON.stringify(result.rows, null, 2))
+          // JSON mode: output full result object
+          const output: Record<string, unknown> = {
+            columns: result.columns,
+            rows: result.rows,
+            rowCount: result.rowCount,
+          }
+          if (result.commandTag) {
+            output.commandTag = result.commandTag
+          }
+          if (result.executionTimeMs !== undefined) {
+            output.executionTimeMs = result.executionTimeMs
+          }
+          console.log(JSON.stringify(output, null, 2))
         } else {
           // Table mode
           console.log(formatTable(result))
