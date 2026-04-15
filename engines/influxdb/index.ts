@@ -1,11 +1,12 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
+import { getWindowsDllEnv } from '../../core/library-env'
 import { configManager } from '../../core/config-manager'
 import {
   logDebug,
@@ -533,6 +534,9 @@ export class InfluxDBEngine extends BaseEngine {
       return null
     }
 
+    // On Windows, influxdb3.exe needs python313.dll from the co-located python/ dir
+    const pythonDllEnv = getWindowsDllEnv(join(dirname(influxdbServer), 'python'))
+
     // InfluxDB runs in foreground, so we need to spawn detached
     if (isWindows()) {
       return new Promise((resolve, reject) => {
@@ -541,6 +545,7 @@ export class InfluxDBEngine extends BaseEngine {
           stdio: ['ignore', 'ignore', 'ignore'],
           detached: true,
           windowsHide: true,
+          env: { ...process.env, ...pythonDllEnv },
         }
 
         const proc = spawn(influxdbServer, args, spawnOpts)
@@ -626,6 +631,7 @@ export class InfluxDBEngine extends BaseEngine {
       cwd: containerDir,
       stdio: ['ignore', 'ignore', 'ignore'],
       detached: true,
+      env: { ...process.env, ...pythonDllEnv },
     })
     proc.unref()
 
@@ -1449,6 +1455,9 @@ export class InfluxDBEngine extends BaseEngine {
     const influxdbServer = await this.getInfluxDBServerPath(version)
 
     await new Promise<void>((resolve, reject) => {
+      const tokenDllEnv = getWindowsDllEnv(
+        join(dirname(influxdbServer), 'python'),
+      )
       const proc = spawn(
         influxdbServer,
         [
@@ -1465,6 +1474,7 @@ export class InfluxDBEngine extends BaseEngine {
         ],
         {
           stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, ...tokenDllEnv },
         },
       )
 
