@@ -1554,12 +1554,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Cache InfluxDB binaries - these are downloaded from hostdb
+      # Bump v2 suffix to force fresh download for DLL diagnostic (revert after diagnosis)
       - name: Cache InfluxDB binaries
         uses: actions/cache@v4
         id: influxdb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-influxdb-3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-influxdb-3-${{ runner.os }}-${{ runner.arch }}-v2
 
       # Use SpinDB to download InfluxDB binaries
       - name: Install InfluxDB via SpinDB
@@ -1567,6 +1568,84 @@ jobs:
 
       - name: Show installed engines
         run: pnpm start engines list
+
+      # Diagnose Windows DLL dependencies before running tests
+      # See: exit code 0xC0000135 (STATUS_DLL_NOT_FOUND) on windows-latest
+      - name: Diagnose InfluxDB binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binRoot = "$env:USERPROFILE\.spindb\bin"
+          $exe = Get-ChildItem -Path $binRoot -Filter "influxdb3.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Host "influxdb3.exe not found under $binRoot"
+            exit 0
+          }
+
+          Write-Host "=== Binary location ==="
+          Write-Host $exe.FullName
+          Write-Host ""
+
+          Write-Host "=== Files in bin/ directory ==="
+          Get-ChildItem -Path $exe.Directory -Recurse | ForEach-Object {
+            $rel = $_.FullName.Substring($exe.Directory.FullName.Length + 1)
+            Write-Host "  $rel  ($($_.Length) bytes)"
+          }
+          Write-Host ""
+
+          Write-Host "=== DLL files next to binary ==="
+          Get-ChildItem -Path $exe.Directory -Filter "*.dll" -ErrorAction SilentlyContinue | Format-Table Name, Length
+          Write-Host ""
+
+          Write-Host "=== DLL files in python/ subdirectory ==="
+          $pythonDir = Join-Path $exe.Directory "python"
+          if (Test-Path $pythonDir) {
+            Get-ChildItem -Path $pythonDir -Filter "*.dll" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+              $rel = $_.FullName.Substring($pythonDir.Length + 1)
+              Write-Host "  $rel  ($($_.Length) bytes)"
+            }
+          } else {
+            Write-Host "  python/ directory not found next to binary"
+          }
+          Write-Host ""
+
+          Write-Host "=== DLL dependencies (dumpbin) ==="
+          # dumpbin is in VS Build Tools; find it via vswhere
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath 2>$null
+          if ($vsPath) {
+            $dumpbin = Get-ChildItem -Path $vsPath -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($dumpbin) {
+              & $dumpbin.FullName /dependents $exe.FullName
+            } else {
+              Write-Host "  dumpbin.exe not found in VS installation"
+            }
+          } else {
+            Write-Host "  Visual Studio not found via vswhere"
+          }
+          Write-Host ""
+
+          Write-Host "=== System DLL check ==="
+          $systemDlls = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "python3.dll", "python313.dll")
+          foreach ($dll in $systemDlls) {
+            $found = Get-ChildItem -Path "$env:SystemRoot\System32" -Filter $dll -ErrorAction SilentlyContinue
+            if ($found) {
+              Write-Host "  FOUND: $dll (System32)"
+            } else {
+              Write-Host "  MISSING: $dll (System32)"
+            }
+          }
+          Write-Host ""
+
+          Write-Host "=== Direct binary test ==="
+          try {
+            $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--version" -NoNewWindow -PassThru -Wait -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt"
+            Write-Host "  Exit code: $($proc.ExitCode)"
+            Write-Host "  stdout: $(Get-Content stdout.txt -ErrorAction SilentlyContinue)"
+            Write-Host "  stderr: $(Get-Content stderr.txt -ErrorAction SilentlyContinue)"
+          } catch {
+            Write-Host "  Failed to run: $_"
+          }
 
       - name: Run InfluxDB integration tests
         run: pnpm test:engine influxdb

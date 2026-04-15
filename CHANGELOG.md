@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.17] - 2026-04-15
+
+### Improvements
+
+- **InfluxDB Windows DLL diagnostic in CI** — Added diagnostic step to InfluxDB CI jobs that captures DLL dependencies, file layout, and system DLL availability on Windows runners. Investigating exit code 0xC0000135 (STATUS_DLL_NOT_FOUND) on `windows-latest` when cache misses force a fresh binary download from hostdb.
+
 ## [0.47.16] - 2026-04-15
 
 ### Fixed
