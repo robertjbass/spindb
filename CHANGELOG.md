@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **MySQL/MariaDB host cache poisoning** — Added `--skip-host-cache` to MySQL and MariaDB start args. Stale ProxySQL processes from deleted databases could poison MySQL's `performance_schema.host_cache`, causing intermittent connection blocks for all clients on the Docker bridge IP after 100 accumulated handshake errors.
+- **MySQL/MariaDB host cache poisoning** — Added `--host-cache-size=0` to MySQL and MariaDB start args to disable the host cache. Stale ProxySQL processes from deleted databases could poison MySQL's `performance_schema.host_cache`, causing intermittent connection blocks for all clients on the Docker bridge IP after 100 accumulated handshake errors. Uses `--host-cache-size=0` instead of the deprecated `--skip-host-cache` (removed in MySQL 8.3+).
 
 ## [0.47.14] - 2026-04-03
 
