@@ -40,6 +40,25 @@ export function getLibraryEnv(
 }
 
 /**
+ * Returns env vars that add a directory to the Windows DLL search path.
+ * Appends the directory to the existing PATH environment variable.
+ * Returns undefined on non-Windows platforms (not needed).
+ *
+ * Use for engines that bundle DLLs in subdirectories that aren't on the
+ * default search path (e.g., InfluxDB's python/ directory containing
+ * python313.dll needed at load time).
+ *
+ * Usage: spread into spawn env: `{ ...process.env, ...getWindowsDllEnv(dllDir) }`
+ */
+export function getWindowsDllEnv(
+  dllDir: string,
+): Record<string, string> | undefined {
+  if (osPlatform() !== 'win32') return undefined
+  const currentPath = process.env.PATH || ''
+  return { PATH: `${currentPath};${dllDir}` }
+}
+
+/**
  * Scans stderr/log output for dynamic library loading errors and returns
  * an actionable message, or null if no library error was detected.
  */

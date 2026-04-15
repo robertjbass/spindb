@@ -427,6 +427,15 @@ export abstract class BaseBinaryManager {
   }
 
   /**
+   * Returns additional env vars needed when spawning the engine binary.
+   * Override in subclass for engines that need custom library paths
+   * (e.g., InfluxDB needs python/ on the Windows PATH for python313.dll).
+   */
+  protected getSpawnEnv(_binPath: string): Record<string, string> | undefined {
+    return undefined
+  }
+
+  /**
    * Verify that binaries are working
    */
   async verify(
@@ -455,6 +464,7 @@ export abstract class BaseBinaryManager {
       const { stdout, stderr } = await spawnAsync(serverPath, ['--version'], {
         timeout: this.verifyTimeoutMs,
         cwd: binPath,
+        env: this.getSpawnEnv(binPath),
       })
       // Log stderr if present (may contain warnings)
       if (stderr && stderr.trim()) {

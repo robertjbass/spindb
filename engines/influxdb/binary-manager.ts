@@ -28,6 +28,7 @@ import {
 } from '../../core/base-binary-manager'
 import { moveEntry } from '../../core/fs-error-utils'
 import { logDebug } from '../../core/error-handler'
+import { getWindowsDllEnv } from '../../core/library-env'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
 import { Engine, type Platform, type Arch } from '../../types'
@@ -56,6 +57,16 @@ class InfluxDBBinaryManager extends BaseBinaryManager {
     // Extract version from output like "influxdb3 3.8.0" or "InfluxDB 3 Edge v3.8.0"
     const match = stdout.match(/v?(\d+\.\d+\.\d+)/)
     return match?.[1] ?? null
+  }
+
+  /**
+   * On Windows, influxdb3.exe has a load-time dependency on python313.dll
+   * (bundled Python runtime for PYO3). The DLL lives in bin/python/ but
+   * Windows only searches the application directory by default. Adding
+   * bin/python/ to PATH makes it discoverable.
+   */
+  protected override getSpawnEnv(binPath: string): Record<string, string> | undefined {
+    return getWindowsDllEnv(join(binPath, 'bin', 'python'))
   }
 
   /**

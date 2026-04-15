@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.18] - 2026-04-15
+
+### Fixed
+
+- **InfluxDB Windows DLL loading** — Fixed InfluxDB failing to start on Windows with exit code 0xC0000135 (STATUS_DLL_NOT_FOUND). The `influxdb3.exe` binary has a load-time dependency on `python313.dll` (bundled PYO3 runtime) which lives in the co-located `python/` subdirectory, but Windows only searches the application directory by default. Now adds `python/` to the PATH in the spawn environment for all InfluxDB process launches (start, verify, token creation). Added `getWindowsDllEnv()` to `library-env.ts` and a `getSpawnEnv()` hook to `BaseBinaryManager` for engine-specific library paths.
+
+## [0.47.17] - 2026-04-15
+
+### Improvements
+
+- **InfluxDB Windows DLL diagnostic in CI** — Added diagnostic step to InfluxDB CI jobs that captures DLL dependencies, file layout, and system DLL availability on Windows runners. Investigating exit code 0xC0000135 (STATUS_DLL_NOT_FOUND) on `windows-latest` when cache misses force a fresh binary download from hostdb.
+
 ## [0.47.16] - 2026-04-15
 
 ### Fixed
