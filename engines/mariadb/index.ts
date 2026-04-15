@@ -434,6 +434,7 @@ export class MariaDBEngine extends BaseEngine {
       `--log-error=${logFile}`,
       `--bind-address=${container.bindAddress ?? '127.0.0.1'}`,
       `--max-connections=${engineDef.maxConnections}`,
+      '--skip-host-cache',
     ]
 
     if (platform !== Platform.Win32) {
