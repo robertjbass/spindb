@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-04-20
+
+### Fixed
+
+- **`spindb which` picks a stopped container when multiple share a port** — When two or more containers were registered on the same port (e.g., one stopped from an earlier project and one currently running an app's database), `spindb which --url <DATABASE_URL>` could return either, because the resolver was a naive `containers.find(c => c.port === targetPort)` with no preference for running state or which container actually hosted the requested database. Scripts downstream (e.g., `pnpm db:clone` tooling) then had to self-heal the wrong answer. Fixed by ranking candidates: running containers score higher than stopped, and containers that host the database named in the URL path score higher still. The first candidate wins ties so behavior stays deterministic.
+
+### Added
+
+- **URL-path database parsing in `spindb which`** — `parseConnectionUrl` now extracts the database name from the URL pathname (e.g., `postgresql://localhost:5433/offlabelinsight` → `offlabelinsight`) and passes it through to the candidate ranker as `targetDatabase`. Previously the pathname was discarded.
+- **`selectContainerForWhich` helper** — The ranking logic is extracted from the command action into a pure, testable helper exported from `cli/commands/which.ts`. Covered by `tests/unit/which-select.test.ts` (8 cases including the original regression: running vs stopped on the same port, running+hosts-database preference, and stable tiebreakers).
+
 ## [0.48.0] - 2026-04-20
 
 ### Fixed
