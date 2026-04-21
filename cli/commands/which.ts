@@ -15,7 +15,56 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { uiError } from '../ui/theme'
-import { Engine } from '../../types'
+import { Engine, type ContainerConfig } from '../../types'
+
+export type WhichSelectCriteria = {
+  targetPort?: number
+  targetEngine?: Engine
+  targetDatabase?: string
+  runningOnly?: boolean
+}
+
+/**
+ * Pick the best-matching container for the given criteria.
+ *
+ * Multiple containers can legitimately share a port (e.g., one running, others
+ * stopped from earlier experiments). Prefer running containers, and if the
+ * caller passed a database name, prefer containers that actually host it.
+ * Stable — containers that tie on score keep their original order.
+ */
+export function selectContainerForWhich(
+  containers: ContainerConfig[],
+  criteria: WhichSelectCriteria,
+): ContainerConfig | null {
+  const { targetPort, targetEngine, targetDatabase, runningOnly } = criteria
+
+  const candidates = containers.filter((c) => {
+    if (targetPort !== undefined && c.port !== targetPort) return false
+    if (targetEngine && c.engine !== targetEngine) return false
+    if (runningOnly && c.status !== 'running') return false
+    return true
+  })
+
+  function score(c: ContainerConfig): number {
+    let s = 0
+    if (c.status === 'running') s += 4
+    if (targetDatabase) {
+      const hostsTarget =
+        c.database === targetDatabase ||
+        (c.databases?.includes(targetDatabase) ?? false)
+      if (hostsTarget) s += 2
+    }
+    return s
+  }
+
+  // Decorate-sort-undecorate to keep the sort stable across Node versions that
+  // previously had unstable Array#sort for equal scores.
+  const ranked = candidates
+    .map((c, i) => ({ c, i, s: score(c) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+
+  return ranked[0]?.c ?? null
+}
 
 /**
  * Parse a database connection URL and extract host, port, and engine type.
@@ -24,17 +73,20 @@ import { Engine } from '../../types'
 function parseConnectionUrl(url: string): {
   host: string
   port: number
+  database?: string
   engine?: Engine
   unsupportedProtocol?: string
 } | null {
   try {
     const parsed = new URL(url)
+    const database = parsed.pathname.replace(/^\//, '').split('?')[0] || undefined
 
     // If URL has explicit port, use it
     if (parsed.port) {
       return {
         host: parsed.hostname,
         port: parseInt(parsed.port, 10),
+        database,
         engine: getEngineFromProtocol(parsed.protocol),
       }
     }
@@ -46,6 +98,7 @@ function parseConnectionUrl(url: string): {
       return {
         host: parsed.hostname,
         port: 0, // Will be caught by caller
+        database,
         unsupportedProtocol: parsed.protocol.replace(/:$/, ''),
       }
     }
@@ -53,6 +106,7 @@ function parseConnectionUrl(url: string): {
     return {
       host: parsed.hostname,
       port: defaultPort,
+      database,
       engine: getEngineFromProtocol(parsed.protocol),
     }
   } catch {
@@ -126,6 +180,7 @@ export const whichCommand = new Command('which')
         // Parse the port/URL to find what we're looking for
         let targetPort: number | undefined
         let targetEngine: Engine | undefined
+        let targetDatabase: string | undefined
 
         if (options.url) {
           const parsed = parseConnectionUrl(options.url)
@@ -163,6 +218,7 @@ export const whichCommand = new Command('which')
 
           targetPort = parsed.port
           targetEngine = parsed.engine
+          targetDatabase = parsed.database
         } else if (options.port) {
           targetPort = parseInt(options.port, 10)
           if (isNaN(targetPort)) {
@@ -217,26 +273,12 @@ export const whichCommand = new Command('which')
           }
         }
 
-        // Get all containers and find matching one
         const containers = await containerManager.list()
-
-        const match = containers.find((c) => {
-          // Port must match
-          if (targetPort !== undefined && c.port !== targetPort) {
-            return false
-          }
-
-          // Engine must match if specified
-          if (targetEngine && c.engine !== targetEngine) {
-            return false
-          }
-
-          // Running filter
-          if (options.running && c.status !== 'running') {
-            return false
-          }
-
-          return true
+        const match = selectContainerForWhich(containers, {
+          targetPort,
+          targetEngine,
+          targetDatabase,
+          runningOnly: options.running,
         })
 
         if (!match) {
