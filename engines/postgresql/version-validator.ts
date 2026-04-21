@@ -15,12 +15,10 @@ import {
   logWarning,
   logDebug,
 } from '../../core/error-handler'
-import { detectPackageManager } from '../../core/dependency-manager'
 import {
-  detectInstalledPostgres,
-  getDirectBinaryPath,
+  getBundledBinaryPath,
   findCompatibleVersion,
-} from '../../core/homebrew-version-manager'
+} from '../../core/pg-binary-resolver'
 import {
   detectRemotePostgresVersion,
   type RemoteVersionResult,
@@ -254,7 +252,7 @@ export async function validateRestoreCompatibility(options: {
       ErrorCodes.VERSION_MISMATCH,
       result.error!,
       'fatal',
-      `Install PostgreSQL ${dumpVersion!.major} client tools: brew install postgresql@${dumpVersion!.major}`,
+      `Download matching PostgreSQL client tools: spindb engines download postgresql ${dumpVersion!.major}`,
       { dumpVersion, toolVersion },
     )
   }
@@ -274,9 +272,9 @@ export type DumpCompatibilityResult = {
   compatible: boolean
   localToolVersion: VersionInfo
   remoteDbVersion: RemoteVersionResult
-  requiredAction: 'none' | 'use_direct_path' | 'switch_homebrew' | 'install'
-  alternativePath?: string // Direct path to correct version binary
-  switchTarget?: string // Major version to switch to
+  requiredAction: 'none' | 'use_bundled' | 'download'
+  alternativePath?: string // Bundled pg_dump path for the compatible major
+  targetMajor?: string // Major version that should be downloaded (requiredAction=download)
   error?: string
 }
 
@@ -288,10 +286,14 @@ export async function getPgDumpVersion(
 }
 
 /**
- * Validate that a remote database can be dumped with the current pg_dump
+ * Validate that a remote database can be dumped with the current pg_dump.
  *
- * This checks BEFORE dumping to avoid creating incompatible dump files.
- * Returns the recommended action if the current pg_dump is incompatible.
+ * If the current pg_dump is older than the remote server, look for a newer
+ * bundled pg_dump in spindb's own binary cache. If none is available, tell
+ * the user to download one with `spindb engines download postgresql <major>`.
+ *
+ * We never inspect system-installed PostgreSQL — spindb owns all of its
+ * database binaries.
  */
 export async function validateDumpCompatibility(options: {
   connectionString: string
@@ -299,18 +301,16 @@ export async function validateDumpCompatibility(options: {
 }): Promise<DumpCompatibilityResult> {
   const { connectionString, pgDumpPath } = options
 
-  // Get local pg_dump version
   const localVersion = await getPgDumpVersion(pgDumpPath)
   logDebug('Local pg_dump version', { version: localVersion.full })
 
-  // Detect remote database version
   const remoteVersion = await detectRemotePostgresVersion(connectionString)
   logDebug('Remote database version', {
     version: remoteVersion.fullVersion,
     serverType: remoteVersion.serverType,
   })
 
-  // Check compatibility: local tool must be >= remote version
+  // Current pg_dump can already read the remote — no action needed.
   if (localVersion.major >= remoteVersion.majorVersion) {
     return {
       compatible: true,
@@ -320,94 +320,49 @@ export async function validateDumpCompatibility(options: {
     }
   }
 
-  // Version mismatch - check if we can use a direct path
   const targetMajor = String(remoteVersion.majorVersion)
-  const directPath = await getDirectBinaryPath('pg_dump', targetMajor)
 
-  if (directPath) {
-    // Have a direct path to the correct version
+  // Prefer the exact major match from spindb's bundled binaries.
+  const exactBundled = getBundledBinaryPath('pg_dump', targetMajor)
+  if (exactBundled) {
     return {
       compatible: false,
       localToolVersion: localVersion,
       remoteDbVersion: remoteVersion,
-      requiredAction: 'use_direct_path',
-      alternativePath: directPath,
-      switchTarget: targetMajor,
+      requiredAction: 'use_bundled',
+      alternativePath: exactBundled,
+      targetMajor,
     }
   }
 
-  // Check if any compatible version is installed via Homebrew
-  const compatibleVersion = await findCompatibleVersion(
-    remoteVersion.majorVersion,
-  )
-
+  // Otherwise, accept any bundled major that is >= the remote.
+  const compatibleVersion = findCompatibleVersion(remoteVersion.majorVersion)
   if (compatibleVersion) {
-    const altPath = await getDirectBinaryPath(
+    const bundledPath = getBundledBinaryPath(
       'pg_dump',
       compatibleVersion.majorVersion,
     )
-    return {
-      compatible: false,
-      localToolVersion: localVersion,
-      remoteDbVersion: remoteVersion,
-      requiredAction: 'use_direct_path',
-      alternativePath: altPath || undefined,
-      switchTarget: compatibleVersion.majorVersion,
+    if (bundledPath) {
+      return {
+        compatible: false,
+        localToolVersion: localVersion,
+        remoteDbVersion: remoteVersion,
+        requiredAction: 'use_bundled',
+        alternativePath: bundledPath,
+        targetMajor: compatibleVersion.majorVersion,
+      }
     }
   }
 
-  // Check if we could switch Homebrew (version is installed but not as direct path)
-  const installed = await detectInstalledPostgres()
-  const hasTarget = installed.some(
-    (v) => parseInt(v.majorVersion, 10) >= remoteVersion.majorVersion,
-  )
-
-  if (hasTarget) {
-    const best = installed
-      .filter((v) => parseInt(v.majorVersion, 10) >= remoteVersion.majorVersion)
-      .sort(
-        (a, b) => parseInt(a.majorVersion, 10) - parseInt(b.majorVersion, 10),
-      )[0]
-
-    return {
-      compatible: false,
-      localToolVersion: localVersion,
-      remoteDbVersion: remoteVersion,
-      requiredAction: 'switch_homebrew',
-      switchTarget: best.majorVersion,
-    }
-  }
-
-  // Need to install - provide platform-specific instructions
-  const installCmd = await getInstallCommand(targetMajor)
+  // No bundled binary can read this server — ask the user to download one.
   return {
     compatible: false,
     localToolVersion: localVersion,
     remoteDbVersion: remoteVersion,
-    requiredAction: 'install',
-    switchTarget: targetMajor,
+    requiredAction: 'download',
+    targetMajor,
     error:
       `Your pg_dump version (${localVersion.major}) cannot dump from PostgreSQL ${remoteVersion.majorVersion}. ` +
-      `Install PostgreSQL ${targetMajor} client tools: ${installCmd}`,
+      `Download the matching client tools with: spindb engines download postgresql ${targetMajor}`,
   }
-}
-
-export async function getInstallCommand(majorVersion: string): Promise<string> {
-  const pm = await detectPackageManager()
-
-  if (!pm) {
-    return `Install PostgreSQL ${majorVersion} client tools for your platform`
-  }
-
-  // Versioned package names per package manager
-  const packages: Record<string, string> = {
-    brew: `postgresql@${majorVersion}`,
-    apt: `postgresql-client-${majorVersion}`,
-    yum: `postgresql${majorVersion}`,
-    dnf: `postgresql${majorVersion}`,
-    pacman: 'postgresql-libs', // Arch doesn't version packages the same way
-  }
-
-  const pkg = packages[pm.id] || `postgresql-${majorVersion}`
-  return pm.config.installTemplate.replace('{package}', pkg)
 }

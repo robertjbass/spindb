@@ -89,7 +89,7 @@ spindb/
 │   ├── backup-restore.ts       # Backup/restore orchestration
 │   ├── remote-container.ts     # Remote database linking utilities
 │   ├── hostdb-client.ts        # Shared hostdb fetch/caching
-│   ├── homebrew-version-manager.ts  # Homebrew version detection
+│   ├── pg-binary-resolver.ts  # PostgreSQL client-tool lookup (bundled only)
 │   ├── update-manager.ts       # Update checking
 │   └── version-utils.ts        # Version parsing/comparison
 │

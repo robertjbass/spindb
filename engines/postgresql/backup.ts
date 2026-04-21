@@ -82,11 +82,7 @@ async function getPgDumpPath(containerVersion: string): Promise<string> {
 
   throw new Error(
     `pg_dump not found for PostgreSQL ${containerVersion}. ` +
-      `Either download PostgreSQL binaries with 'spindb create --engine postgresql --version ${majorVersion}' ` +
-      'or install PostgreSQL client tools:\n' +
-      '  macOS: brew install libpq && brew link --force libpq\n' +
-      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-      'Or configure manually: spindb config set pg_dump /path/to/pg_dump',
+      `Download the matching binaries: spindb engines download postgresql ${majorVersion}`,
   )
 }
 

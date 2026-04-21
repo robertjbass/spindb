@@ -27,7 +27,6 @@ import {
   validateDumpCompatibility,
   type DumpCompatibilityResult,
 } from './version-validator'
-import { switchHomebrewVersion } from '../../core/homebrew-version-manager'
 import {
   getDefaultUsername,
   loadCredentials,
@@ -529,10 +528,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const psqlPath = await configManager.getBinaryPath('psql')
     if (!psqlPath) {
       throw new Error(
-        'psql not found. Install PostgreSQL client tools:\n' +
-          '  macOS: brew install libpq && brew link --force libpq\n' +
-          '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-          'Or configure manually: spindb config set psql /path/to/psql',
+        'psql not found. Download PostgreSQL binaries:\n' +
+          '  spindb engines download postgresql',
       )
     }
     return psqlPath
@@ -542,10 +539,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const pgRestorePath = await configManager.getBinaryPath('pg_restore')
     if (!pgRestorePath) {
       throw new Error(
-        'pg_restore not found. Install PostgreSQL client tools:\n' +
-          '  macOS: brew install libpq && brew link --force libpq\n' +
-          '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-          'Or configure manually: spindb config set pg_restore /path/to/pg_restore',
+        'pg_restore not found. Download PostgreSQL binaries:\n' +
+          '  spindb engines download postgresql',
       )
     }
     return pgRestorePath
@@ -555,10 +550,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const pgDumpPath = await configManager.getBinaryPath('pg_dump')
     if (!pgDumpPath) {
       throw new Error(
-        'pg_dump not found. Install PostgreSQL client tools:\n' +
-          '  macOS: brew install libpq && brew link --force libpq\n' +
-          '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-          'Or configure manually: spindb config set pg_dump /path/to/pg_dump',
+        'pg_dump not found. Download PostgreSQL binaries:\n' +
+          '  spindb engines download postgresql',
       )
     }
     return pgDumpPath
@@ -587,16 +580,15 @@ export class PostgreSQLEngine extends BaseEngine {
     if (!path) {
       throw new SpinDBError(
         ErrorCodes.DEPENDENCY_MISSING,
-        'pg_dump not found. Install PostgreSQL client tools.',
+        'pg_dump not found.',
         'fatal',
-        'macOS: brew install postgresql@17 && brew link --overwrite postgresql@17\n' +
-          'Ubuntu/Debian: apt install postgresql-client',
+        'Download PostgreSQL binaries: spindb engines download postgresql',
       )
     }
 
     if (versionMismatch) {
       warnings.push(
-        `pg_dump version changed: ${cachedVersion} -> ${actualVersion} (Homebrew link changed)`,
+        `pg_dump version changed on disk: ${cachedVersion} -> ${actualVersion}`,
       )
     }
 
@@ -622,59 +614,28 @@ export class PostgreSQLEngine extends BaseEngine {
       return { path, switched: false, warnings }
     }
 
-    // Handle incompatibility based on required action
-    // All cases that don't return will fall through to VERSION_MISMATCH error below
-    switch (compatibility.requiredAction) {
-      case 'use_direct_path':
-        if (compatibility.alternativePath) {
-          warnings.push(
-            `Using PostgreSQL ${compatibility.switchTarget} pg_dump (remote DB is v${compatibility.remoteDbVersion.majorVersion})`,
-          )
-          return {
-            path: compatibility.alternativePath,
-            switched: false,
-            warnings,
-          }
-        }
-        // No alternative path available - fall through to VERSION_MISMATCH error
-        break
-
-      case 'switch_homebrew':
-        if (compatibility.switchTarget) {
-          const switchResult = await switchHomebrewVersion(
-            compatibility.switchTarget,
-          )
-          if (switchResult.success) {
-            // Refresh config cache after switching
-            await configManager.refreshBinaryWithVersion('pg_dump')
-            await configManager.refreshBinaryWithVersion('pg_restore')
-            await configManager.refreshBinaryWithVersion('psql')
-
-            const newPath = await configManager.getBinaryPath('pg_dump')
-            if (newPath) {
-              warnings.push(
-                `Switched Homebrew from PostgreSQL ${switchResult.previousVersion} to ${switchResult.currentVersion}`,
-              )
-              return { path: newPath, switched: true, warnings }
-            }
-          }
-        }
-        // Switch failed or no target - fall through to VERSION_MISMATCH error
-        break
-
-      case 'install':
-        // User needs to install manually - fall through to VERSION_MISMATCH error
-        break
+    if (
+      compatibility.requiredAction === 'use_bundled' &&
+      compatibility.alternativePath
+    ) {
+      warnings.push(
+        `Using bundled PostgreSQL ${compatibility.targetMajor} pg_dump (remote DB is v${compatibility.remoteDbVersion.majorVersion})`,
+      )
+      return {
+        path: compatibility.alternativePath,
+        switched: false,
+        warnings,
+      }
     }
 
-    // Cannot auto-fix - throw error with install instructions
+    // No bundled binary can read this server — tell the user to download one.
     throw new SpinDBError(
       ErrorCodes.VERSION_MISMATCH,
       compatibility.error ||
         `Your pg_dump version (${compatibility.localToolVersion.major}) cannot dump from PostgreSQL ${compatibility.remoteDbVersion.majorVersion}`,
       'fatal',
-      `Install PostgreSQL ${compatibility.remoteDbVersion.majorVersion} client tools:\n` +
-        `  brew install postgresql@${compatibility.remoteDbVersion.majorVersion}`,
+      `Download matching PostgreSQL client tools:\n` +
+        `  spindb engines download postgresql ${compatibility.remoteDbVersion.majorVersion}`,
       { compatibility },
     )
   }
@@ -760,7 +721,9 @@ export class PostgreSQLEngine extends BaseEngine {
           resolve()
           return
         }
-        reject(new Error(output || `psql exited with code ${code ?? 'unknown'}`))
+        reject(
+          new Error(output || `psql exited with code ${code ?? 'unknown'}`),
+        )
       })
     })
   }

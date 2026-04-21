@@ -188,10 +188,8 @@ async function getPsqlPath(containerVersion?: string): Promise<string> {
   }
 
   throw new Error(
-    'psql not found. Install PostgreSQL client tools:\n' +
-      '  macOS: brew install libpq && brew link --force libpq\n' +
-      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-      'Or configure manually: spindb config set psql /path/to/psql',
+    'psql not found. Download PostgreSQL binaries:\n' +
+      '  spindb engines download postgresql',
   )
 }
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-04-20
+
+### Fixed
+
+- **`spindb pull` no longer requires Homebrew for PostgreSQL version mismatches** — When pulling from a remote PostgreSQL server whose major version is newer than the currently-registered `pg_dump`, the resolver would only look for compatible client tools under `/opt/homebrew/opt/postgresql@<major>/bin` and `/usr/lib/postgresql/<major>/bin`. If the user hadn't run `brew install postgresql@18` (or the APT equivalent), the pull failed with an install-via-homebrew error message — even though spindb had already downloaded the matching binaries into `~/.spindb/bin/postgresql-18.1.0-*`. `pg_dump`, `pg_restore`, `psql`, and `pg_basebackup` are now resolved exclusively from spindb's bundled binary cache.
+
+### Changed
+
+- **Removed system package manager fallback for PostgreSQL client tools.** spindb is responsible for every database binary it uses — the Homebrew/APT/YUM detection paths were legacy scaffolding from before hostdb shipped complete PostgreSQL packages. Renamed `core/homebrew-version-manager.ts` → `core/pg-binary-resolver.ts` and reduced it to only scan `~/.spindb/bin/` via `paths.findInstalledBinaryForMajor`. Deleted `isHomebrewAvailable`, `getCurrentLinkedVersion`, `switchHomebrewVersion`, and the Homebrew/APT probing inside `detectInstalledPostgres` / `getDirectBinaryPath`.
+- **`DumpCompatibilityResult` shape.** `requiredAction` enum tightened from `'none' | 'use_direct_path' | 'switch_homebrew' | 'install'` to `'none' | 'use_bundled' | 'download'`, and `switchTarget` renamed to `targetMajor`. The `switch_homebrew` branch in `getCompatiblePgDumpPath` (which would call `brew link --overwrite postgresql@X`) is gone.
+- **Error message remediation hints** — Every PostgreSQL and FerretDB code path that previously surfaced `brew install postgresql@X` / `apt install postgresql-client` now points at `spindb engines download postgresql <major>` instead.
+
+### Added
+
+- **`tests/unit/pg-binary-resolver.test.ts`** — Unit coverage for `getBundledBinaryPath` and `findCompatibleVersion`, plus a source-grep regression guard that fails compilation if any PostgreSQL code path reintroduces a `brew install postgresql` or `apt install postgresql-client` hint.
+- **CLAUDE.md gotcha** — Documented the bundled-only invariant for PostgreSQL client tools so future work doesn't silently reintroduce the system-package-manager fallback.
+
 ## [0.47.18] - 2026-04-15
 
 ### Fixed
