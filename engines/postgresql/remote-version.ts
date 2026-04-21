@@ -32,9 +32,7 @@ export async function detectRemotePostgresVersion(
   if (!psqlPath) {
     throw new Error(
       'psql not found - required for remote version detection.\n' +
-        'Install PostgreSQL client tools:\n' +
-        '  macOS: brew install postgresql@17 && brew link --overwrite postgresql@17\n' +
-        '  Ubuntu/Debian: apt install postgresql-client',
+        'Download PostgreSQL binaries: spindb engines download postgresql',
     )
   }
 

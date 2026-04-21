@@ -9,14 +9,20 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
 import { basename, join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { configManager } from '../../core/config-manager'
 import { platformService } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { buildMongoUri, normalizeMongoHost } from '../mongo-uri'
 import { ferretdbBinaryManager } from './binary-manager'
-import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
+import {
+  getMongorestorePath,
+  MONGORESTORE_NOT_FOUND_ERROR,
+} from '../mongodb/cli-utils'
 import {
   DEFAULT_DOCUMENTDB_VERSION,
   DEFAULT_V1_POSTGRESQL_VERSION,
@@ -123,10 +129,7 @@ async function findBackendBinary(
   const backendName = v1 ? 'PostgreSQL' : 'postgresql-documentdb'
   throw new Error(
     `${binaryName} not found. The ${backendName} installation at ${backendPath} does not include client tools.\n` +
-      'Install PostgreSQL client tools:\n' +
-      '  macOS: brew install libpq && brew link --force libpq\n' +
-      '  Ubuntu/Debian: apt install postgresql-client\n\n' +
-      `Or configure manually: spindb config set ${binaryName} /path/to/${binaryName}`,
+      'Download PostgreSQL binaries: spindb engines download postgresql',
   )
 }
 
@@ -303,8 +306,13 @@ async function restoreViaMongo(
   options: RestoreOptions,
   format: BackupFormat,
 ): Promise<RestoreResult> {
-  const { port, database, drop = true, sourceDatabase, containerVersion } =
-    options
+  const {
+    port,
+    database,
+    drop = true,
+    sourceDatabase,
+    containerVersion,
+  } = options
   const timeoutMs = options.timeoutMs ?? DEFAULT_RESTORE_TIMEOUT_MS
   const backupDatabase = sourceDatabase ?? database
 
@@ -320,20 +328,24 @@ async function restoreViaMongo(
         getDefaultUsername(Engine.FerretDB),
       )
     : null
-  const container =
-    options.containerName
-      ? await containerManager.getConfig(options.containerName)
-      : null
+  const container = options.containerName
+    ? await containerManager.getConfig(options.containerName)
+    : null
   const host = normalizeMongoHost(container?.bindAddress)
 
   const args: string[] = savedCreds
     ? [
         '--uri',
-        buildMongoUri(port, database, {
-          username: savedCreds.username,
-          password: savedCreds.password,
-          authDatabase: savedCreds.database || 'admin',
-        }, host),
+        buildMongoUri(
+          port,
+          database,
+          {
+            username: savedCreds.username,
+            password: savedCreds.password,
+            authDatabase: savedCreds.database || 'admin',
+          },
+          host,
+        ),
       ]
     : ['--host', host, '--port', String(port)]
 
@@ -399,7 +411,9 @@ async function restoreViaMongo(
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
-  logDebug(`Running mongorestore with args: ${sanitizeMongoArgs(args).join(' ')}`)
+  logDebug(
+    `Running mongorestore with args: ${sanitizeMongoArgs(args).join(' ')}`,
+  )
 
   return new Promise((resolve, reject) => {
     const proc = spawn(mongorestore, args, {
@@ -471,8 +485,11 @@ export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<RestoreResult> {
   const { backendPort } = container
-  const { database, drop = true, timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS } =
-    options
+  const {
+    database,
+    drop = true,
+    timeoutMs = DEFAULT_RESTORE_TIMEOUT_MS,
+  } = options
 
   // Detect backup format
   const format = await detectBackupFormat(backupPath)
