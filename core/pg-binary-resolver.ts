@@ -12,6 +12,7 @@
  */
 
 import { existsSync } from 'fs'
+import { join } from 'path'
 import { paths } from '../config/paths'
 import { platformService } from './platform-service'
 
@@ -47,7 +48,7 @@ export function getBundledBinaryPath(
   if (!installed) return null
 
   const ext = platformService.getExecutableExtension()
-  const toolPath = `${installed.path}/bin/${tool}${ext}`
+  const toolPath = join(installed.path, 'bin', `${tool}${ext}`)
   return existsSync(toolPath) ? toolPath : null
 }
 
@@ -62,8 +63,8 @@ export function detectInstalledPostgres(): InstalledPostgresVersion[] {
   const bundled: InstalledPostgresVersion[] = []
 
   for (const entry of installed) {
-    const binDir = `${entry.path}/bin`
-    if (!existsSync(`${binDir}/pg_dump${ext}`)) continue
+    const binDir = join(entry.path, 'bin')
+    if (!existsSync(join(binDir, `pg_dump${ext}`))) continue
 
     const majorVersion = entry.version.split('.')[0]
     if (!majorVersion) continue
