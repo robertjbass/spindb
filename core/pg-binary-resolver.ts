@@ -39,17 +39,21 @@ export function getBundledBinaryPath(
   majorVersion: string,
 ): string | null {
   const { platform, arch } = platformService.getPlatformInfo()
-  const installed = paths.findInstalledBinaryForMajor(
-    'postgresql',
-    majorVersion,
-    platform,
-    arch,
-  )
-  if (!installed) return null
-
   const ext = platformService.getExecutableExtension()
-  const toolPath = join(installed.path, 'bin', `${tool}${ext}`)
-  return existsSync(toolPath) ? toolPath : null
+  const installed = paths.findInstalledBinaries('postgresql', platform, arch)
+  const majorPrefix = `${majorVersion}.`
+
+  for (const entry of installed) {
+    // Match same-major installs (version === "18" or starts with "18.")
+    if (entry.version !== majorVersion && !entry.version.startsWith(majorPrefix)) {
+      continue
+    }
+
+    const toolPath = join(entry.path, 'bin', `${tool}${ext}`)
+    if (existsSync(toolPath)) return toolPath
+  }
+
+  return null
 }
 
 /**

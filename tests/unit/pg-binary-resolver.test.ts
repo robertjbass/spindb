@@ -106,6 +106,33 @@ describe('getBundledBinaryPath', () => {
       'Should return null when the specific tool binary is missing',
     )
   })
+
+  it('falls back to an older same-major install when the newest one is missing the tool', async () => {
+    const { platform, arch } = platformService.getPlatformInfo()
+
+    // Simulate a partial/corrupt pg 18.2 install — bin dir exists but pg_dump was never extracted.
+    const broken = join(tempRoot, `postgresql-18.2.0-${platform}-${arch}`)
+    await mkdir(join(broken, 'bin'), { recursive: true })
+
+    // A healthy older pg 18.1 install that does contain pg_dump.
+    const healthy = join(tempRoot, `postgresql-18.1.0-${platform}-${arch}`)
+    const healthyBinDir = join(healthy, 'bin')
+    await mkdir(healthyBinDir, { recursive: true })
+    await writeFile(join(healthyBinDir, `pg_dump${ext}`), 'fake pg_dump')
+
+    // findInstalledBinaries is sorted newest-first, so the broken install comes first.
+    stubInstalledBinaries([
+      { version: '18.2.0', path: broken },
+      { version: '18.1.0', path: healthy },
+    ])
+
+    const result = getBundledBinaryPath('pg_dump', '18')
+    assertEqual(
+      result,
+      join(healthyBinDir, `pg_dump${ext}`),
+      'Should iterate past the broken install and return the healthy one',
+    )
+  })
 })
 
 describe('findCompatibleVersion', () => {
