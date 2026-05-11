@@ -317,8 +317,12 @@ RUN groupadd -r spindb && useradd -r -g spindb -d /home/spindb -m -s /bin/bash s
 # Install pnpm and SpinDB globally
 ENV PNPM_HOME="/home/spindb/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+# pnpm 10+ refuses 'add -g' unless 'pnpm setup' has written PNPM_HOME into
+# the shell profile (env-var alone isn't trusted). \`SHELL\` tells setup which
+# rc file to touch; without it, setup errors on a fresh container.
 RUN npm install -g pnpm \\
     && mkdir -p "$PNPM_HOME" \\
+    && SHELL=/bin/bash pnpm setup \\
     && pnpm add -g spindb
 
 # Create spindb directories with proper ownership
