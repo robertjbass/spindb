@@ -59,3 +59,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
         timeout-minutes: 10
+
+  # Docker Export catches Dockerfile.export regressions before they reach
+  # dev → main. Same job definition as ci.yml so the two paths can't drift.
+  docker-export:
+    needs: lint
+    uses: ./.github/workflows/_docker-export.yml

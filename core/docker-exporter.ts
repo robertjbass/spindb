@@ -314,12 +314,13 @@ RUN mkdir -p /etc/apt/keyrings \\
 # Create spindb user (non-root for database processes)
 RUN groupadd -r spindb && useradd -r -g spindb -d /home/spindb -m -s /bin/bash spindb
 
-# Install pnpm and SpinDB globally
-ENV PNPM_HOME="/home/spindb/.local/share/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g pnpm \\
-    && mkdir -p "$PNPM_HOME" \\
-    && pnpm add -g spindb
+# Install SpinDB globally via npm. We deliberately don't use pnpm here: pnpm
+# 10+ requires \`pnpm setup\` to write PNPM_HOME into a shell profile before
+# \`pnpm add -g\` works, but Dockerfile RUN doesn't source profiles mid-step,
+# and pnpm 11.x has @pnpm/exe install bugs in clean containers. For a single
+# global package, npm is simpler and reliable.
+RUN npm install -g spindb \\
+    && npm cache clean --force
 
 # Create spindb directories with proper ownership
 RUN mkdir -p /home/spindb/.spindb/containers /home/spindb/.spindb/bin /home/spindb/.spindb/certs /home/spindb/.spindb/init \\

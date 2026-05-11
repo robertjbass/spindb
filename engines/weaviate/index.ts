@@ -521,6 +521,14 @@ export class WeaviateEngine extends BaseEngine {
     // Use port-based naming for uniqueness when multiple containers run.
     const nodeHostname = `node-${port}`
 
+    // Weaviate's RAFT layer rejects wildcard bind addresses (0.0.0.0, ::)
+    // as cluster advertise addresses — "local bind address is not advertisable"
+    // and the process exits fatal during raft init. For single-node operation
+    // the cluster is intra-process anyway, so we advertise on loopback whenever
+    // the REST API is on a wildcard. Routable explicit binds pass through.
+    const isWildcardBind = ['0.0.0.0', '::', ''].includes(currentBind)
+    const clusterAdvertiseAddr = isWildcardBind ? '127.0.0.1' : currentBind
+
     const env = {
       ...process.env,
       // Defaults from weaviate.env file (includes auth settings from createUser)
@@ -530,7 +538,7 @@ export class WeaviateEngine extends BaseEngine {
       BACKUP_FILESYSTEM_PATH: backupsDir,
       ENABLE_MODULES: 'backup-filesystem',
       CLUSTER_HOSTNAME: nodeHostname,
-      CLUSTER_ADVERTISE_ADDR: currentBind,
+      CLUSTER_ADVERTISE_ADDR: clusterAdvertiseAddr,
       CLUSTER_JOIN: '',
       RAFT_JOIN: nodeHostname,
       RAFT_BOOTSTRAP_EXPECT: '1',

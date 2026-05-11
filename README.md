@@ -64,7 +64,9 @@ SpinDB supports **21 database engines** across **5 platform architectures**—al
 
 ```bash
 # Install
-npm install -g spindb    # or: pnpm add -g spindb
+npm install -g spindb
+# Or with pnpm (requires `pnpm setup` first on pnpm 10+):
+# pnpm setup && pnpm add -g spindb
 
 # Create and start a PostgreSQL database
 spindb create myapp --start --connect
