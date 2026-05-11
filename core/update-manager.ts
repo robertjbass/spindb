@@ -218,11 +218,40 @@ export class UpdateManager {
         }
       }
 
-      return {
-        success: false,
-        previousVersion,
-        newVersion: previousVersion,
-        error: `${message}\nManual update: ${installCmd}`,
+      // pnpm 10+ refuses `add -g` until `pnpm setup` has written PNPM_HOME
+      // into a shell profile. End users on a fresh pnpm install will hit
+      // "global bin directory ... not in PATH" — fall back to npm so the
+      // update still succeeds instead of leaving them stranded.
+      const isPnpmSetupError =
+        pm === 'pnpm' &&
+        (message.includes('global bin directory') ||
+          message.includes('is not in PATH') ||
+          message.includes('Run "pnpm setup"'))
+
+      if (isPnpmSetupError) {
+        const npmCmd = this.getInstallCommand('npm')
+        logDebug(`pnpm install failed, falling back to: ${npmCmd}`)
+        try {
+          await execAsync(npmCmd, { timeout: 60000, cwd: '/' })
+        } catch (fallbackError) {
+          const fallbackMessage =
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError)
+          return {
+            success: false,
+            previousVersion,
+            newVersion: previousVersion,
+            error: `${message}\nFallback to npm also failed: ${fallbackMessage}\nManual update: ${installCmd}, or run \`pnpm setup\` first`,
+          }
+        }
+      } else {
+        return {
+          success: false,
+          previousVersion,
+          newVersion: previousVersion,
+          error: `${message}\nManual update: ${installCmd}`,
+        }
       }
     }
 
