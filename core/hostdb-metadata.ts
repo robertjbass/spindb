@@ -89,7 +89,11 @@ type DownloadsJson = {
   tools: Record<string, ToolDownloadInfo>
 }
 
-// Simple in-memory cache
+// Simple in-memory cache.
+// `databasesCache` / `downloadsCache` hold the result so we don't re-parse the
+// bundled JSON (or re-fetch the network fallback) on every call. `timestamp`
+// is only meaningful for the network path — bundled reads write `Infinity` so
+// the entry never expires within a process.
 let databasesCache: { data: DatabasesJson; timestamp: number } | null = null
 let downloadsCache: { data: DownloadsJson; timestamp: number } | null = null
 
@@ -175,9 +179,12 @@ export function unwrapDatabasesJson(
  * the bundled file ever fails to load (e.g., corrupt install).
  */
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
+  if (databasesCache) return databasesCache.data
   try {
     const raw = hostdbLoadDatabasesJson() as unknown as Record<string, unknown>
-    return unwrapDatabasesJson(raw)
+    const data = unwrapDatabasesJson(raw)
+    databasesCache = { data, timestamp: Infinity }
+    return data
   } catch (error) {
     logDebug('Falling back to network for databases.json', {
       error: error instanceof Error ? error.message : String(error),
@@ -201,8 +208,11 @@ export async function fetchDatabasesJson(): Promise<DatabasesJson> {
  * Same offline guarantee as fetchDatabasesJson — network fallback is defensive only.
  */
 export async function fetchDownloadsJson(): Promise<DownloadsJson> {
+  if (downloadsCache) return downloadsCache.data
   try {
-    return hostdbLoadDownloadsJson() as DownloadsJson
+    const data = hostdbLoadDownloadsJson() as DownloadsJson
+    downloadsCache = { data, timestamp: Infinity }
+    return data
   } catch (error) {
     logDebug('Falling back to network for downloads.json', {
       error: error instanceof Error ? error.message : String(error),
