@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-05-15
+
+### Changed
+
+- **Tracked latest hostdb engine releases.** Version maps repointed to the patches now live on `registry.layerbase.host`:
+  - SQLite: `3.51.2` → `3.53.1`
+  - Meilisearch: `1.33.1` → `1.43.1`
+  - DuckDB: `1.4.3` → `1.4.4`
+  - Redis: `7.4.7` → `7.4.9` (8.4 line stays at 8.4.0)
+  - Valkey: `8.0.6` → `8.0.9`, `9.0.1` → `9.0.4`
+  - MariaDB: `10.11.15` → `10.11.16`, `11.4.5` → `11.4.10`, `11.8.5` → `11.8.6`
+  - MongoDB: `7.0.28` → `7.0.34`, `8.0.17` → `8.0.23`, `8.2.3` → `8.2.9`
+  - MySQL: `8.4.3` → `8.4.9`
+  - PostgreSQL: `15.15` → `15.18`, `16.11` → `16.14`, `17.7` → `17.10`, `18.1` → `18.4`
+- Old patch versions remain in each engine's `VERSION_MAP` so previously-provisioned containers keep resolving to the binary they were created with. The 1-part and 2-part major.minor keys now point at the new defaults; the cloud universal image consumes them automatically on its next rebuild.
+
 ## [0.48.1] - 2026-04-20
 
 ### Fixed

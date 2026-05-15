@@ -18,11 +18,13 @@ import { logDebug } from '../../core/error-handler'
  */
 export const MEILISEARCH_VERSION_MAP: Record<string, string> = {
   // 1-part: major version -> latest
-  '1': '1.33.1',
+  '1': '1.43.1',
   // 2-part: major.minor -> latest patch
   '1.33': '1.33.1',
+  '1.43': '1.43.1',
   // 3-part: exact version (identity mapping)
   '1.33.1': '1.33.1',
+  '1.43.1': '1.43.1',
 }
 
 /**

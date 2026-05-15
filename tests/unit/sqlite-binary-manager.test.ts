@@ -20,7 +20,7 @@ describe('SQLite version-maps', () => {
   describe('normalizeVersion', () => {
     it('should map major version 3 to full version', () => {
       const result = normalizeVersion('3')
-      assertEqual(result, '3.51.2', 'Major version 3 should map to 3.51.2')
+      assertEqual(result, '3.53.1', 'Major version 3 should map to 3.53.1')
     })
 
     it('should map minor version 3.51 to full version', () => {
@@ -50,7 +50,7 @@ describe('SQLite version-maps', () => {
   describe('getFullVersion', () => {
     it('should return full version for major version 3', () => {
       const result = getFullVersion('3')
-      assertEqual(result, '3.51.2', 'Should return full version for major 3')
+      assertEqual(result, '3.53.1', 'Should return full version for major 3')
     })
 
     it('should return null for unknown major version', () => {
@@ -169,14 +169,14 @@ describe('SQLite binary-urls', () => {
     it('should include full version in URL', () => {
       const url = getBinaryUrl('3', Platform.Darwin, Arch.ARM64)
 
-      assert(url.includes('3.51.2'), 'URL should include full version 3.51.2')
+      assert(url.includes('3.53.1'), 'URL should include full version 3.53.1')
     })
 
     it('should include sqlite tag in URL', () => {
       const url = getBinaryUrl('3', Platform.Darwin, Arch.ARM64)
 
       assert(
-        url.includes('sqlite-3.51.2'),
+        url.includes('sqlite-3.53.1'),
         'URL should include sqlite version tag',
       )
     })
@@ -209,7 +209,7 @@ describe('SQLiteBinaryManager', () => {
   describe('getFullVersion', () => {
     it('should map major version 3 to full version', () => {
       const result = sqliteBinaryManager.getFullVersion('3')
-      assertEqual(result, '3.51.2', 'Should map major version 3 to 3.51.2')
+      assertEqual(result, '3.53.1', 'Should map major version 3 to 3.53.1')
     })
 
     it('should return full version unchanged', () => {
@@ -230,7 +230,7 @@ describe('SQLiteBinaryManager', () => {
         url.includes('registry.layerbase.host'),
         'URL should use layerbase registry',
       )
-      assert(url.includes('3.51.2'), 'URL should include full version')
+      assert(url.includes('3.53.1'), 'URL should include full version')
       assert(url.includes('darwin-arm64'), 'URL should include platform')
     })
 
@@ -264,7 +264,7 @@ describe('SQLiteBinaryManager', () => {
         path.includes('bin/sqlite3') || path.includes('bin\\sqlite3'),
         'Path should include bin/sqlite3',
       )
-      assert(path.includes('3.51.2'), 'Path should use full version')
+      assert(path.includes('3.53.1'), 'Path should use full version')
       assert(path.includes('darwin-arm64'), 'Path should include platform')
     })
 
@@ -447,7 +447,7 @@ describe('SQLiteBinaryManager', () => {
       )
 
       assert(typeof binPath === 'string', 'Should return path string')
-      assert(binPath.includes('3.51.2'), 'Path should include full version')
+      assert(binPath.includes('3.53.1'), 'Path should include full version')
       assert(binPath.includes('darwin-arm64'), 'Path should include platform')
     })
   })

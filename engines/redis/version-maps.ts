@@ -18,13 +18,14 @@ import { logDebug } from '../../core/error-handler'
  */
 export const REDIS_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → latest
-  '7': '7.4.7',
+  '7': '7.4.9',
   '8': '8.4.0',
   // 2-part: major.minor → latest patch
-  '7.4': '7.4.7',
+  '7.4': '7.4.9',
   '8.4': '8.4.0',
   // 3-part: exact version (identity mapping)
   '7.4.7': '7.4.7',
+  '7.4.9': '7.4.9',
   '8.4.0': '8.4.0',
 }
 

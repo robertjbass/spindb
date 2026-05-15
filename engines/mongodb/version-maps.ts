@@ -17,16 +17,19 @@ import { logDebug } from '../../core/error-handler'
  */
 export const MONGODB_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → LTS
-  '7': '7.0.28',
-  '8': '8.0.17',
+  '7': '7.0.34',
+  '8': '8.0.23',
   // 2-part: major.minor → latest patch
-  '7.0': '7.0.28',
-  '8.0': '8.0.17',
-  '8.2': '8.2.3',
+  '7.0': '7.0.34',
+  '8.0': '8.0.23',
+  '8.2': '8.2.9',
   // 3-part: exact version (identity mapping)
   '7.0.28': '7.0.28',
+  '7.0.34': '7.0.34',
   '8.0.17': '8.0.17',
+  '8.0.23': '8.0.23',
   '8.2.3': '8.2.3',
+  '8.2.9': '8.2.9',
 }
 
 /**

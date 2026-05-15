@@ -18,14 +18,16 @@ import { logDebug } from '../../core/error-handler'
  */
 export const VALKEY_VERSION_MAP: Record<string, string> = {
   // 1-part: major version -> latest
-  '8': '8.0.6',
-  '9': '9.0.1',
+  '8': '8.0.9',
+  '9': '9.0.4',
   // 2-part: major.minor -> latest patch
-  '8.0': '8.0.6',
-  '9.0': '9.0.1',
+  '8.0': '8.0.9',
+  '9.0': '9.0.4',
   // 3-part: exact version (identity mapping)
   '8.0.6': '8.0.6',
+  '8.0.9': '8.0.9',
   '9.0.1': '9.0.1',
+  '9.0.4': '9.0.4',
 }
 
 /**
