@@ -164,7 +164,7 @@ export async function handleCreate(): Promise<'main' | string | void> {
 
   // At this point, all wizard values are guaranteed to be set
   const engine = selectedEngine!
-  const version = selectedVersion!
+  let version = selectedVersion!
   const name = containerName!
 
   // Step 4: Database name (defaults to container name, sanitized)
@@ -207,6 +207,19 @@ export async function handleCreate(): Promise<'main' | string | void> {
 
   const dbEngine = getEngine(engine)
   const isPostgreSQL = engine === 'postgresql'
+
+  // Pin to full resolved version so future spindb upgrades don't silently
+  // drift the container onto a different patch. See cli/commands/create.ts
+  // for the rationale.
+  const resolvedVersion = dbEngine.resolveFullVersion(version)
+  if (resolvedVersion !== version) {
+    console.log(
+      chalk.gray(
+        `  Resolved ${dbEngine.displayName} ${version} → ${resolvedVersion}`,
+      ),
+    )
+  }
+  version = resolvedVersion
 
   // For PostgreSQL and file-based DBs, download binaries FIRST
   // They include client tools needed for subsequent operations
