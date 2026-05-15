@@ -57,6 +57,10 @@ export class DuckDBEngine extends BaseEngine {
     return getBinaryUrl(version, platform, arch)
   }
 
+  resolveFullVersion(version: string): string {
+    return normalizeVersion(version)
+  }
+
   async verifyBinary(): Promise<boolean> {
     return this.isBinaryInstalled('1')
   }

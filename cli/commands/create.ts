@@ -579,6 +579,7 @@ export const createCommand = new Command('create')
           }
         }
 
+
         // Redis/Valkey use numbered databases (0-15), default to "0"
         // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
         if (engine === Engine.Redis || engine === Engine.Valkey) {
@@ -630,6 +631,21 @@ export const createCommand = new Command('create')
         }
 
         const dbEngine = getEngine(engine)
+
+        // Pin the resolved full version into the container config so future
+        // spindb upgrades (which may shift defaults['18'] from 18.4.0 → 18.6.0)
+        // don't silently move existing containers onto a different binary.
+        // The container locks itself to the version it was created against;
+        // `spindb doctor` can opt the user into upgrading later.
+        const resolvedVersion = dbEngine.resolveFullVersion(version)
+        if (resolvedVersion !== version && !options.json) {
+          console.log(
+            chalk.gray(
+              `  Resolved ${dbEngine.displayName} ${version} → ${resolvedVersion}`,
+            ),
+          )
+        }
+        version = resolvedVersion
 
         // SQLite has a simplified flow (no port, no start/stop)
         if (engine === Engine.SQLite) {
