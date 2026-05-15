@@ -22,17 +22,18 @@ import { logDebug } from '../../core/error-handler'
  */
 export const MYSQL_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → latest
-  '8': '8.4.3',
+  '8': '8.4.9',
   '9': '9.6.0',
   // 2-part: major.minor → latest patch
   '8.0': '8.0.40',
-  '8.4': '8.4.3',
+  '8.4': '8.4.9',
   '9.1': '9.1.0',
   '9.5': '9.5.0',
   '9.6': '9.6.0',
   // 3-part: exact version (identity mapping)
   '8.0.40': '8.0.40',
   '8.4.3': '8.4.3',
+  '8.4.9': '8.4.9',
   '9.1.0': '9.1.0',
   '9.5.0': '9.5.0',
   '9.6.0': '9.6.0',

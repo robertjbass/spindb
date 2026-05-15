@@ -18,11 +18,13 @@ import { logDebug } from '../../core/error-handler'
  */
 export const SQLITE_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → latest
-  '3': '3.51.2',
+  '3': '3.53.1',
   // 2-part: major.minor → latest patch
   '3.51': '3.51.2',
+  '3.53': '3.53.1',
   // 3-part: exact version (identity mapping)
   '3.51.2': '3.51.2',
+  '3.53.1': '3.53.1',
 }
 
 /**

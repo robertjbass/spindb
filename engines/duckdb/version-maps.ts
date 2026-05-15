@@ -18,11 +18,12 @@ import { logDebug } from '../../core/error-handler'
  */
 export const DUCKDB_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → latest
-  '1': '1.4.3',
+  '1': '1.4.4',
   // 2-part: major.minor → latest patch
-  '1.4': '1.4.3',
+  '1.4': '1.4.4',
   // 3-part: exact version (identity mapping)
   '1.4.3': '1.4.3',
+  '1.4.4': '1.4.4',
 }
 
 /**

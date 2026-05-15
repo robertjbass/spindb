@@ -18,16 +18,19 @@ import { logDebug } from '../../core/error-handler'
  */
 export const MARIADB_VERSION_MAP: Record<string, string> = {
   // 1-part: major version → LTS
-  '10': '10.11.15',
-  '11': '11.8.5',
+  '10': '10.11.16',
+  '11': '11.8.6',
   // 2-part: major.minor → latest patch
-  '10.11': '10.11.15',
-  '11.4': '11.4.5',
-  '11.8': '11.8.5',
+  '10.11': '10.11.16',
+  '11.4': '11.4.10',
+  '11.8': '11.8.6',
   // 3-part: exact version (identity mapping)
   '10.11.15': '10.11.15',
+  '10.11.16': '10.11.16',
   '11.4.5': '11.4.5',
+  '11.4.10': '11.4.10',
   '11.8.5': '11.8.5',
+  '11.8.6': '11.8.6',
 }
 
 /**
