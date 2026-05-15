@@ -123,12 +123,19 @@ export function validateSemverLikeVersion(
  */
 export function isShorthandVersion(version: string): boolean {
   if (!version || version === 'unknown') return false
-  // Compound version like '17-0.107.0' is full; '17' alone is shorthand.
+
+  // Compound format (postgresql-documentdb): `<pg-major>-<docdb-version>` like
+  // `17-0.107.0`. The presence of a `-` AND a dotted suffix means it's the
+  // full pinned form. Bare `17` (no `-` at all) is handled by the plain-semver
+  // branch below as shorthand. A dash with no suffix dots (theoretical e.g.
+  // `17-rc1`) is still shorthand — there's no patch component.
   if (version.includes('-')) {
-    const [base] = version.split('-', 2)
-    return !base.includes('.')
+    const [, suffix = ''] = version.split('-', 2)
+    return !suffix.includes('.')
   }
+
+  // Plain semver-like: 1-part `17` / 2-part `8.4` are shorthand;
+  // 3-part `17.10.0` and 4-part ClickHouse `25.12.3.21` are full.
   const parts = version.split('.')
-  // Full = 3+ parts (semver / ClickHouse). Shorthand = 1 or 2 parts.
   return parts.length < 3
 }

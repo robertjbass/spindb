@@ -273,12 +273,13 @@ export class ContainerManager {
 
     // List SQLite containers from registry
     const sqliteEntries = await sqliteRegistry.list()
+    const sqliteVersion = fileBasedEngineVersion('sqlite')
     for (const entry of sqliteEntries) {
       const fileExists = existsSync(entry.filePath)
       containers.push({
         name: entry.name,
         engine: Engine.SQLite,
-        version: '3',
+        version: sqliteVersion,
         port: 0,
         database: entry.filePath,
         databases: [entry.filePath],
@@ -289,12 +290,13 @@ export class ContainerManager {
 
     // List DuckDB containers from registry
     const duckdbEntries = await duckdbRegistry.list()
+    const duckdbVersion = fileBasedEngineVersion('duckdb')
     for (const entry of duckdbEntries) {
       const fileExists = existsSync(entry.filePath)
       containers.push({
         name: entry.name,
         engine: Engine.DuckDB,
-        version: '1',
+        version: duckdbVersion,
         port: 0,
         database: entry.filePath,
         databases: [entry.filePath],

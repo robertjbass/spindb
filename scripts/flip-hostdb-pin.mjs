@@ -95,20 +95,24 @@ const pkgPath = join(ROOT, 'package.json')
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
 const previous = pkg.dependencies.hostdb
 if (previous === targetVersion) {
-  console.log(`  hostdb is already pinned to ${targetVersion}; nothing to do`)
-  process.exit(0)
+  console.log(`  hostdb is already pinned to ${targetVersion}`)
+} else {
+  pkg.dependencies.hostdb = targetVersion
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+  console.log(`  ${previous} -> ${targetVersion}`)
 }
-pkg.dependencies.hostdb = targetVersion
-writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
-console.log(`  ${previous} -> ${targetVersion}`)
 
+// Always run install to catch the case where package.json was already pinned
+// but pnpm-lock.yaml still points at file:../hostdb (script was interrupted,
+// or someone ran `pnpm install` after a partial flip).
 console.log(`\nRegenerating pnpm-lock.yaml...`)
 exec('pnpm', ['install'])
 
-console.log(`\nRunning test suite...`)
+console.log(`\nRunning full test suite...`)
 exec('pnpm', ['lint'])
 exec('pnpm', ['test:unit'])
 exec('pnpm', ['test:hostdb-sync'])
+exec('pnpm', ['test:cli'])
 
 console.log(`\n✓ Done. Review the diff, then:`)
 console.log(
