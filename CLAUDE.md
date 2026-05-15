@@ -65,7 +65,7 @@ Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements
 
 ### Critical: When Adding/Modifying Engines
 
-1. **Version maps** (`engines/{engine}/version-maps.ts`) MUST match [hostdb databases.json](https://github.com/robertjbass/hostdb/blob/main/databases.json) exactly. Mismatch = broken downloads or missing versions.
+1. **Version maps** (`engines/{engine}/version-maps.ts`) are **thin wrappers** over the `hostdb` npm package — they import `resolveVersion`, `getSupportedMajorVersions`, `listVersions` from hostdb and rebuild the legacy `<ENGINE>_VERSION_MAP` + `SUPPORTED_MAJOR_VERSIONS` exports at module-load time. To bump a version, bump `hostdb` in `package.json`. Do NOT edit MAP entries by hand. See `engines/sqlite/version-maps.ts` as the simplest template, `engines/ferretdb/version-maps.ts` for the most complex (dual-engine: `ferretdb` + `postgresql-documentdb`).
 
 2. **KNOWN_BINARY_TOOLS** in `core/dependency-manager.ts` — all engine tools MUST be listed here. Missing entries cause `findBinary()` to skip config lookup and silently fall back to PATH.
 
@@ -81,10 +81,29 @@ All engines use the factory in `core/hostdb-releases-factory.ts` (`createHostdbR
 
 The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the authoritative version source, with a three-tier fallback: **databases.json → locally installed binaries → hardcoded version map**. Do NOT write custom fetch/cache/fallback logic in engine files — use the factory.
 
-**hostdb data files** (fetched from `registry.layerbase.host`, fallback to GitHub raw):
-- `databases.json` — version listings, platform support, CLI tools per engine (used by factory for version lookups)
+**hostdb data files** are bundled inside the `hostdb` npm package. `core/hostdb-metadata.ts` reads them via `hostdb`'s `loadDatabasesJson()` / `loadDownloadsJson()` — no network call at runtime. The 5-minute cache + `registry.layerbase.host` / GitHub Raw fallback only kicks in if the bundled load throws (corrupt install, etc.). What's bundled:
+- `databases.json` — version listings, platform support, CLI tools per engine (used by factory for version lookups, defaults block, deprecation flags)
 - `downloads.json` — package manager install commands for tools
-- `releases.json` — legacy flat version list (still used by `tests/integration/hostdb-sync.test.ts` for validation, and by binary download URL resolution in `core/hostdb-client.ts`)
+- `releases.json` — flat version list with R2 URLs + sha256s (used by `getReleaseInfo()` in hostdb's resolver, by `core/hostdb-client.ts` for binary downloads, and by `tests/integration/hostdb-sync.test.ts` as the bundled-vs-live drift check)
+
+### hostdb npm Package & Pinning Strategy
+
+`hostdb` is the single source of truth for which versions exist, how to resolve shorthand inputs (`'17'` → `'17.10.0'`), and where to download binaries. Spindb's `package.json` should pin **exactly** — not `^` or `~` — because:
+
+- A patch-level hostdb release can add NEW VERSIONS (e.g., `hostdb@0.31.1` adds PostgreSQL 17.11.0). With `^0.31.0`, an end-user `pnpm install spindb@0.49.0` could pick up `hostdb@0.31.5` with versions spindb's tests never validated against.
+- The `tests/integration/hostdb-sync.test.ts` drift check passes against a specific hostdb snapshot. Allowing the snapshot to change under your feet defeats the test.
+- Spindb's `cli/ui/prompts.ts` displays version lists derived from hostdb. Users expect the same spindb version to show the same options.
+
+**Correct pin format:** `"hostdb": "0.31.0"` (no caret, no tilde). Bumping hostdb is an explicit spindb release.
+
+**Bump-hostdb workflow:**
+1. New hostdb published to npm (registry shows new version).
+2. Update `spindb/package.json`: change `hostdb` to exact new version.
+3. `pnpm install` regenerates lockfile.
+4. `pnpm test:hostdb-sync` confirms bundled snapshot matches live registry.
+5. `pnpm test:unit` passes (version maps auto-rebuild from new snapshot).
+6. Commit: `chore(deps): bump hostdb 0.31.0 → 0.32.0` describing new versions / deprecations.
+7. Standard feature → dev → main PR flow.
 
 ### Binary Sources
 
