@@ -102,3 +102,33 @@ export function validateSemverLikeVersion(
     )
   }
 }
+
+/**
+ * Return true if a version string is shorthand (not a full X.Y.Z form).
+ *
+ * Used by `spindb start` to detect container.version entries that pre-date
+ * eager-resolution (A9) and auto-migrate them to the full form so the
+ * container becomes drift-immune.
+ *
+ * Handles:
+ *   - 1-part shorthand: '17', '8'
+ *   - 2-part shorthand: '8.4', '11.8', '25.12'
+ *   - Compound shorthand: '17' (postgresql-documentdb v1 backend)
+ *   - Skips full 3-part semver: '17.10.0', '11.8.6'
+ *   - Skips 4-part ClickHouse semver: '25.12.3.21'
+ *   - Skips compound full form: '17-0.107.0'
+ *
+ * Returns false for strings that are already pinned-full or non-version
+ * sentinels like 'unknown' (those are handled by the caller).
+ */
+export function isShorthandVersion(version: string): boolean {
+  if (!version || version === 'unknown') return false
+  // Compound version like '17-0.107.0' is full; '17' alone is shorthand.
+  if (version.includes('-')) {
+    const [base] = version.split('-', 2)
+    return !base.includes('.')
+  }
+  const parts = version.split('.')
+  // Full = 3+ parts (semver / ClickHouse). Shorthand = 1 or 2 parts.
+  return parts.length < 3
+}
