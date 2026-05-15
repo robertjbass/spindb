@@ -261,9 +261,12 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 SpinDB uses "container" terminology loosely—there's no Docker involved. When you create a container, SpinDB:
 
-1. **Downloads database binaries** from [hostdb](https://github.com/robertjbass/hostdb) or uses system installations
-2. **Creates isolated data directories** at `~/.spindb/containers/{engine}/{name}/`
-3. **Runs databases as native processes** on your machine
+1. **Resolves the version** via the [`hostdb` npm package](https://www.npmjs.com/package/hostdb), which is pinned as a SpinDB dependency. `hostdb` bundles a registry snapshot (`databases.json` + `releases.json`) at publish time, so the resolution is offline and deterministic — `spindb create postgresql 18` always picks the exact same patch for a given SpinDB release.
+2. **Downloads database binaries** from `registry.layerbase.host` (Cloudflare R2 mirror of [hostdb](https://github.com/robertjbass/hostdb)). When a new database version is published to hostdb, SpinDB picks it up on the next release (we bump the `hostdb` dep and republish SpinDB).
+3. **Creates isolated data directories** at `~/.spindb/containers/{engine}/{name}/`
+4. **Runs databases as native processes** on your machine
+
+The container config persists the **full resolved version** (e.g. `18.4.0`), not the shorthand (`18`). This means a future SpinDB upgrade will not silently switch your existing data to a different patch — the binary you originally built against is what your container keeps running on. Use `spindb doctor --dry-run` to see version drift; `spindb doctor` (interactive) or `spindb doctor --fix` to migrate older containers created before this guarantee was in place.
 
 ### Storage Layout
 
