@@ -1,94 +1,56 @@
 /**
- * MongoDB version mapping
+ * MongoDB Version Maps
  *
- * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
- * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ * Thin wrapper around the `hostdb` npm package. See engines/sqlite/version-maps.ts
+ * for the architecture rationale — hostdb is the single source of truth.
  *
- * To update: Check releases.json, find databases.mongodb, copy all version strings.
+ * Note: SUPPORTED_MAJOR_VERSIONS is 2-part (e.g., '8.0') to preserve the
+ * convention used by `core/version-migration.ts:getMajorVersion()`. 1-part
+ * keys '7' and '8' still resolve via the MAP (LTS-pick: '8' → 8.0.23, not 8.2.9).
  */
 
+import {
+  resolveVersion as hostdbResolveVersion,
+  getSupportedMajorVersions,
+  listVersions,
+} from 'hostdb'
 import { logDebug } from '../../core/error-handler'
 
-/**
- * Map major versions to full versions
- * Keys are major.minor versions (e.g., "7.0", "8.0", "8.2")
- * Values are full versions from hostdb releases.json
- */
-export const MONGODB_VERSION_MAP: Record<string, string> = {
-  // 1-part: major version → LTS
-  '7': '7.0.34',
-  '8': '8.0.23',
-  // 2-part: major.minor → latest patch
-  '7.0': '7.0.34',
-  '8.0': '8.0.23',
-  '8.2': '8.2.9',
-  // 3-part: exact version (identity mapping)
-  '7.0.28': '7.0.28',
-  '7.0.34': '7.0.34',
-  '8.0.17': '8.0.17',
-  '8.0.23': '8.0.23',
-  '8.2.3': '8.2.3',
-  '8.2.9': '8.2.9',
+const ENGINE = 'mongodb'
+
+function buildVersionMap(): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const major of getSupportedMajorVersions(ENGINE)) {
+    const r = hostdbResolveVersion(ENGINE, major)
+    if (r) map[major] = r
+  }
+  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
+    const r = hostdbResolveVersion(ENGINE, minor)
+    if (r) map[minor] = r
+  }
+  for (const full of listVersions(ENGINE, { format: 'full' })) {
+    map[full] = full
+  }
+  return map
 }
 
-/**
- * Supported major MongoDB versions (2-part format).
- * Used for grouping and display purposes.
- */
-export const SUPPORTED_MAJOR_VERSIONS = ['7.0', '8.0', '8.2']
+export const MONGODB_VERSION_MAP: Record<string, string> = buildVersionMap()
 
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- */
+export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
+  format: 'major-minor',
+})
+
 export const FALLBACK_VERSION_MAP: Record<string, string> = MONGODB_VERSION_MAP
 
-/**
- * Get the full version for a major version
- * @param majorVersion - Major version (e.g., "7.0", "8.0")
- * @returns Full version or null if not found
- */
 export function getFullVersion(majorVersion: string): string | null {
-  // Try exact match first
-  if (MONGODB_VERSION_MAP[majorVersion]) {
-    return MONGODB_VERSION_MAP[majorVersion]
-  }
-
-  // Try matching major only (e.g., "8" -> highest 8.x version)
-  const majorOnly = majorVersion.split('.')[0]
-  const matchingVersions = Object.entries(MONGODB_VERSION_MAP)
-    .filter(([key]) => key.split('.')[0] === majorOnly)
-    .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
-
-  if (matchingVersions.length > 0) {
-    return matchingVersions[0][1]
-  }
-
-  return null
+  return hostdbResolveVersion(ENGINE, majorVersion)
 }
 
-/**
- * Normalize a version string to a full version
- * @param version - Version string (major, major.minor, or full)
- * @returns Full version string
- */
 export function normalizeVersion(version: string): string {
-  // If already a full version (x.y.z), return as-is
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
-    return version
-  }
-
-  // Delegate to getFullVersion for major/major.minor lookup
-  const fullVersion = getFullVersion(version)
-  if (fullVersion) {
-    return fullVersion
-  }
-
-  // Unknown version format - log debug and return as-is
-  // This may cause download failures if the version doesn't exist in hostdb
+  const resolved = hostdbResolveVersion(ENGINE, version)
+  if (resolved) return resolved
   logDebug(
-    `MongoDB version '${version}' not in version map, may not be available in hostdb`,
+    `MongoDB version '${version}' not in hostdb, may not be available for download`,
   )
   return version
 }

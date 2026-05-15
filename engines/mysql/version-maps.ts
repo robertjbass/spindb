@@ -1,86 +1,60 @@
 /**
  * MySQL Version Maps
  *
- * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
- * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ * Thin wrapper around the `hostdb` npm package. See engines/sqlite/version-maps.ts
+ * for the architecture rationale — hostdb is the single source of truth.
  *
- * When updating versions:
- * 1. Check hostdb releases.json for available versions
- * 2. Update MYSQL_VERSION_MAP to match
+ * Note: SUPPORTED_MAJOR_VERSIONS is 2-part (e.g., '8.4') to preserve the
+ * convention used by `core/version-migration.ts:getMajorVersion()`. The 1-part
+ * keys '8' and '9' still resolve via the MAP (LTS-pick: '8' → 8.4.9, not 9.6.0).
+ *
+ * Deprecated patches (8.0.40, 9.1.0, 9.5.0) remain resolvable so existing
+ * containers keep working — hostdb's `enabled !== false` check keeps them in
+ * the available-versions list; only `enabled: false` removes a version entirely.
  */
 
+import {
+  resolveVersion as hostdbResolveVersion,
+  getSupportedMajorVersions,
+  listVersions,
+} from 'hostdb'
 import { logDebug } from '../../core/error-handler'
 
-/**
- * Map of major MySQL versions to their latest stable patch versions.
- * Must match versions available in hostdb releases.json.
- *
- * Deprecated versions (8.0.40, 9.1.0, 9.5.0) are retained for backward
- * compatibility with existing containers. The deprecation status is
- * sourced from hostdb databases.json at runtime.
- */
-export const MYSQL_VERSION_MAP: Record<string, string> = {
-  // 1-part: major version → latest
-  '8': '8.4.9',
-  '9': '9.6.0',
-  // 2-part: major.minor → latest patch
-  '8.0': '8.0.40',
-  '8.4': '8.4.9',
-  '9.1': '9.1.0',
-  '9.5': '9.5.0',
-  '9.6': '9.6.0',
-  // 3-part: exact version (identity mapping)
-  '8.0.40': '8.0.40',
-  '8.4.3': '8.4.3',
-  '8.4.9': '8.4.9',
-  '9.1.0': '9.1.0',
-  '9.5.0': '9.5.0',
-  '9.6.0': '9.6.0',
+const ENGINE = 'mysql'
+
+function buildVersionMap(): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const major of getSupportedMajorVersions(ENGINE)) {
+    const r = hostdbResolveVersion(ENGINE, major)
+    if (r) map[major] = r
+  }
+  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
+    const r = hostdbResolveVersion(ENGINE, minor)
+    if (r) map[minor] = r
+  }
+  for (const full of listVersions(ENGINE, { format: 'full' })) {
+    map[full] = full
+  }
+  return map
 }
 
-/**
- * Supported major MySQL versions (2-part format).
- * Used for grouping and display purposes.
- * Includes deprecated versions so existing containers remain functional.
- */
-export const SUPPORTED_MAJOR_VERSIONS = ['8.0', '8.4', '9.1', '9.5', '9.6']
+export const MYSQL_VERSION_MAP: Record<string, string> = buildVersionMap()
 
-/**
- * Fallback map of major versions to stable patch versions
- * Used when hostdb repository is unreachable
- */
+export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
+  format: 'major-minor',
+})
+
 export const FALLBACK_VERSION_MAP: Record<string, string> = MYSQL_VERSION_MAP
 
-/**
- * Get the full version string for a major version.
- *
- * @param majorVersion - Major version (e.g., '8.0', '9')
- * @returns Full version string (e.g., '8.0.40') or null if not supported
- */
 export function getFullVersion(majorVersion: string): string | null {
-  return MYSQL_VERSION_MAP[majorVersion] || null
+  return hostdbResolveVersion(ENGINE, majorVersion)
 }
 
-/**
- * Normalize a version string to X.Y.Z format.
- *
- * @param version - Version string (e.g., '8.0', '8.0.40', '9')
- * @returns Normalized version (e.g., '8.0.40', '9.5.0') matching hostdb releases
- */
 export function normalizeVersion(version: string): string {
-  // If it's a key in the map (major, major.minor, or full version), return the mapped value
-  // This handles all known versions including identity mappings for full versions
-  const fullVersion = MYSQL_VERSION_MAP[version]
-  if (fullVersion) {
-    return fullVersion
-  }
+  const resolved = hostdbResolveVersion(ENGINE, version)
+  if (resolved) return resolved
 
-  // Unknown version - warn and return as-is
-  // This may cause download failures if the version doesn't exist in hostdb
   const parts = version.split('.')
-
-  // Validate format: must be 1-3 numeric segments (e.g., "9", "8.0", "8.0.40")
   const isValidFormat =
     parts.length >= 1 &&
     parts.length <= 3 &&
@@ -92,7 +66,7 @@ export function normalizeVersion(version: string): string {
     )
   } else {
     logDebug(
-      `MySQL version '${version}' not in version map, may not be available in hostdb`,
+      `MySQL version '${version}' not in hostdb, may not be available for download`,
     )
   }
   return version
