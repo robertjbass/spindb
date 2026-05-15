@@ -10,6 +10,10 @@
  * - downloads.json: Provides package manager commands for installing tools
  */
 
+import {
+  loadDatabasesJson as hostdbLoadDatabasesJson,
+  loadDownloadsJson as hostdbLoadDownloadsJson,
+} from 'hostdb'
 import { logDebug } from './error-handler'
 import { LAYERBASE_REGISTRY_BASE } from './hostdb-client'
 import type { Engine } from '../types'
@@ -17,7 +21,7 @@ import type { Engine } from '../types'
 const GITHUB_RAW_BASE =
   'https://raw.githubusercontent.com/robertjbass/hostdb/main'
 
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes (network fallback only)
 
 type CliTools = {
   server: string | null
@@ -161,31 +165,59 @@ export function unwrapDatabasesJson(
   return raw as DatabasesJson
 }
 
+/**
+ * Returns databases.json bundled inside the installed `hostdb` npm package.
+ *
+ * Network-free: hostdb's published tarball includes a snapshot of databases.json
+ * built at publish time. SpinDB depends on a pinned version of hostdb, so the
+ * snapshot is deterministic for any given SpinDB build. The 5-minute network
+ * cache + fetch fallback below remains only as a defensive measure in case
+ * the bundled file ever fails to load (e.g., corrupt install).
+ */
 export async function fetchDatabasesJson(): Promise<DatabasesJson> {
-  return fetchWithCache(
-    [
-      `${LAYERBASE_REGISTRY_BASE}/databases.json`,
-      `${GITHUB_RAW_BASE}/databases.json`,
-    ],
-    () => databasesCache,
-    (c) => {
-      databasesCache = c
-    },
-    unwrapDatabasesJson,
-  )
+  try {
+    const raw = hostdbLoadDatabasesJson() as unknown as Record<string, unknown>
+    return unwrapDatabasesJson(raw)
+  } catch (error) {
+    logDebug('Falling back to network for databases.json', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return fetchWithCache(
+      [
+        `${LAYERBASE_REGISTRY_BASE}/databases.json`,
+        `${GITHUB_RAW_BASE}/databases.json`,
+      ],
+      () => databasesCache,
+      (c) => {
+        databasesCache = c
+      },
+      unwrapDatabasesJson,
+    )
+  }
 }
 
+/**
+ * Returns downloads.json bundled inside the installed `hostdb` npm package.
+ * Same offline guarantee as fetchDatabasesJson — network fallback is defensive only.
+ */
 export async function fetchDownloadsJson(): Promise<DownloadsJson> {
-  return fetchWithCache(
-    [
-      `${LAYERBASE_REGISTRY_BASE}/downloads.json`,
-      `${GITHUB_RAW_BASE}/downloads.json`,
-    ],
-    () => downloadsCache,
-    (c) => {
-      downloadsCache = c
-    },
-  )
+  try {
+    return hostdbLoadDownloadsJson() as DownloadsJson
+  } catch (error) {
+    logDebug('Falling back to network for downloads.json', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return fetchWithCache(
+      [
+        `${LAYERBASE_REGISTRY_BASE}/downloads.json`,
+        `${GITHUB_RAW_BASE}/downloads.json`,
+      ],
+      () => downloadsCache,
+      (c) => {
+        downloadsCache = c
+      },
+    )
+  }
 }
 
 /**
