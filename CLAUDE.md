@@ -105,6 +105,16 @@ The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the author
 6. Commit: `chore(deps): bump hostdb 0.31.0 → 0.32.0` describing new versions / deprecations.
 7. Standard feature → dev → main PR flow.
 
+### Container version pinning (eager resolution + auto-migrate)
+
+Two layered guarantees prevent silent version drift on the user's data:
+
+1. **At create time** (`cli/commands/create.ts`): the major/major-minor shorthand the user passes (`spindb create postgresql 18`) is resolved to a full version through `dbEngine.resolveFullVersion()` BEFORE `containerManager.create()` writes container.json. New containers always persist `version: '18.4.0'`, never `'18'`.
+
+2. **At start time** (`cli/commands/start.ts`): if a container.json still has shorthand (legacy from an older spindb), `isShorthandVersion()` from `core/version-utils.ts` detects it. Spindb resolves through hostdb, writes the full version back to disk, prints a one-line `uiInfo` that the container is now pinned to `<full>`. From that point on the container is drift-immune. Skipped for file-based engines (SQLite/DuckDB don't pin per data file) and remote/`'unknown'` containers.
+
+Together these mean: new containers are immune from day one; legacy containers self-heal on their next start.
+
 ### Binary Sources
 
 Primary: Layerbase registry (`registry.layerbase.host`). Fallback: GitHub hostdb releases (toggled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). All download/fetch logic is centralized in `core/hostdb-client.ts` (`fetchWithRegistryFallback()`, `fetchHostdbReleases()`, `getReleasesUrls()`).
