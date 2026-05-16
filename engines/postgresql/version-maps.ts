@@ -1,91 +1,47 @@
 /**
  * PostgreSQL Version Maps
  *
- * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
- * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
- *
- * When updating versions:
- * 1. Check hostdb releases.json for available versions
- * 2. Update POSTGRESQL_VERSION_MAP to match
+ * Thin wrapper around the `hostdb` npm package. See engines/sqlite/version-maps.ts
+ * for the architecture rationale — hostdb is the single source of truth.
  */
 
-/**
- * Map of major PostgreSQL versions to their latest stable patch versions.
- * Must match versions available in hostdb releases.json.
- */
-export const POSTGRESQL_VERSION_MAP: Record<string, string> = {
-  // 1-part: major version → latest patch
-  '15': '15.18.0',
-  '16': '16.14.0',
-  '17': '17.10.0',
-  '18': '18.4.0',
-  // 2-part: major.minor → latest patch
-  '15.15': '15.15.0',
-  '15.18': '15.18.0',
-  '16.11': '16.11.0',
-  '16.14': '16.14.0',
-  '17.7': '17.7.0',
-  '17.10': '17.10.0',
-  '18.1': '18.1.0',
-  '18.4': '18.4.0',
-  // 3-part: exact version (identity mapping)
-  '15.15.0': '15.15.0',
-  '15.18.0': '15.18.0',
-  '16.11.0': '16.11.0',
-  '16.14.0': '16.14.0',
-  '17.7.0': '17.7.0',
-  '17.10.0': '17.10.0',
-  '18.1.0': '18.1.0',
-  '18.4.0': '18.4.0',
+import {
+  resolveVersion as hostdbResolveVersion,
+  getSupportedMajorVersions,
+  listVersions,
+} from 'hostdb'
+
+const ENGINE = 'postgresql'
+
+function buildVersionMap(): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const major of getSupportedMajorVersions(ENGINE)) {
+    const r = hostdbResolveVersion(ENGINE, major)
+    if (r) map[major] = r
+  }
+  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
+    const r = hostdbResolveVersion(ENGINE, minor)
+    if (r) map[minor] = r
+  }
+  for (const full of listVersions(ENGINE, { format: 'full' })) {
+    map[full] = full
+  }
+  return map
 }
 
-/**
- * Supported major PostgreSQL versions (1-part format).
- * Used for grouping and display purposes.
- */
-export const SUPPORTED_MAJOR_VERSIONS = ['15', '16', '17', '18']
+export const POSTGRESQL_VERSION_MAP: Record<string, string> = buildVersionMap()
 
-/**
- * Get the full version string for a major version.
- *
- * @param majorVersion - Major version (e.g., '17')
- * @returns Full version string (e.g., '17.7.0') or null if not supported
- */
+export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
+
 export function getFullVersion(majorVersion: string): string | null {
-  return POSTGRESQL_VERSION_MAP[majorVersion] || null
+  return hostdbResolveVersion(ENGINE, majorVersion)
 }
 
-/**
- * Normalize a version string to X.Y.Z format.
- *
- * @param version - Version string (e.g., '17', '17.7', '17.7.0')
- * @returns Normalized version (e.g., '17.7.0')
- */
 export function normalizeVersion(version: string): string {
-  // If it's a major version key in the map, return the full version
-  const fullVersion = POSTGRESQL_VERSION_MAP[version]
-  if (fullVersion) {
-    return fullVersion
-  }
-
-  // If it's already a known full version (a value in the map), return as-is
-  const knownVersions = Object.values(POSTGRESQL_VERSION_MAP)
-  if (knownVersions.includes(version)) {
-    return version
-  }
-
-  // If it looks like a full version (X.Y.Z), return as-is but warn
-  if (/^\d+\.\d+\.\d+$/.test(version)) {
-    console.warn(
-      `PostgreSQL version '${version}' not in version map, may not be available in hostdb`,
-    )
-    return version
-  }
-
-  // Unknown version format - warn and return unchanged
+  const resolved = hostdbResolveVersion(ENGINE, version)
+  if (resolved) return resolved
   console.warn(
-    `PostgreSQL version '${version}' not in version map, may not be available in hostdb`,
+    `PostgreSQL version '${version}' not in hostdb, may not be available for download`,
   )
   return version
 }

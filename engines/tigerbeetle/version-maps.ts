@@ -1,68 +1,53 @@
 /**
  * TigerBeetle Version Maps
  *
- * TEMPORARY: This version map will be replaced by the hostdb npm package once published.
- * Until then, manually keep this in sync with robertjbass/hostdb releases.json:
- * https://github.com/robertjbass/hostdb/blob/main/releases.json
+ * Thin wrapper around the `hostdb` npm package. See engines/sqlite/version-maps.ts
+ * for the architecture rationale — hostdb is the single source of truth.
  *
- * When updating versions:
- * 1. Check hostdb releases.json for available versions
- * 2. Update TIGERBEETLE_VERSION_MAP to match
+ * SUPPORTED_MAJOR_VERSIONS is 2-part (e.g., '0.16') to preserve the existing
+ * spindb convention. The 1-part key '0' still resolves via the MAP.
  */
 
+import {
+  resolveVersion as hostdbResolveVersion,
+  getSupportedMajorVersions,
+  listVersions,
+} from 'hostdb'
 import { logDebug } from '../../core/error-handler'
 
-/**
- * Map of major TigerBeetle versions to their latest stable patch versions.
- * Must match versions available in hostdb releases.json.
- *
- * TigerBeetle uses xy-format grouping (like MariaDB/ClickHouse):
- * 0.16.70 groups as "0.16"
- */
-export const TIGERBEETLE_VERSION_MAP: Record<string, string> = {
-  // 1-part: major version → latest
-  '0': '0.16.70',
-  // 2-part: major.minor → latest patch
-  '0.16': '0.16.70',
-  // 3-part: exact version (identity mapping)
-  '0.16.70': '0.16.70',
-}
+const ENGINE = 'tigerbeetle'
 
-/**
- * Supported major TigerBeetle versions (2-part format).
- * Derived from TIGERBEETLE_VERSION_MAP keys to avoid duplication.
- * Used for grouping and display purposes.
- */
-export const SUPPORTED_MAJOR_VERSIONS = Object.keys(
-  TIGERBEETLE_VERSION_MAP,
-).filter((key) => key.split('.').length === 2)
-
-/**
- * Get the full version string for a major version.
- *
- * @param majorVersion - Major version (e.g., '0.16')
- * @returns Full version string (e.g., '0.16.70') or null if not supported
- */
-export function getFullVersion(majorVersion: string): string | null {
-  return TIGERBEETLE_VERSION_MAP[majorVersion] || null
-}
-
-/**
- * Normalize a version string to X.Y.Z format.
- *
- * @param version - Version string (e.g., '0', '0.16', '0.16.70')
- * @returns Normalized version (e.g., '0.16.70')
- */
-export function normalizeVersion(version: string): string {
-  // If it's a version key in the map (major, major.minor, or full), return the mapped version
-  const fullVersion = TIGERBEETLE_VERSION_MAP[version]
-  if (fullVersion) {
-    return fullVersion
+function buildVersionMap(): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const major of getSupportedMajorVersions(ENGINE)) {
+    const r = hostdbResolveVersion(ENGINE, major)
+    if (r) map[major] = r
   }
+  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
+    const r = hostdbResolveVersion(ENGINE, minor)
+    if (r) map[minor] = r
+  }
+  for (const full of listVersions(ENGINE, { format: 'full' })) {
+    map[full] = full
+  }
+  return map
+}
 
-  // Unknown version - log debug and return as-is
+export const TIGERBEETLE_VERSION_MAP: Record<string, string> = buildVersionMap()
+
+export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
+  format: 'major-minor',
+})
+
+export function getFullVersion(majorVersion: string): string | null {
+  return hostdbResolveVersion(ENGINE, majorVersion)
+}
+
+export function normalizeVersion(version: string): string {
+  const resolved = hostdbResolveVersion(ENGINE, version)
+  if (resolved) return resolved
   logDebug(
-    `TigerBeetle version '${version}' not in version map, may not be available in hostdb`,
+    `TigerBeetle version '${version}' not in hostdb, may not be available for download`,
   )
   return version
 }

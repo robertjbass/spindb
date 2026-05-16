@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.49.0",
+  "version": "0.50.0",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Zero-config Docker-free local database containers. Create, backup, and clone a variety of popular databases.",
@@ -38,7 +38,8 @@
     "format": "prettier --write .",
     "check": "tsc --noEmit",
     "lint": "eslint . && pnpm check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "flip-hostdb-pin": "node scripts/flip-hostdb-pin.mjs"
   },
   "keywords": [
     "hostdb",
@@ -92,6 +93,7 @@
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "hostdb": "0.31.0",
     "inquirer": "^9.3.7",
     "inquirer-autocomplete-prompt": "^3.0.1",
     "ora": "^8.1.1",

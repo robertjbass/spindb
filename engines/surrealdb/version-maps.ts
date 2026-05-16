@@ -1,41 +1,48 @@
 /**
- * SurrealDB version mapping
+ * SurrealDB Version Maps
  *
- * Maps short version aliases to full versions from hostdb releases.
- * MUST stay in sync with hostdb databases.json
+ * Thin wrapper around the `hostdb` npm package. See engines/sqlite/version-maps.ts
+ * for the architecture rationale — hostdb is the single source of truth.
  */
 
-// Full version map for SurrealDB
-export const SURREALDB_VERSION_MAP: Record<string, string> = {
-  '2': '2.3.2',
-  '2.3': '2.3.2',
-  '2.3.2': '2.3.2',
+import {
+  resolveVersion as hostdbResolveVersion,
+  getSupportedMajorVersions,
+  listVersions,
+} from 'hostdb'
+
+const ENGINE = 'surrealdb'
+
+function buildVersionMap(): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const major of getSupportedMajorVersions(ENGINE)) {
+    const r = hostdbResolveVersion(ENGINE, major)
+    if (r) map[major] = r
+  }
+  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
+    const r = hostdbResolveVersion(ENGINE, minor)
+    if (r) map[minor] = r
+  }
+  for (const full of listVersions(ENGINE, { format: 'full' })) {
+    map[full] = full
+  }
+  return map
 }
 
-// Supported major versions (for CLI display)
-export const SUPPORTED_MAJOR_VERSIONS = ['2']
+export const SURREALDB_VERSION_MAP: Record<string, string> = buildVersionMap()
 
-// Default version
-export const DEFAULT_VERSION = '2'
+export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
-/**
- * Normalize a version string to its full version
- * e.g., '2' -> '2.3.2', '2.3' -> '2.3.2'
- */
+export const DEFAULT_VERSION = SUPPORTED_MAJOR_VERSIONS[0] ?? '2'
+
 export function normalizeVersion(version: string): string {
-  return SURREALDB_VERSION_MAP[version] || version
+  return hostdbResolveVersion(ENGINE, version) ?? version
 }
 
-/**
- * Check if a version is supported
- */
 export function isVersionSupported(version: string): boolean {
   return version in SURREALDB_VERSION_MAP
 }
 
-/**
- * Get the latest patch version for a major version
- */
 export function getLatestPatch(majorVersion: string): string | undefined {
   return SURREALDB_VERSION_MAP[majorVersion]
 }
