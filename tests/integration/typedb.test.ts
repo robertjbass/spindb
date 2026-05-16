@@ -287,6 +287,54 @@ describe('TypeDB Integration Tests', () => {
     console.log('   Created user successfully')
   })
 
+  // BUG-13 regression: createUser's "already exists" fallback used the
+  // wrong console subcommand (`user password-update` instead of the
+  // canonical `user update-password`), so EVERY password rotation against
+  // an existing user silently failed. Layerbase-cloud calls this exact
+  // path on every fresh TypeDB provision via setup-database.sh's
+  // `spindb users create <db> admin --password <pw>` — a failure leaves
+  // TypeDB on its default `admin/password` while cloud stores the rotated
+  // value, surfacing as a 401 AUT1 on every query.
+  //
+  // We avoid rotating the built-in admin here because subsequent tests
+  // (and the test harness's cleanup path) authenticate as admin/password.
+  // Instead, create a fresh user twice with different passwords — the
+  // second call exercises the "already exists" → update-password branch.
+  it('should rotate password on an existing user (BUG-13 regression)', async () => {
+    console.log(`\n Testing createUser password rotation on existing user...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+    const rotationUser = 'bug13user'
+
+    // First call goes through the `user create` happy path.
+    await engine.createUser(config!, {
+      username: rotationUser,
+      password: 'initial-pw-456',
+      database: DATABASE,
+    })
+
+    // Second call triggers `user create` → "already exists" → falls through
+    // to `user update-password <name> <newpw>`. Before BUG-13 fix this
+    // threw `Failed to update user password: Unrecognised 'user'
+    // subcommand: 'password-update bug13user rotated-pw-789'`.
+    const rotated = await engine.createUser(config!, {
+      username: rotationUser,
+      password: 'rotated-pw-789',
+      database: DATABASE,
+    })
+    assertEqual(rotated.username, rotationUser, 'Username should match')
+    assertEqual(
+      rotated.password,
+      'rotated-pw-789',
+      'Returned password should be the rotated one',
+    )
+
+    console.log('   Password rotation against existing user succeeded')
+  })
+
   it('should clone container using backup/restore', async () => {
     console.log(
       `\n Creating container "${clonedContainerName}" via backup/restore...`,
