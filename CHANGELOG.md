@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-05-16
+
+### Fixed
+
+- **TigerBeetle integration test flakiness (~25% failure rate on CI).** Two distinct races in `engines/tigerbeetle/index.ts` were causing intermittent CI failures on macOS arm64, macOS x64, and Windows x64 runners (BUG-7 from `~/dev/qa-sweep-bug-tracker.md`). (1) **Format timeout race**: `tigerbeetle format` allocates ~1.06 GiB on disk even with `--development`; the old 30s `execFileSync` budget was too tight for cold CI disks, surfacing as `ETIMEDOUT` during format. (2) **Start readiness race + unconditional kill**: `waitForReady` used `portManager.isPortAvailable`, which flips false the moment anything binds the port (including a half-bound socket not yet accepting); follow-on TCP connects raced and observed `ECONNREFUSED`. When the probe timed out the code unconditionally killed `proc.pid`, terminating actually-alive daemons. Fix: format runs via async `spawnAsync` with a 120s budget + `waitForDataFileReady` poll; start retries the data-file existence check, uses real TCP connect probing with port-bound fallback (60s wait budget), and — mirroring spindb 0.50.1's ClickHouse PID-race fix — treats "port has a listener" as ready when the probe times out instead of killing the daemon. New `tests/unit/tigerbeetle-startup-race.test.ts` adds 7 regression tests covering both races.
+
+### Changed
+
+- **`hostdb` dep bumped: `0.31.0` → `0.31.1` (exact pin).** `hostdb@0.31.1` moves `tsx` from `dependencies` to `devDependencies` (no API surface change). End users installing spindb no longer get a transitive `tsx` install, which removes the platform-specific `@esbuild/<platform>` binaries that previously broke electron-builder's universal-macOS merge in layerbase-desktop. Spindb's compiled `dist/` doesn't need tsx at runtime.
+
 ## [0.50.1] - 2026-05-16
 
 ### Fixed
