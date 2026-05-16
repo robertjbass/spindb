@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.1] - 2026-05-16
+
+### Fixed
+
+- **ClickHouse PID-file race in `engine.start()`.** Previously the PID file was written only after `waitForReady` succeeded; on cold-start timeouts or `findProcessByPort` hiccups the daemon was left running but PID-fileless, which downstream consumers (notably layerbase-cloud's `health-monitor` task that runs `spindb list --json` every 60s and derives status from PID-file existence) interpreted as `stopped`. That stuck ClickHouse cloud databases in a Stopped → Start → Stopped loop they couldn't escape. Fixed by introducing a `writePidFromPort(port, pidFile, options?)` helper that scrapes the listening port and writes the PID file independently of `waitForReady` — invoked both before AND after `waitForReady` for belt-and-suspenders. If `waitForReady` times out but the PID file was successfully written, treat the daemon as started (it's bound and the readiness handshake will retry on the next client query). Only throw `"failed to start within timeout"` when neither signal saw the daemon. Surfaced by the 2026-05-16 prod QA sweep; tracked as BUG-2 in `~/dev/qa-sweep-bug-tracker.md`.
+
+### Tests
+
+- New `tests/unit/clickhouse-pid-write.test.ts` with 3 regression tests covering the PID-write helper (port-bound → file written, no listener → no file + returns false, bounded retry honors maxAttempts/intervalMs).
+
 ## [0.50.0] - 2026-05-15
 
 ### Changed — hostdb is now an npm dependency
