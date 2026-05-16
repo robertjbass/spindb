@@ -868,7 +868,21 @@ export class CouchDBEngine extends BaseEngine {
     )
   }
 
-  // Wait for CouchDB to be ready
+  // Wait for CouchDB to be ready.
+  //
+  // CouchDB's chttpd HTTP listener binds and serves `GET /` before the rest of
+  // the node (mem3 / fabric / cluster machinery) has finished bootstrapping.
+  // On slow runners (notably GitHub Actions macOS x64) the gap is wide enough
+  // that the very next operation — a GET against a user database — can hit the
+  // half-initialized node and return a 5xx with `{"error":"no_majority"}`,
+  // which then poisons follow-up restore/PUT logic.
+  //
+  // CouchDB exposes `GET /_up` for exactly this readiness signal: the endpoint
+  // is documented to return `{"status":"ok"}` 200 only once the node is fully
+  // ready to serve requests. We additionally verify that a GET against a
+  // synthetic, definitely-nonexistent database returns 404 rather than 5xx —
+  // that catches the rare case where `/_up` is satisfied but the fabric layer
+  // still rejects queries.
   private async waitForReady(
     port: number,
     timeoutMs = 30000,
@@ -878,17 +892,41 @@ export class CouchDBEngine extends BaseEngine {
 
     while (Date.now() - startTime < timeoutMs) {
       try {
-        const response = await couchdbApiRequest(
+        const upResponse = await couchdbApiRequest(
           port,
           'GET',
-          '/',
+          '/_up',
           undefined,
           undefined,
           null,
         )
-        if (response.status >= 200 && response.status < 500) {
-          logDebug(`CouchDB ready on port ${port}`)
-          return true
+
+        let upOk = false
+        if (upResponse.status === 200) {
+          const upData = upResponse.data as { status?: string } | null
+          upOk = upData?.status === 'ok'
+        }
+
+        if (upOk) {
+          // Verify the node will actually answer a database lookup with 404
+          // rather than 5xx. This proves the cluster machinery (mem3/fabric)
+          // is bootstrapped, not just chttpd.
+          const probeResponse = await couchdbApiRequest(
+            port,
+            'GET',
+            '/_spindb_readiness_probe',
+            undefined,
+            undefined,
+            null,
+          )
+          if (probeResponse.status === 404 || probeResponse.status === 401) {
+            logDebug(`CouchDB ready on port ${port}`)
+            return true
+          }
+          logDebug(
+            `CouchDB _up ok but DB lookup returned ${probeResponse.status} ` +
+              `on port ${port}, waiting...`,
+          )
         }
       } catch {
         // Connection failed, wait and retry

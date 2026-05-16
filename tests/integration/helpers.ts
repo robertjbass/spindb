@@ -849,17 +849,44 @@ export async function waitForReady(
           throw new Error('Meilisearch health check failed or timed out')
         }
       } else if (engine === Engine.CouchDB) {
-        // Use fetch to ping CouchDB REST API with timeout
+        // CouchDB's HTTP listener answers `GET /` before the cluster machinery
+        // (mem3/fabric) finishes bootstrapping. Use `/_up` plus a synthetic
+        // 404 probe to confirm the node is actually ready to serve DB lookups.
+        // Without this, restore/PUT requests can hit a half-initialized node
+        // and silently fail on slow runners (notably macOS x64 GHA).
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         try {
-          const response = await fetch(`http://127.0.0.1:${port}/`, {
+          const upResponse = await fetch(`http://127.0.0.1:${port}/_up`, {
             signal: controller.signal,
           })
+          if (!upResponse.ok) {
+            clearTimeout(timeoutId)
+            throw new Error(
+              `CouchDB /_up returned ${upResponse.status}, not ready`,
+            )
+          }
+          const upData = (await upResponse.json()) as { status?: string }
+          if (upData?.status !== 'ok') {
+            clearTimeout(timeoutId)
+            throw new Error(
+              `CouchDB /_up status=${upData?.status}, not ready`,
+            )
+          }
+          const probeResponse = await fetch(
+            `http://127.0.0.1:${port}/_spindb_test_probe`,
+            { signal: controller.signal },
+          )
           clearTimeout(timeoutId)
-          if (response.ok) {
+          if (
+            probeResponse.status === 404 ||
+            probeResponse.status === 401
+          ) {
             return true
           }
+          throw new Error(
+            `CouchDB DB-lookup probe returned ${probeResponse.status}, cluster not ready`,
+          )
         } catch {
           clearTimeout(timeoutId)
           throw new Error('CouchDB health check failed or timed out')
