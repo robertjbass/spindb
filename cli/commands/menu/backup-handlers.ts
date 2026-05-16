@@ -282,13 +282,25 @@ export async function handleCreateForRestore(): Promise<{
   console.log()
   const answers = await promptCreateOptions()
   let { name: containerName } = answers
-  const { engine, version, port, database } = answers
+  const { engine, port, database } = answers
+  let { version } = answers
 
   console.log()
   console.log(header('Creating Database Container'))
   console.log()
 
   const dbEngine = getEngine(engine)
+
+  // Pin to full resolved version (same rationale as cli/commands/create.ts).
+  const resolvedVersion = dbEngine.resolveFullVersion(version)
+  if (resolvedVersion !== version) {
+    console.log(
+      chalk.gray(
+        `  Resolved ${dbEngine.displayName} ${version} → ${resolvedVersion}`,
+      ),
+    )
+  }
+  version = resolvedVersion
 
   const portAvailable = await portManager.isPortAvailable(port)
   if (!portAvailable) {

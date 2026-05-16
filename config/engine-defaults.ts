@@ -1,19 +1,33 @@
 /**
  * Engine-specific default configurations
- * Extracted for dependency injection pattern - allows each engine to define its own defaults
+ *
+ * Encodes spindb-side policy that is NOT derived from hostdb:
+ *   - `defaultVersion`: which major-version line spindb recommends. For most
+ *     engines this is the latest major; for MySQL it's `8.4` (LTS) rather than
+ *     `9.x` (innovation track). The full pinned version (e.g. `8.4.9`) comes
+ *     from hostdb at create time — see `cli/commands/create.ts` for the
+ *     eager-resolution call that turns shorthand into a full version before
+ *     the container config is persisted.
+ *   - Port ranges, superuser names, file paths, client-tool names: stable per
+ *     engine, no hostdb involvement.
+ *
+ * What's deliberately NOT here:
+ *   - `latestVersion` (deleted) — derive from `getEngine(name).supportedVersions[0]`
+ *     at the call site. That value is built from the wrapper's
+ *     `SUPPORTED_MAJOR_VERSIONS`, which is data-driven from hostdb.
  */
 
 import { Engine, ALL_ENGINES } from '../types'
+import { listVersions as hostdbListVersions } from 'hostdb'
 
 export type EngineDefaults = {
-  // Default version to use when not specified
+  // Default major-version line that spindb recommends. Shorthand like '18' or
+  // '8.4'. Resolved to a full version (e.g. '8.4.9') via hostdb at create time.
   defaultVersion: string
   // Default port for this engine
   defaultPort: number
   // Port range to scan if default is busy
   portRange: { start: number; end: number }
-  // Latest major version (used for Homebrew package names like postgresql@17)
-  latestVersion: string
   // Default superuser name
   superuser: string
   // Connection string scheme (e.g., 'postgresql', 'mysql')
@@ -35,7 +49,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '18',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
-    latestVersion: '18',
     superuser: 'postgres',
     connectionScheme: 'postgresql',
     logFileName: 'postgres.log',
@@ -48,7 +61,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '8.4',
     defaultPort: 3306,
     portRange: { start: 3306, end: 3400 },
-    latestVersion: '9.6',
     superuser: 'root',
     connectionScheme: 'mysql',
     logFileName: 'mysql.log',
@@ -61,7 +73,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '11.8',
     defaultPort: 3307, // Different from MySQL to allow side-by-side
     portRange: { start: 3307, end: 3400 },
-    latestVersion: '11.8',
     superuser: 'root',
     connectionScheme: 'mysql', // MariaDB uses MySQL protocol
     logFileName: 'mariadb.log',
@@ -74,7 +85,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '3',
     defaultPort: 0, // File-based, no port
     portRange: { start: 0, end: 0 }, // N/A
-    latestVersion: '3',
     superuser: '', // No authentication
     connectionScheme: 'sqlite',
     logFileName: '', // No log file
@@ -87,7 +97,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '1',
     defaultPort: 0, // File-based, no port
     portRange: { start: 0, end: 0 }, // N/A
-    latestVersion: '1',
     superuser: '', // No authentication
     connectionScheme: 'duckdb',
     logFileName: '', // No log file
@@ -100,7 +109,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '8.0',
     defaultPort: 27017,
     portRange: { start: 27017, end: 27100 },
-    latestVersion: '8.2',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'mongodb',
     logFileName: 'mongodb.log',
@@ -113,7 +121,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '8',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6400 },
-    latestVersion: '8',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis',
     logFileName: 'redis.log',
@@ -126,7 +133,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '9',
     defaultPort: 6379,
     portRange: { start: 6379, end: 6479 },
-    latestVersion: '9',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'redis', // Use redis:// scheme for client compatibility
     logFileName: 'valkey.log',
@@ -139,7 +145,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '25.12',
     defaultPort: 9000, // Native TCP port (HTTP is 8123)
     portRange: { start: 9000, end: 9100 },
-    latestVersion: '25.12',
     superuser: 'default', // Default user in ClickHouse
     connectionScheme: 'clickhouse',
     logFileName: 'clickhouse-server.log',
@@ -152,7 +157,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '1',
     defaultPort: 6333, // HTTP REST API port (gRPC is 6334)
     portRange: { start: 6333, end: 6400 },
-    latestVersion: '1',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'qdrant.log',
@@ -165,7 +169,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '1',
     defaultPort: 7700, // HTTP REST API port
     portRange: { start: 7700, end: 7800 },
-    latestVersion: '1',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'meilisearch.log',
@@ -178,7 +181,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '2',
     defaultPort: 27017, // MongoDB-compatible port
     portRange: { start: 27017, end: 27100 },
-    latestVersion: '2',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'mongodb', // MongoDB-compatible protocol
     logFileName: 'ferretdb.log',
@@ -191,7 +193,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '3',
     defaultPort: 5984, // CouchDB default HTTP port
     portRange: { start: 5984, end: 6084 },
-    latestVersion: '3',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'couchdb.log',
@@ -204,7 +205,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '25',
     defaultPort: 26257, // CockroachDB default SQL port (HTTP UI at port + 1)
     portRange: { start: 26257, end: 26357 },
-    latestVersion: '25',
     superuser: 'root', // Default user in insecure mode
     connectionScheme: 'postgresql', // Uses PostgreSQL wire protocol
     logFileName: 'cockroach.log',
@@ -217,7 +217,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '2',
     defaultPort: 8000, // SurrealDB default HTTP/WS port
     portRange: { start: 8000, end: 8100 },
-    latestVersion: '2',
     superuser: 'root', // Default user with password 'root'
     connectionScheme: 'ws', // WebSocket for real-time connections
     logFileName: 'surrealdb.log',
@@ -230,7 +229,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '9',
     defaultPort: 8812, // QuestDB PostgreSQL wire protocol port
     portRange: { start: 8812, end: 8912 },
-    latestVersion: '9',
     superuser: 'admin', // Default user with password 'quest'
     connectionScheme: 'postgresql', // Uses PostgreSQL wire protocol
     logFileName: 'questdb.log',
@@ -243,7 +241,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '3',
     defaultPort: 1729, // TypeDB main port (gRPC protocol)
     portRange: { start: 1729, end: 1829 },
-    latestVersion: '3',
     superuser: 'admin', // Default admin user (password: 'password')
     connectionScheme: 'typedb', // TypeDB proprietary protocol
     logFileName: 'typedb.log',
@@ -256,7 +253,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '3',
     defaultPort: 8086, // InfluxDB HTTP API port
     portRange: { start: 8086, end: 8186 },
-    latestVersion: '3',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'influxdb.log',
@@ -269,7 +265,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '1',
     defaultPort: 8080, // Weaviate HTTP REST API port (gRPC is port + 1)
     portRange: { start: 8080, end: 8180 },
-    latestVersion: '1',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'weaviate.log',
@@ -282,7 +277,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '0.16',
     defaultPort: 3000,
     portRange: { start: 3000, end: 3100 },
-    latestVersion: '0.16',
     superuser: '', // No auth
     connectionScheme: '', // Custom binary protocol, no URI scheme
     logFileName: 'tigerbeetle.log',
@@ -295,7 +289,6 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     defaultVersion: '0.24',
     defaultPort: 8080, // HTTP API port
     portRange: { start: 8080, end: 8180 },
-    latestVersion: '0.24',
     superuser: '', // No auth by default for local dev
     connectionScheme: 'http',
     logFileName: 'libsql.log',
@@ -340,10 +333,17 @@ export function getSupportedEngines(): Engine[] {
 }
 
 /**
- * Get Homebrew package name for PostgreSQL client tools
- * Returns 'postgresql@18' format for versioned installs
+ * Get Homebrew package name for PostgreSQL client tools.
+ * Returns `postgresql@18` format. The version number tracks hostdb's latest
+ * PostgreSQL major automatically — when PG 19 ships in hostdb, this returns
+ * `postgresql@19` without a spindb code change.
  */
 export function getPostgresHomebrewPackage(): string {
-  const version = engineDefaults[Engine.PostgreSQL].latestVersion
-  return `postgresql@${version}`
+  const latestMajor = hostdbListVersions('postgresql', { format: 'major' })[0]
+  if (!latestMajor) {
+    throw new Error(
+      'hostdb has no PostgreSQL versions — cannot resolve Homebrew package name',
+    )
+  }
+  return `postgresql@${latestMajor}`
 }

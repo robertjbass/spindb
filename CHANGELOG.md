@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-05-15
+
+### Changed — hostdb is now an npm dependency
+
+SpinDB no longer hand-maintains 21 `engines/<X>/version-maps.ts` MAP files. They're now thin wrappers over the `hostdb` npm package (pinned exactly at `0.31.0`). To get new database versions, bump the `hostdb` dep — the wrappers rebuild automatically.
+
+- **Wrapper pattern.** `engines/<X>/version-maps.ts` exports (`<ENGINE>_VERSION_MAP`, `SUPPORTED_MAJOR_VERSIONS`, `getFullVersion`, `normalizeVersion`) preserved; values now sourced from hostdb's resolver at module-load time.
+- **Offline metadata.** `core/hostdb-metadata.ts` reads `databases.json` / `downloads.json` from the bundled `hostdb` package — no runtime network call for registry metadata. Binary downloads still hit R2.
+- **Eager version resolution at create.** `spindb create postgresql 18` now resolves to the full version (`18.4.0`) via hostdb BEFORE writing `container.json`. New containers persist the full version and are immune to future drift.
+- **Auto-migrate on start.** Legacy containers with shorthand `version: '17'` are auto-pinned to the full version on next `spindb start`. One-time migration; silent thereafter.
+
+### Migration
+
+If you have existing containers created by spindb <0.50.0, no action required — they self-pin on next start. To inspect or batch-migrate explicitly: `spindb doctor --dry-run` shows containers that will migrate; `spindb doctor --fix` performs the migration interactively.
+
+### Removed
+
+- `config/engines.json` no longer carries `supportedVersions` / `defaultVersion` / `versionPlatforms` (those fields drifted from hostdb's truth). The JSON output of `spindb engines supported --json` preserves the same shape, enriched at output time from hostdb.
+- `config/engine-defaults.ts:latestVersion` deleted. Callers now read `engine.supportedVersions[0]` (sourced from the hostdb-driven wrapper).
+- `filterEnginesByPlatform` in `config/engines-registry.ts` removed (only used by deleted `tests/unit/engines-registry.test.ts`).
+
 ## [0.49.0] - 2026-05-15
 
 ### Changed

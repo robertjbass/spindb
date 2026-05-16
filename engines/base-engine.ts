@@ -231,6 +231,19 @@ export abstract class BaseEngine {
   ): Promise<string>
 
   /**
+   * Resolve a shorthand version (e.g. '17', '8.4') to the full pinned version
+   * ('17.10.0', '8.4.9') the engine will actually use. Container creation
+   * persists the resolved value so subsequent spindb upgrades don't silently
+   * drift the container onto a different patch.
+   *
+   * Default impl returns the input unchanged. Engines with a version-maps
+   * module should override to call its `normalizeVersion`.
+   */
+  resolveFullVersion(version: string): string {
+    return version
+  }
+
+  /**
    * Fetch all available versions from remote source (grouped by major version)
    * Returns a map of major version -> array of full versions (sorted latest first)
    * Falls back to hardcoded versions if network fails

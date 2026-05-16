@@ -1,11 +1,23 @@
 /**
  * hostdb Version Sync Verification Tests
  *
- * Verifies that SpinDB's version-maps.ts files are in sync with
- * hostdb's releases.json (the source of truth for available versions).
+ * After the spindb→hostdb migration, every engine's VERSION_MAP is built at
+ * import time from the bundled hostdb npm package's databases.json +
+ * releases.json snapshot.
  *
- * This test requires network access to fetch releases.json from GitHub.
- * It runs as part of CI to catch version mismatches early.
+ * This test verifies that the *bundled* snapshot agrees with the *live*
+ * releases.json hosted on GitHub. It catches:
+ *   - The pinned `hostdb` dependency lagging behind the latest hostdb release
+ *     (a new version was published; spindb hasn't bumped yet).
+ *   - The bundled releases.json in the published hostdb package being stale
+ *     vs what's actually on R2 (build-pipeline issue in hostdb).
+ *
+ * Smoke-check semantics: every full version emitted by spindb's MAPs (which
+ * are now thin views over hostdb's data) must exist as a known release in
+ * the live hostdb registry. Anything missing means spindb would attempt to
+ * download a release that R2 doesn't serve.
+ *
+ * Network access is required.
  */
 
 import { describe, it, before } from 'node:test'
@@ -15,7 +27,6 @@ import {
   type HostdbReleasesData,
 } from '../../core/hostdb-client'
 
-// Import version maps from all engines
 import { POSTGRESQL_VERSION_MAP } from '../../engines/postgresql/version-maps'
 import { MYSQL_VERSION_MAP } from '../../engines/mysql/version-maps'
 import { MARIADB_VERSION_MAP } from '../../engines/mariadb/version-maps'
@@ -41,8 +52,6 @@ import { WEAVIATE_VERSION_MAP } from '../../engines/weaviate/version-maps'
 import { TIGERBEETLE_VERSION_MAP } from '../../engines/tigerbeetle/version-maps'
 import { LIBSQL_VERSION_MAP } from '../../engines/libsql/version-maps'
 
-// Engine configurations for testing
-// Names must match the keys in hostdb releases.json
 const ENGINES = [
   { name: 'postgresql', map: POSTGRESQL_VERSION_MAP },
   { name: 'mysql', map: MYSQL_VERSION_MAP },
@@ -72,11 +81,11 @@ describe('hostdb Version Sync Verification', () => {
   let hostdbReleases: HostdbReleasesData
 
   before(async () => {
-    console.log('\n🌐 Fetching hostdb releases.json...')
+    console.log('\n🌐 Fetching live hostdb releases.json...')
     try {
       hostdbReleases = await fetchHostdbReleases()
       console.log(
-        `   ✓ Fetched releases (updated: ${hostdbReleases.updatedAt})`,
+        `   ✓ Fetched live releases (updated: ${hostdbReleases.updatedAt})`,
       )
     } catch (error) {
       const err = error as Error
@@ -88,12 +97,12 @@ describe('hostdb Version Sync Verification', () => {
   })
 
   for (const { name, map } of ENGINES) {
-    it(`${name} version map matches hostdb releases`, () => {
+    it(`${name} bundled hostdb snapshot matches live releases`, () => {
       const releases = getEngineReleases(hostdbReleases, name)
 
       if (!releases) {
         throw new Error(
-          `Engine '${name}' not found in hostdb releases.json. ` +
+          `Engine '${name}' not found in live hostdb releases.json. ` +
             `Available engines: ${Object.keys(hostdbReleases.databases).join(', ')}`,
         )
       }
@@ -109,12 +118,13 @@ describe('hostdb Version Sync Verification', () => {
       }
 
       if (missingVersions.length > 0) {
-        const mapPath = `engines/${name}/version-maps.ts`
         throw new Error(
-          `Version mismatch for ${name}!\n` +
-            `  Missing from hostdb: ${missingVersions.join(', ')}\n` +
-            `  Available in hostdb: ${availableVersions.join(', ')}\n` +
-            `  Fix: Update ${mapPath} to use versions from hostdb releases.json`,
+          `Version drift for ${name}!\n` +
+            `  Bundled hostdb snapshot expects: ${missingVersions.join(', ')}\n` +
+            `  Live hostdb releases.json has:   ${availableVersions.join(', ')}\n` +
+            `  Fix: bump the 'hostdb' dependency in package.json to a newer version ` +
+            `(or, if the bundled snapshot is ahead of the live registry, the next ` +
+            `hostdb release will publish the missing binaries to R2).`,
         )
       }
 
@@ -124,7 +134,7 @@ describe('hostdb Version Sync Verification', () => {
     })
   }
 
-  it('all hostdb engines are represented in SpinDB', () => {
+  it('all live hostdb engines are represented in SpinDB', () => {
     const hostdbEngines = Object.keys(hostdbReleases.databases)
     const spindbEngines: string[] = ENGINES.map((e) => e.name)
     const missingEngines = hostdbEngines.filter(
@@ -132,14 +142,11 @@ describe('hostdb Version Sync Verification', () => {
     )
 
     if (missingEngines.length > 0) {
-      // Emit CI-visible warning (GitHub Actions annotation format + console.warn)
       const message = `hostdb has engines not yet in SpinDB: ${missingEngines.join(', ')}`
       if (process.env.GITHUB_ACTIONS) {
-        // GitHub Actions warning annotation - shows in CI summary
         console.log(`::warning::${message}`)
       }
       console.warn(`   ⚠ ${message}`)
-      // This is informational, not a failure - new engines are added intentionally
     }
 
     console.log(

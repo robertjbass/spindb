@@ -8,9 +8,10 @@ import { postgresqlEngine } from '../../engines/postgresql'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { uiWarning } from '../ui/theme'
+import { uiWarning, uiInfo } from '../ui/theme'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../../types'
 import { exitWithError, logDebug } from '../../core/error-handler'
+import { isShorthandVersion } from '../../core/version-utils'
 import { getEngineMetadata } from '../helpers'
 import { isV1 as isFerretDBv1 } from '../../engines/ferretdb/version-maps'
 
@@ -108,6 +109,35 @@ export const startCommand = new Command('start')
             )
           }
           return
+        }
+
+        // Auto-migrate shorthand version → full version (A9 forward-compat).
+        // Containers created by old spindb stored shorthand like 'version: 17';
+        // new spindb stores 'version: 17.10.0'. On first start under new spindb,
+        // we silently upgrade the persisted value so future starts are immune
+        // to defaults-block drift. Skip for file-based engines (SQLite/DuckDB
+        // don't pin binary versions per data file) and for remote/'unknown'.
+        if (
+          !isFileBasedEngine(engineName) &&
+          config.version &&
+          config.version !== 'unknown' &&
+          isShorthandVersion(config.version)
+        ) {
+          const dbEngine = getEngine(engineName)
+          const fullVersion = dbEngine.resolveFullVersion(config.version)
+          if (fullVersion !== config.version) {
+            if (!options.json) {
+              console.log(
+                uiInfo(
+                  `Pinning ${containerName} to ${dbEngine.displayName} ${fullVersion} (was ${config.version})`,
+                ),
+              )
+            }
+            await containerManager.updateConfig(containerName, {
+              version: fullVersion,
+            })
+            config.version = fullVersion
+          }
         }
 
         const running = await processManager.isRunning(containerName, {

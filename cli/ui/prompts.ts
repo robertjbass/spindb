@@ -588,14 +588,17 @@ export async function promptVersion(
     | inquirer.Separator
 
   const majorChoices: Choice[] = []
-  const engineDefs = getEngineDefaults(engineName)
+  // First entry in supportedVersions is the latest major in the engine's own
+  // format (1-part for PG, 2-part for MySQL/MongoDB/etc). Comes from the
+  // hostdb-driven wrapper, so it stays current automatically.
+  const latestMajor = majorVersions[0]
   let hiddenDeprecatedCount = 0
 
   for (let i = 0; i < majorVersions.length; i++) {
     const major = majorVersions[i]
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
-    const isLatestMajor = major === engineDefs.latestVersion
+    const isLatestMajor = major === latestMajor
     const allDeprecated =
       fullVersions.length > 0 &&
       fullVersions.every((v) => deprecatedVersions.has(v))
@@ -650,7 +653,7 @@ export async function promptVersion(
       name: 'majorVersion',
       message: 'Select major version:',
       choices: majorChoices,
-      default: engineDefs.latestVersion, // Default to latest major
+      default: latestMajor, // Default to latest major
     },
   ])
 

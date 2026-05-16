@@ -12,6 +12,7 @@ import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { paths } from '../../config/paths'
+import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { detectPackageManager, findBinary } from '../../core/dependency-manager'
 import {
@@ -31,7 +32,6 @@ import {
 import { Engine, Platform, ALL_ENGINES } from '../../types'
 import {
   loadEnginesJson,
-  filterEnginesByPlatform,
   type EngineConfig,
 } from '../../config/engines-registry'
 import { mysqlBinaryManager } from '../../engines/mysql/binary-manager'
@@ -1823,11 +1823,43 @@ enginesCommand
       const rawData = await loadEnginesJson()
       const { platform, arch } = platformService.getPlatformInfo()
       const platformKey = `${platform}-${arch}`
-      const enginesData = filterEnginesByPlatform(rawData, platformKey)
+      // Filter engines whose `platforms` field excludes the current platform.
+      // (Per-version platform overrides used to live here too; that data is now
+      // in hostdb and isn't needed for the `engines supported` listing.)
+      const enginesData = {
+        ...rawData,
+        engines: Object.fromEntries(
+          Object.entries(rawData.engines).filter(
+            ([, c]) => !c.platforms || c.platforms.includes(platformKey),
+          ),
+        ) as typeof rawData.engines,
+      }
 
       if (options.json) {
-        // Output full JSON
-        console.log(JSON.stringify(enginesData, null, 2))
+        // Enrich the JSON output with hostdb-derived version data. This keeps
+        // the consumer-facing API stable (supportedVersions / defaultVersion
+        // fields) even though those values no longer live in engines.json.
+        const enrichedEngines = Object.fromEntries(
+          Object.entries(enginesData.engines).map(([name, config]) => {
+            let supportedVersions: string[] = []
+            let defaultVersion: string | undefined
+            try {
+              const engineInstance = getEngine(name)
+              supportedVersions = [...engineInstance.supportedVersions]
+              defaultVersion = getEngineDefaults(name).defaultVersion
+            } catch {
+              // Engine not registered (e.g., status='planned') — leave version fields empty.
+            }
+            return [name, { ...config, supportedVersions, defaultVersion }]
+          }),
+        )
+        console.log(
+          JSON.stringify(
+            { ...enginesData, engines: enrichedEngines },
+            null,
+            2,
+          ),
+        )
         return
       }
 

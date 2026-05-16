@@ -22,8 +22,6 @@
         "icon",
         "status",
         "binarySource",
-        "supportedVersions",
-        "defaultVersion",
         "defaultPort",
         "runtime",
         "queryLanguage",
@@ -50,17 +48,6 @@
           "type": "string",
           "enum": ["hostdb", "system", "edb"],
           "description": "Source for engine binaries"
-        },
-        "supportedVersions": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of supported major versions"
-        },
-        "defaultVersion": {
-          "type": "string",
-          "description": "Default version to use when not specified"
         },
         "defaultPort": {
           "type": ["integer", "null"],
@@ -119,14 +106,6 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Supported platform-arch combos (e.g. 'darwin-arm64'). If omitted, all platforms are supported."
-        },
-        "versionPlatforms": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "description": "Per-version platform overrides. Keys are version strings, values are platform-arch arrays."
         }
       },
       "additionalProperties": false
