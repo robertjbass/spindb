@@ -530,40 +530,104 @@ export class ClickHouseEngine extends BaseEngine {
       )
     }
 
+    // ClickHouse runs with --daemon, so it forks immediately. The PID file is
+    // written by scraping `lsof -ti tcp:PORT` (the config <pid_file> directive
+    // is not honored in daemon mode). Previously this only happened AFTER
+    // waitForReady succeeded — which produced a race: if waitForReady timed
+    // out (or lsof/findProcessByPort hiccupped), the daemon was left running
+    // but PID-fileless. spindb's container manager then reports the container
+    // as "stopped" (no PID file → process-manager.isRunning returns false),
+    // and the cloud's health reconciler flips the DB row to Stopped despite
+    // the daemon being alive. See spindb-status-invariants notes.
+    //
+    // The fix: try to write the PID file BEFORE waitForReady (with a short
+    // bounded retry, since the daemon needs ~1-2s to bind the port). If the
+    // daemon isn't bound yet, waitForReady will still confirm readiness and
+    // we make a second PID-write attempt afterwards. The PID file is therefore
+    // written iff the daemon ever managed to listen on the port, independent
+    // of the readiness handshake (which can fail under low-memory conditions
+    // even when the daemon is fine).
+    let pidWritten = await this.writePidFromPort(port, pidFile)
+    if (pidWritten) {
+      logDebug(`Wrote PID file ${pidFile} before waitForReady`)
+    }
+
     // Wait for server to be ready (outside of event handler to keep event loop alive)
     logDebug(`Waiting for ClickHouse server to be ready on port ${port}...`)
     const ready = await this.waitForReady(port, version)
     logDebug(`waitForReady returned: ${ready}`)
 
-    if (!ready) {
-      throw new Error(
-        `ClickHouse failed to start within timeout. Check logs at: ${logFile}`,
-      )
+    // Second attempt — covers the case where the daemon bound the port
+    // late (e.g., after the first writePidFromPort retry budget exhausted
+    // but before waitForReady gave up).
+    if (!pidWritten) {
+      pidWritten = await this.writePidFromPort(port, pidFile)
+      if (pidWritten) {
+        logDebug(`Wrote PID file ${pidFile} after waitForReady`)
+      }
     }
 
-    // ClickHouse in daemon mode doesn't respect <pid_file> config
-    // So we manually find and write the PID after server is ready
-    logDebug(`Finding PID for port ${port}...`)
-    try {
-      const pids = await platformService.findProcessByPort(port)
-      logDebug(`findProcessByPort output: ${JSON.stringify(pids)}`)
-      if (pids.length > 0) {
-        const serverPid = String(pids[0])
-        logDebug(`Writing PID ${serverPid} to ${pidFile}`)
-        await writeFile(pidFile, serverPid, 'utf8')
-        logDebug(`Wrote PID ${serverPid} to ${pidFile}`)
-      } else {
-        logDebug(`No PIDs found for port ${port}`)
+    if (!ready) {
+      // Only treat this as a hard failure if the daemon also never bound
+      // the port. If pidWritten is true, the daemon is alive and listening
+      // — readiness probe failure is likely a transient handshake issue
+      // (lsof race, slow client spawn, low-memory VM). Let the caller see
+      // the daemon as running rather than misreport it as failed-to-start.
+      if (!pidWritten) {
+        throw new Error(
+          `ClickHouse failed to start within timeout. Check logs at: ${logFile}`,
+        )
       }
-    } catch (pidError) {
-      // Non-fatal: PID file is optional for operation
-      logDebug(`Could not write PID file: ${pidError}`)
+      logWarning(
+        `ClickHouse readiness probe timed out but daemon is listening on port ${port}; treating as started`,
+      )
     }
 
     return {
       port,
       connectionString: this.getConnectionString(container),
     }
+  }
+
+  /**
+   * Find the daemon process bound to `port` and write its PID to `pidFile`.
+   *
+   * Tries up to `maxAttempts` times with `intervalMs` between attempts.
+   * Returns true iff the PID file was written. Non-fatal on any error.
+   *
+   * Exposed as a method (rather than inlined) so it's directly unit-testable:
+   * a test can drive this with a known port and assert the PID file appears
+   * without spawning a real ClickHouse server.
+   */
+  async writePidFromPort(
+    port: number,
+    pidFile: string,
+    options: { maxAttempts?: number; intervalMs?: number } = {},
+  ): Promise<boolean> {
+    const maxAttempts = options.maxAttempts ?? 10
+    const intervalMs = options.intervalMs ?? 200
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const pids = await platformService.findProcessByPort(port)
+        logDebug(
+          `writePidFromPort attempt ${attempt}/${maxAttempts}: findProcessByPort(${port}) -> ${JSON.stringify(pids)}`,
+        )
+        if (pids.length > 0) {
+          const serverPid = String(pids[0])
+          await writeFile(pidFile, serverPid, 'utf8')
+          logDebug(`writePidFromPort: wrote ${serverPid} to ${pidFile}`)
+          return true
+        }
+      } catch (error) {
+        // Non-fatal: keep trying. Surface error in debug logs for visibility.
+        logDebug(`writePidFromPort attempt ${attempt} error: ${error}`)
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      }
+    }
+    return false
   }
 
   // Wait for ClickHouse to be ready
