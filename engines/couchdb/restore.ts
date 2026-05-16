@@ -145,6 +145,14 @@ export async function restoreBackup(
 
   logDebug(`Restoring ${backup.databases.length} database(s) from backup`)
 
+  // CouchDB's chttpd HTTP listener answers `GET /` before the cluster
+  // machinery (mem3/fabric) finishes bootstrapping. If the caller hands us a
+  // freshly-started node, the very first DB lookup or PUT can race the init
+  // and return 5xx (e.g. `{"error":"no_majority"}`). Block until the node
+  // proves it can answer DB lookups deterministically before we touch any
+  // real data.
+  await waitForCouchDBReady(port, auth)
+
   let restoredCount = 0
   const errors: string[] = []
 
@@ -159,15 +167,9 @@ export async function restoreBackup(
       `Restoring database: ${dbName} (${dbBackup.docs.length} documents)`,
     )
 
-    // Check if database exists
-    const checkResponse = await couchdbApiRequest(
-      port,
-      'GET',
-      `/${encodeURIComponent(dbName)}`,
-      undefined,
-      undefined,
-      auth,
-    )
+    // Check if database exists. Retry briefly on transient cluster-init
+    // errors so we can distinguish "doesn't exist" from "node not ready yet".
+    const checkResponse = await getDatabaseStatusWithRetry(port, dbName, auth)
 
     if (checkResponse.status === 200) {
       if (flush) {
@@ -190,6 +192,16 @@ export async function restoreBackup(
       } else {
         logDebug(`Database ${dbName} exists, merging documents`)
       }
+    } else if (checkResponse.status !== 404) {
+      // Anything other than 200 (exists) or 404 (clean) is a hard failure —
+      // do NOT silently fall through to bulk_docs against a missing DB. This
+      // was the original BUG-9 footgun: a 5xx from a half-initialized cluster
+      // caused the PUT branch below to be skipped, restore to "succeed" with
+      // code:1 stderr, and the calling test to see an empty database list.
+      errors.push(
+        `Unexpected status ${checkResponse.status} checking database ${dbName}: ${JSON.stringify(checkResponse.data)}`,
+      )
+      continue
     }
 
     // Create database if it doesn't exist (or was just deleted)
@@ -250,12 +262,110 @@ export async function restoreBackup(
     `Restored ${restoredCount} database(s)` +
     (errors.length > 0 ? ` with ${errors.length} error(s)` : '')
 
+  // Surface errors loudly instead of returning code:1 and letting the caller
+  // assume success. Silently returning success-with-stderr is what allowed
+  // BUG-9 to slip past the clone integration test on macOS x64.
+  if (errors.length > 0) {
+    throw new Error(`CouchDB restore failed: ${errors.join('; ')}`)
+  }
+
   return {
     format: 'json',
     stdout: message,
-    stderr: errors.length > 0 ? errors.join('\n') : undefined,
-    code: errors.length > 0 ? 1 : 0,
+    stderr: undefined,
+    code: 0,
   }
+}
+
+/**
+ * Poll CouchDB until the node is fully bootstrapped and can answer database
+ * lookups. Combines `/_up` (returns `status:"ok"` once the node is ready)
+ * with a synthetic GET against a known-nonexistent database (must return 404,
+ * not 5xx). The combination proves that mem3/fabric are up, not just chttpd.
+ */
+async function waitForCouchDBReady(
+  port: number,
+  auth: { username: string; password: string } | undefined,
+  timeoutMs = 30000,
+): Promise<void> {
+  const startTime = Date.now()
+  const checkInterval = 250
+  let lastFailure = 'no probe attempted'
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const up = await couchdbApiRequest(
+        port,
+        'GET',
+        '/_up',
+        undefined,
+        5000,
+        auth ?? null,
+      )
+      if (up.status === 200) {
+        const data = up.data as { status?: string } | null
+        if (data?.status === 'ok') {
+          const probe = await couchdbApiRequest(
+            port,
+            'GET',
+            '/_spindb_restore_probe',
+            undefined,
+            5000,
+            auth ?? null,
+          )
+          if (probe.status === 404 || probe.status === 401) {
+            return
+          }
+          lastFailure = `db-lookup probe returned ${probe.status}`
+        } else {
+          lastFailure = `/_up status was ${data?.status ?? 'undefined'}`
+        }
+      } else {
+        lastFailure = `/_up returned ${up.status}`
+      }
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkInterval))
+  }
+
+  throw new Error(
+    `CouchDB on port ${port} did not become ready within ${timeoutMs}ms ` +
+      `(last failure: ${lastFailure})`,
+  )
+}
+
+/**
+ * Issue `GET /{db}` with a short retry loop. Transient 5xx responses can
+ * happen if the node is still settling — we don't want a one-off blip to
+ * cascade into a silent restore failure.
+ */
+async function getDatabaseStatusWithRetry(
+  port: number,
+  dbName: string,
+  auth: { username: string; password: string } | undefined,
+  maxAttempts = 5,
+): Promise<{ status: number; data: unknown }> {
+  let lastResponse: { status: number; data: unknown } | null = null
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await couchdbApiRequest(
+      port,
+      'GET',
+      `/${encodeURIComponent(dbName)}`,
+      undefined,
+      undefined,
+      auth,
+    )
+    if (response.status === 200 || response.status === 404) {
+      return response
+    }
+    lastResponse = response
+    logDebug(
+      `CouchDB GET /${dbName} returned ${response.status}, retrying (${attempt + 1}/${maxAttempts})`,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  return lastResponse ?? { status: 0, data: null }
 }
 
 /**
