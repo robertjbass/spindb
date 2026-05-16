@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.3] - 2026-05-16
+
+### Fixed
+
+- **TypeDB user password rotation against an existing user always failed (BUG-13 from `~/dev/qa-sweep-bug-tracker.md`).** `engines/typedb/index.ts:1234` invoked `user password-update <name> <pw>` via the `--command` flag of `typedb_console_bin`. The TypeDB 3.x console registers the subcommand as `update-password` (verified against `typedb/typedb-console` `main.rs` from 3.8.0 through 3.10.1), so the call surfaced as `Unrecognised 'user' subcommand: 'password-update …'` and the close handler bubbled `Failed to update user password`. The `createUser` flow's `user create` → on-"already exists" → password-update fallback was therefore broken for every admin-password rotation, which in layerbase-cloud surfaces as a 401 AUT1 on the very first query (cloud's stored credential is the rotated one, but TypeDB still has `admin/password`). Fix: swap the subcommand to the canonical `update-password`.
+
 ## [0.50.2] - 2026-05-16
 
 ### Fixed
