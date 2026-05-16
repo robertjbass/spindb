@@ -1225,13 +1225,23 @@ export class TypeDBEngine extends BaseEngine {
           logDebug(`Created TypeDB user: ${username}`)
           resolve()
         } else if (stderr.toLowerCase().includes('already exists')) {
-          // User exists - update password instead
+          // User exists - update password instead.
+          //
+          // The TypeDB 3.x console subcommand is `update-password`, not
+          // `password-update`. The words were transposed here, so every
+          // password rotation against an existing user (including the
+          // built-in admin) failed with "Unrecognised 'user' subcommand:
+          // 'password-update <pw>'", caught by the close handler and
+          // bubbled up as "Failed to update user password" — see typedb-
+          // console main.rs CommandLeaf registration: the canonical name
+          // is "update-password". Verified across 3.8.0..3.10.1 console
+          // releases.
           logDebug(`User "${username}" already exists, updating password`)
           try {
             const updateArgs = [
               ...getConsoleBaseArgs(port),
               '--command',
-              `user password-update ${username} ${password}`,
+              `user update-password ${username} ${password}`,
             ]
             await new Promise<void>((res, rej) => {
               const updateProc = spawn(consolePath, updateArgs, {
