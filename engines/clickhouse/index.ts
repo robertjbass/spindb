@@ -670,21 +670,57 @@ export class ClickHouseEngine extends BaseEngine {
           '--query',
           'SELECT 1',
         ]
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(clickhouse, args, {
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
-          proc.on('close', (code) => {
-            logDebug(`Client process closed with code ${code}`)
-            if (code === 0) resolve()
-            else reject(new Error(`Exit code ${code}`))
-          })
-          proc.on('error', (err) => {
-            logDebug(`Client process error: ${err}`)
-            reject(err)
-          })
-        })
-        logDebug(`ClickHouse ready on port ${port}`)
+        // Capture stderr so we can distinguish "server is down" from
+        // "server is up but rejected unauthenticated probe". On a restart
+        // where the user has set a password (e.g., cloud's setup-database.sh
+        // edits users.xml on first provision), this probe doesn't carry
+        // credentials and ClickHouse responds with a clear auth-failure
+        // error — which is itself proof the server is up and listening.
+        // Treat that case as ready to avoid burning the full 240s timeout
+        // on every restart of a password-protected ClickHouse.
+        const authFailedReady = await new Promise<boolean>(
+          (resolve, reject) => {
+            const proc = spawn(clickhouse, args, {
+              stdio: ['ignore', 'pipe', 'pipe'],
+            })
+            let stderr = ''
+            proc.stderr?.on('data', (data: Buffer) => {
+              stderr += data.toString()
+            })
+            proc.on('close', (code) => {
+              logDebug(`Client process closed with code ${code}`)
+              if (code === 0) {
+                resolve(false) // ready via successful query, no auth fallback needed
+                return
+              }
+              // ClickHouse server is responding but rejected the probe
+              // because authentication is required. We don't have the
+              // password here, so trust the auth error as a definitive
+              // "server is up" signal.
+              if (
+                /Authentication failed|password is incorrect|there is no user with such name|UNKNOWN_USER|AUTHENTICATION_FAILED/i.test(
+                  stderr,
+                )
+              ) {
+                logDebug(
+                  `ClickHouse responded with auth-required (Code ${code}); server is up — treating as ready`,
+                )
+                resolve(true)
+                return
+              }
+              reject(new Error(`Exit code ${code}: ${stderr.slice(0, 200)}`))
+            })
+            proc.on('error', (err) => {
+              logDebug(`Client process error: ${err}`)
+              reject(err)
+            })
+          },
+        )
+        if (authFailedReady) {
+          logDebug(`ClickHouse ready on port ${port} (auth-required)`)
+        } else {
+          logDebug(`ClickHouse ready on port ${port}`)
+        }
         return true
       } catch (err) {
         logDebug(`Attempt ${attempt} failed: ${err}`)
