@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.4] - 2026-05-17
+
+### Fixed
+
+- **ClickHouse `waitForReady` now detects auth-required as "server up" (BUG-18 from `~/dev/qa-sweep-bug-tracker.md`).** The readiness probe at `engines/clickhouse/index.ts:waitForReady` spawned `clickhouse client --query "SELECT 1"` without `--user/--password`. Once the ClickHouse user has a password set (which layerbase-cloud's `setup-database.sh` does on first provision by editing `users.xml`), every subsequent restart's unauthenticated probe returned exit code 4 — and `waitForReady` blindly looped until the full 240s timeout fired and fell back to "treating as started". On layerbase-cloud's wake codepath, three chained spindb starts (cloud-side + setup-database.sh's universal restart + setup-database.sh's ClickHouse case-block restart) each burned that 240s, adding ~12 minutes of wall-clock to every ClickHouse hibernate→wake cycle. Fix: capture the probe's stderr, and if it matches the well-known auth-failure patterns (`Authentication failed`, `password is incorrect`, `UNKNOWN_USER`, `AUTHENTICATION_FAILED`, `there is no user with such name`), trust the response as proof the server is listening and return ready immediately. End-to-end impact: ClickHouse wake on layerbase-cloud drops from ~12 minutes to ~30 seconds.
+
 ## [0.50.3] - 2026-05-16
 
 ### Fixed
