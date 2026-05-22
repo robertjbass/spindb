@@ -242,26 +242,121 @@ export function getRegistryFallbackUrl(url: string): string | null {
   return null
 }
 
+// Retry policy for transient network failures. Picked so a 1-2s blip
+// gets absorbed but a real outage fails quickly. Total worst-case
+// budget per URL = sum of delays = 0 + 300 + 900 = 1.2s of backoff
+// across 3 attempts.
+const TRANSIENT_RETRY_DELAYS_MS = [0, 300, 900]
+
+/**
+ * Returns true when an error from `fetch` looks like a transient
+ * network problem worth retrying. Excludes intentional timeouts
+ * (AbortError, which carry their own meaning) and non-retryable
+ * client errors at this layer.
+ *
+ * Node's undici throws `TypeError: fetch failed` for almost every
+ * connection-level failure; the underlying reason lives in
+ * `error.cause.code` (e.g., 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN',
+ * 'UND_ERR_SOCKET'). Treating all of those as transient is the right
+ * call — none of them indicate the URL is permanently broken.
+ */
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === 'AbortError') return false
+  if (error.message === 'fetch failed') return true
+  const cause = (error as { cause?: { code?: string } }).cause
+  if (cause?.code) {
+    return [
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+      'UND_ERR_SOCKET',
+      'UND_ERR_CONNECT_TIMEOUT',
+    ].includes(cause.code)
+  }
+  return false
+}
+
+/**
+ * Returns true when an HTTP response status code is worth retrying.
+ * Covers transient server-side conditions (5xx) and rate limiting
+ * (429). Client errors (other 4xx) are NOT retried — they won't
+ * change on retry and are usually a bug in the request.
+ */
+function isTransientStatus(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Fetch a URL with retry on transient network errors and transient
+ * HTTP responses (5xx, 408, 429). Used as the base primitive that
+ * fetchWithRegistryFallback and fetchFromRegistryUrls build on, so a
+ * single network blip doesn't take down a binary download. Honors
+ * AbortError so caller-supplied timeouts still terminate immediately.
+ */
+async function fetchWithRetries(
+  url: string,
+  options?: RequestInit,
+): Promise<Response> {
+  let lastError: unknown
+  let lastStatus: number | null = null
+  for (let attempt = 0; attempt < TRANSIENT_RETRY_DELAYS_MS.length; attempt++) {
+    await sleep(TRANSIENT_RETRY_DELAYS_MS[attempt])
+    try {
+      const response = await fetch(url, options)
+      if (response.ok || !isTransientStatus(response.status)) {
+        return response
+      }
+      lastStatus = response.status
+      logDebug(
+        `Fetch ${url} returned ${response.status} on attempt ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}, retrying...`,
+      )
+    } catch (error) {
+      if (!isTransientFetchError(error)) {
+        throw error
+      }
+      lastError = error
+      logDebug(
+        `Fetch ${url} failed transiently on attempt ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}: ${(error as Error).message}`,
+      )
+    }
+  }
+  // All attempts exhausted. Throw the last error we saw, or a
+  // synthetic one carrying the last HTTP status if we never threw.
+  if (lastError) throw lastError
+  throw new Error(
+    `fetch ${url} failed after ${TRANSIENT_RETRY_DELAYS_MS.length} attempts (last status: ${lastStatus ?? 'unknown'})`,
+  )
+}
+
 /**
  * Fetch wrapper that tries the primary URL first, then falls back to the
  * GitHub registry if the primary is a layerbase URL and the request fails
  * with a 404, 5xx, or network error.
  *
- * AbortError (timeout) is never retried — it propagates immediately.
+ * Each URL attempt internally retries on transient errors before falling
+ * back to the next URL — a single network blip won't burn through the
+ * fallback. AbortError (timeout) still propagates immediately.
  */
 export async function fetchWithRegistryFallback(
   url: string,
   options?: RequestInit,
 ): Promise<Response> {
   try {
-    const response = await fetch(url, options)
+    const response = await fetchWithRetries(url, options)
     if (response.status === 404 || response.status >= 500) {
       const fallbackUrl = getRegistryFallbackUrl(url)
       if (fallbackUrl) {
         logDebug(
           `Primary registry returned ${response.status}, trying GitHub fallback`,
         )
-        return await fetch(fallbackUrl, options)
+        return await fetchWithRetries(fallbackUrl, options)
       }
     }
     return response
@@ -276,7 +371,7 @@ export async function fetchWithRegistryFallback(
       logDebug(
         `Primary registry fetch failed (${err.message}), trying GitHub fallback`,
       )
-      return await fetch(fallbackUrl, options)
+      return await fetchWithRetries(fallbackUrl, options)
     }
     throw error
   }
@@ -284,8 +379,9 @@ export async function fetchWithRegistryFallback(
 
 /**
  * Try fetching from multiple registry URLs in order, returning the first
- * successful (response.ok) Response. Logs per-URL failures via the
- * supplied logger callback.
+ * successful (response.ok) Response. Each URL gets its own retry budget
+ * before moving on to the next so transient blips don't burn through the
+ * registry list. Logs per-URL failures via the supplied logger callback.
  *
  * @param urls - URLs to try in order (e.g., layerbase then GitHub)
  * @param logger - Callback for logging per-URL failures
@@ -301,7 +397,7 @@ export async function fetchFromRegistryUrls(
   let lastError: Error | null = null
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithRetries(url, {
         signal: AbortSignal.timeout(timeoutMs),
       })
       if (response.ok) return response
