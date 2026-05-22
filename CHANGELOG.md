@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.5] - 2026-05-22
+
+### Fixed
+
+- **Hostdb fetch had zero retry logic, producing recurring `"<engine> <version> not available: fetch failed"` errors during cloud provisioning.** A single transient network blip (`TypeError: fetch failed` from Node's undici on `ECONNRESET` / `ETIMEDOUT` / `EAI_AGAIN`) would kill the entire `spindb create`, with no second chance. Combined with `ENABLE_GITHUB_FALLBACK = false`, even the URL fallback was disabled. Two layers of retry now in place: (1) `fetchWithRetries` in `core/hostdb-client.ts` wraps every fetch with up to 3 attempts at `0/300/900 ms` backoff on transient network errors and HTTP 5xx/408/429; used by both `fetchWithRegistryFallback` and `fetchFromRegistryUrls`. (2) `core/base-binary-manager.ts` wraps the entire binary download — `fetch()` + stream pipeline to disk — in an outer 3-attempt retry at `0/1/3 s` backoff, catching stream-mid-flight failures (socket reset after the body started streaming). `AbortError` still propagates immediately so caller timeouts work; 4xx other than 408/429 are not retried since they won't change.
+
 ## [0.50.4] - 2026-05-17
 
 ### Fixed

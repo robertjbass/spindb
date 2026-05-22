@@ -1542,15 +1542,36 @@ export async function createCouchDBDatabase(
   port: number,
   name: string,
 ): Promise<boolean> {
+  const url = `http://127.0.0.1:${port}/${encodeURIComponent(name)}`
   try {
-    const encodedName = encodeURIComponent(name)
-    const response = await fetch(`http://127.0.0.1:${port}/${encodedName}`, {
+    const response = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: COUCHDB_AUTH_HEADER },
     })
     // 201 = created, 412 = already exists (both are acceptable)
-    return response.status === 201 || response.status === 412
-  } catch {
+    if (response.status === 201 || response.status === 412) {
+      return true
+    }
+    // Surface the real reason on unexpected statuses. The previous
+    // `catch {}` and bare-false-return path hid these from CI and made
+    // the assertion message "Should create source database" useless for
+    // diagnosing intermittent failures on the macOS x64 runner.
+    let body = ''
+    try {
+      body = await response.text()
+    } catch {
+      body = '(response body unreadable)'
+    }
+    console.error(
+      `createCouchDBDatabase PUT ${url} returned ${response.status} ${response.statusText}: ${body.slice(0, 500)}`,
+    )
+    return false
+  } catch (error) {
+    const err = error as Error & { cause?: { code?: string; message?: string } }
+    console.error(
+      `createCouchDBDatabase PUT ${url} threw ${err.name}: ${err.message}` +
+        (err.cause ? ` (cause.code=${err.cause.code} cause.message=${err.cause.message})` : ''),
+    )
     return false
   }
 }
