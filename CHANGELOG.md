@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.7] - 2026-05-23
+
+### Tests
+
+- **New `tests/integration/redis-version-smoke.test.ts` for non-canonical Redis majors.** The existing `redis.test.ts` hardcodes `TEST_VERSION='8'`, so 21 lifecycle / clone / restore / auth tests all run on 8.x only. When hostdb 0.32.0 shipped the BSD-licensed `redis-7.2.14` binary and `spindb@0.50.6` cascaded it into production, no automated test ever booted the new binary - the suite was 100% green because it just never tested the new version. Manual smoke caught it during cloud rollout; could just as easily have shipped a broken binary. The new smoke iterates `SUPPORTED_MAJOR_VERSIONS` minus the canonical version and runs a minimal lifecycle (ensureBinaries -> create -> initDataDir -> start -> waitForReady -> SET smoke:key value -> GET smoke:key -> stop -> waitForStopped -> delete) for each. ~2.6s per version on Apple Silicon. Future Redis majors added to hostdb pick up smoke coverage automatically with no test edits. Scope is intentionally minimal - backup/restore/clone coverage stays on the canonical version; we just need proof the binary boots and serves traffic on this platform. Verified locally against Redis 7 before merge.
+
 ## [0.50.6] - 2026-05-23
 
 ### Changed
