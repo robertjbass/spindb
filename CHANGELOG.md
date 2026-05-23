@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.6] - 2026-05-23
+
+### Changed
+
+- **`hostdb` dep bumped: `0.31.1` → `0.32.0` (exact pin).** Picks up the BSD-licensed `redis-7.2.14` binary added in `hostdb@0.32.0` (PR #192) and the registry's defaults flip — `resolveVersion('redis', '7')` now returns `7.2.14` instead of `7.4.9`. Redis 7.4.x and 8.x are RSALv2/SSPLv1 ("no competing managed services"); 7.2.x is the last branch still maintained under BSD-3-Clause by Redis Inc themselves. Existing `spindb create redis 7.4.x` / `redis 8.x` calls still work for desktop / dev use, but `redis 7` (the canonical default) now lands on the BSD line by default. `redis 7.4.9`/`7.4.7` remain resolvable from the registry but are marked `deprecated: true` in `releases.json`. Verified: all 44 integration tests pass against `hostdb@0.32.0`.
+
 ## [0.50.5] - 2026-05-22
 
 ### Fixed
