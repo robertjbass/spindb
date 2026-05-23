@@ -11,7 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`hostdb` dep bumped: `0.31.1` → `0.32.0` (exact pin).** Picks up the BSD-licensed `redis-7.2.14` binary added in `hostdb@0.32.0` (PR #192) and the registry's defaults flip — `resolveVersion('redis', '7')` now returns `7.2.14` instead of `7.4.9`. Redis 7.4.x and 8.x are RSALv2/SSPLv1 ("no competing managed services"); 7.2.x is the last branch still maintained under BSD-3-Clause by Redis Inc themselves. Existing `spindb create redis 7.4.x` / `redis 8.x` calls still work for desktop / dev use, but `redis 7` (the canonical default) now lands on the BSD line by default. `redis 7.4.9`/`7.4.7` remain resolvable from the registry but are marked `deprecated: true` in `releases.json`. Verified: all 44 integration tests pass against `hostdb@0.32.0`.
+- **`hostdb` dep bumped: `0.31.1` → `0.32.0` (exact pin).** Highlights:
+  - Adds the BSD-3-Clause `redis-7.2.14` binary (built in `hostdb#192`) to the registry, alongside the existing `7.4.7` / `7.4.9` / `8.4.0` builds.
+  - Flips the `redis` major-version default: `resolveVersion('redis', '7')` now returns `7.2.14` (was `7.4.9`).
+  - Redis license posture per the registry (`license: "BSD-3-Clause (7.2.x), RSALv2/SSPLv1 (7.4+), AGPL-3.0 (8.0+)"`):
+    - `7.2.x` — BSD-3-Clause (safe to host as a managed service).
+    - `7.4+` — RSALv2/SSPLv1 dual (forbids competing managed services).
+    - `8.0+` — AGPL-3.0 also applies (network-service source disclosure on top of RSAL/SSPL).
+  - Existing `spindb create redis 7.4.x` / `redis 8.x` calls keep working for desktop and self-contained app use; the canonical `redis 7` default now lands on the BSD line.
+  - `redis 7.4.9` / `7.4.7` remain resolvable in `releases.json` but are flagged `deprecated: true`.
+  - Integration test suite (`pnpm test`, 44 tests) ran clean against `hostdb@0.32.0` on `chore/hostdb-0.32.0-bump` before publish.
 
 ## [0.50.5] - 2026-05-22
 
