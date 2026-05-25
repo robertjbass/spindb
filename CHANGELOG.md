@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.8] - 2026-05-24
+
+### Fixed
+
+- **CouchDB `waitForReady` returned ready before the cluster writer machinery was up, causing intermittent macOS x64 GHA failures on integration tests that immediately PUT a database.** Bug history: the May 16 BUG-9 fix (`commit 65804be`) added a `/_up` probe + a synthetic GET-404 probe to confirm CouchDB's chttpd routing layer was reachable. That gates layer 1 (HTTP listener) and layer 2 (mem3/fabric reads). The May 22 run [26302468589](https://github.com/robertjbass/spindb/actions/runs/26302468589) failed on `should backup and restore with password-authenticated local admin credentials` at `tests/integration/couchdb.test.ts:471` — `waitForReady` returned true and the next-line `createCouchDBDatabase` PUT hit 5xx with `no_majority`. Root cause: a third layer — the cluster writer / shard-creation machinery (`mem3_shards`, `couch_replicator`) — initializes after the read path and was not gated. Fix: extend `waitForReady` in both `engines/couchdb/index.ts` (runtime path used by spindb CLI / desktop / cloud) and `tests/integration/helpers.ts` (test-helper path used by the failing assertion) to add a synthetic PUT + DELETE on `/spindb_writeprobe` after the existing two probes. Probe name uses no underscore prefix because CouchDB reserves underscore-prefixed names for system DBs and rejects user-PUTs on them. PUT accepts `201` (freshly created) or `412` (leftover from a previous probe — still proves writes work). DELETE is best-effort. Local verification: CouchDB integration suite ran 3 consecutive times green, 12/12 each, ~17.5s per run.
+
 ## [0.50.7] - 2026-05-23
 
 ### Tests
