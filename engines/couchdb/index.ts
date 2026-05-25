@@ -877,12 +877,14 @@ export class CouchDBEngine extends BaseEngine {
   // half-initialized node and return a 5xx with `{"error":"no_majority"}`,
   // which then poisons follow-up restore/PUT logic.
   //
-  // CouchDB exposes `GET /_up` for exactly this readiness signal: the endpoint
-  // is documented to return `{"status":"ok"}` 200 only once the node is fully
-  // ready to serve requests. We additionally verify that a GET against a
-  // synthetic, definitely-nonexistent database returns 404 rather than 5xx —
-  // that catches the rare case where `/_up` is satisfied but the fabric layer
-  // still rejects queries.
+  // Three-stage gate:
+  //   1. `GET /_up` returns `{"status":"ok"}` — chttpd is up.
+  //   2. `GET /<nonexistent-db>` returns 404 — the routing layer can talk
+  //      to mem3/fabric for reads.
+  //   3. `PUT /<probe-db>` + `DELETE` succeed — the cluster writer
+  //      machinery (shard-creation) is also bootstrapped. Without this
+  //      third stage the reader can be ready while writes still 5xx, and
+  //      any caller doing `PUT /<dbname>` (e.g. restore, tests) fails.
   private async waitForReady(
     port: number,
     timeoutMs = 30000,
@@ -908,10 +910,9 @@ export class CouchDBEngine extends BaseEngine {
         }
 
         if (upOk) {
-          // Verify the node will actually answer a database lookup with 404
-          // rather than 5xx. This proves the cluster machinery (mem3/fabric)
-          // is bootstrapped, not just chttpd.
-          const probeResponse = await couchdbApiRequest(
+          // Read probe: nonexistent DB lookup must return 404, not 5xx.
+          // Proves the routing + mem3/fabric layer is bootstrapped.
+          const readProbe = await couchdbApiRequest(
             port,
             'GET',
             '/_spindb_readiness_probe',
@@ -919,13 +920,45 @@ export class CouchDBEngine extends BaseEngine {
             undefined,
             null,
           )
-          if (probeResponse.status === 404 || probeResponse.status === 401) {
-            logDebug(`CouchDB ready on port ${port}`)
+          if (
+            readProbe.status !== 404 &&
+            readProbe.status !== 401
+          ) {
+            logDebug(
+              `CouchDB _up ok but read probe returned ${readProbe.status} ` +
+                `on port ${port}, waiting...`,
+            )
+            await new Promise((resolve) => setTimeout(resolve, checkInterval))
+            continue
+          }
+          // Write probe: PUT + DELETE a synthetic DB. Until this round-trips
+          // the node isn't safe for callers that create databases.
+          // Underscore-prefixed names are reserved for system DBs and will
+          // be rejected on PUT, so use a plain name.
+          const probeDbPath = '/spindb_writeprobe'
+          const putResponse = await couchdbApiRequest(
+            port,
+            'PUT',
+            probeDbPath,
+          )
+          if (
+            putResponse.status === 201 ||
+            putResponse.status === 412 ||
+            putResponse.status === 202
+          ) {
+            // Best-effort cleanup. If the DELETE fails, the next probe will
+            // see 412 (already exists) and still treat the cluster as ready.
+            try {
+              await couchdbApiRequest(port, 'DELETE', probeDbPath)
+            } catch {
+              /* probe cleanup is best-effort */
+            }
+            logDebug(`CouchDB ready (read + write) on port ${port}`)
             return true
           }
           logDebug(
-            `CouchDB _up ok but DB lookup returned ${probeResponse.status} ` +
-              `on port ${port}, waiting...`,
+            `CouchDB read probe ok but write probe PUT returned ` +
+              `${putResponse.status} on port ${port}, waiting...`,
           )
         }
       } catch {
