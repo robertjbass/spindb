@@ -850,10 +850,16 @@ export async function waitForReady(
         }
       } else if (engine === Engine.CouchDB) {
         // CouchDB's HTTP listener answers `GET /` before the cluster machinery
-        // (mem3/fabric) finishes bootstrapping. Use `/_up` plus a synthetic
-        // 404 probe to confirm the node is actually ready to serve DB lookups.
-        // Without this, restore/PUT requests can hit a half-initialized node
-        // and silently fail on slow runners (notably macOS x64 GHA).
+        // (mem3/fabric) finishes bootstrapping. Three-stage readiness gate:
+        //   1. `/_up` returns {status:"ok"} — chttpd is up.
+        //   2. GET on a synthetic DB returns 404 — the routing layer can
+        //      reach mem3/fabric for reads.
+        //   3. PUT + DELETE a synthetic probe DB succeed — the cluster
+        //      writer machinery (shard-creation) is also bootstrapped.
+        // Without (3), the read probe can succeed while writes still 5xx
+        // with no_majority on slow runners (notably macOS x64 GHA), which
+        // is the race that caused recurring failures in the
+        // backup-restore-with-auth integration test.
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         try {
@@ -877,16 +883,45 @@ export async function waitForReady(
             `http://127.0.0.1:${port}/_spindb_test_probe`,
             { signal: controller.signal },
           )
-          clearTimeout(timeoutId)
           if (
-            probeResponse.status === 404 ||
-            probeResponse.status === 401
+            probeResponse.status !== 404 &&
+            probeResponse.status !== 401
           ) {
-            return true
+            clearTimeout(timeoutId)
+            throw new Error(
+              `CouchDB DB-lookup probe returned ${probeResponse.status}, cluster not ready`,
+            )
           }
-          throw new Error(
-            `CouchDB DB-lookup probe returned ${probeResponse.status}, cluster not ready`,
-          )
+          // Write probe: PUT a synthetic DB and DELETE it. Until this
+          // round-trips the node is not safe to hand off to test code that
+          // creates databases. Underscore-prefixed names are reserved for
+          // CouchDB system DBs, so the probe uses a plain name.
+          const writeProbeUrl = `http://127.0.0.1:${port}/spindb_writeprobe`
+          const putResponse = await fetch(writeProbeUrl, {
+            method: 'PUT',
+            headers: { Authorization: COUCHDB_AUTH_HEADER },
+            signal: controller.signal,
+          })
+          // 201 = freshly created, 412 = leftover from a previous probe
+          // (still proves writes work — we'll DELETE either way).
+          if (putResponse.status !== 201 && putResponse.status !== 412) {
+            clearTimeout(timeoutId)
+            throw new Error(
+              `CouchDB write probe PUT returned ${putResponse.status}, cluster writer not ready`,
+            )
+          }
+          // Best-effort cleanup. If DELETE fails, the next probe iteration
+          // (or the next waitForReady call on the same port) will hit 412
+          // and still treat the cluster as ready.
+          await fetch(writeProbeUrl, {
+            method: 'DELETE',
+            headers: { Authorization: COUCHDB_AUTH_HEADER },
+            signal: controller.signal,
+          }).catch(() => {
+            /* probe cleanup is best-effort */
+          })
+          clearTimeout(timeoutId)
+          return true
         } catch {
           clearTimeout(timeoutId)
           throw new Error('CouchDB health check failed or timed out')
