@@ -144,7 +144,7 @@ spindb delete production-pg
 
 **Supported operations:** `connect`, `url`, `info`, `list`, `delete` (unlink), `databases`, `query`
 
-**Not yet supported:** `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs`
+**Not yet supported:** `backup`, `run`, `restore`, `export`, `clone`, `branch`, `start`, `stop`, `logs`
 
 ## Connection Strings
 
@@ -226,6 +226,43 @@ spindb stop mydb                        # Must stop first
 spindb clone mydb mydb-copy             # Clone container
 spindb start mydb-copy                  # Start on new port
 ```
+
+## Branch (copy-on-write)
+
+Instant, near-zero-space forks (reflink on APFS / Btrfs / XFS-reflink / ZFS; full-copy fallback on ext4 / NTFS). A running source is auto stop → snapshot → restart'ed — no need to stop it first.
+
+```bash
+spindb branch mydb mydb-exp             # Fork mydb -> mydb-exp (auto-starts it)
+spindb branch mydb mydb-exp --no-start  # Create without starting
+spindb branch mydb mydb-exp --port 6000 # Run the branch on a specific port
+spindb branch mydb mydb-exp --json      # Scriptable: { method: "reflink"|"copy", port, ... }
+
+spindb branch list                      # Lineage tree (--json for the forest)
+spindb branch info mydb-exp             # Parent + children
+spindb branch reset mydb-exp            # Discard the branch's changes, re-fork from parent
+spindb branch rename mydb-exp mydb-x    # Rename (repoints children)
+spindb branch delete mydb-exp           # Delete (refuses if it has child branches)
+spindb branch delete mydb --cascade     # Delete a branch and its whole subtree
+```
+
+### Git-driven branching (Neon/Vercel-style)
+
+Your git branch drives your database branch on a **stable port** — your `DATABASE_URL` never changes. Server engines only.
+
+```bash
+spindb branch init --base mydb          # Wire this repo: writes .spindb/branch.json + post-checkout hook
+# from now on, just use git:
+git checkout -b feature/x               # hook swaps mydb__feature-x onto the stable port
+git checkout main                       # hook swaps the base back
+
+spindb branch status                    # Config, current git branch, active DB, hook state
+spindb branch sync                      # Manually swap to the current git branch
+spindb branch prune                     # Delete DB branches whose git branch is gone
+spindb branch hooks install             # (Re)install the post-checkout hook (e.g. after cloning)
+spindb branch hooks uninstall
+```
+
+See [docs/BRANCHING.md](docs/BRANCHING.md) and [docs/BRANCHING-INTEGRATION.md](docs/BRANCHING-INTEGRATION.md).
 
 ## Pull (Sync from Remote)
 
