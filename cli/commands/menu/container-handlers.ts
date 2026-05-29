@@ -2406,7 +2406,9 @@ async function handleBranchFromSubmenu(
     },
   ])
 
-  if (await containerManager.exists(branchName, { engine: sourceConfig.engine })) {
+  if (
+    await containerManager.exists(branchName, { engine: sourceConfig.engine })
+  ) {
     console.log(uiError(`Container "${branchName}" already exists`))
     await pressEnterToContinue()
     return
@@ -2421,7 +2423,9 @@ async function handleBranchFromSubmenu(
       name: branchName,
     })
     const methodNote = result.method === 'reflink' ? ' (copy-on-write)' : ''
-    spinner.succeed(`Created branch "${branchName}" from "${sourceName}"${methodNote}`)
+    spinner.succeed(
+      `Created branch "${branchName}" from "${sourceName}"${methodNote}`,
+    )
 
     if (result.warning) console.log(uiWarning(result.warning))
     console.log()
@@ -2578,6 +2582,35 @@ async function handleDelete(containerName: string): Promise<void> {
   if (!confirmed) {
     console.log(uiWarning(isRemote ? 'Unlink cancelled' : 'Deletion cancelled'))
     return
+  }
+
+  // Branch-aware: deleting a container that has child branches would orphan
+  // them. Offer to cascade (matching `spindb branch delete --cascade`).
+  if (!isRemote) {
+    const children = await branchManager.childrenOf(containerName)
+    if (children.length > 0) {
+      const cascade = await promptConfirm(
+        `"${containerName}" has ${children.length} child branch(es): ${children.join(', ')}. Delete them too?`,
+        false,
+      )
+      if (!cascade) {
+        console.log(
+          uiWarning(
+            'Deletion cancelled — delete or reset the child branches first.',
+          ),
+        )
+        return
+      }
+      const cascadeSpinner = createSpinner(
+        `Deleting ${containerName} and its branches...`,
+      )
+      cascadeSpinner.start()
+      const result = await branchManager.deleteBranch(containerName, {
+        cascade: true,
+      })
+      cascadeSpinner.succeed(`Deleted ${result.deleted.length} container(s)`)
+      return
+    }
   }
 
   // Remote containers: skip process checks

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-05-29
+
+### Added
+
+- **`spindb branch` documented in CHEATSHEET.md** — a new Branch (copy-on-write) section covering create/list/info/reset/rename/delete plus the git-driven workflow; `branch` also added to the remote-not-supported list.
+- **Interactive menu manages branches end-to-end.** A new top-level **Branches** view renders the lineage tree and lets you drill into any branch to manage it; and, when a repo is git-branch-configured, a **Git branching** view shows status (base, stable port, current branch, active DB, hook state) and offers sync / prune / hook install-uninstall. The per-container **Delete** is now branch-aware — deleting a container that has child branches prompts to cascade instead of silently orphaning them. The tree renderer is shared between `spindb branch list` and the menu.
+- **docs/BRANCHING-INTEGRATION.md** — a concrete integration playbook for layerbase-desktop and layerbase-cloud: which `spindb branch` commands to wrap, the `POST /v1/databases/:id/branch` endpoint shape, port allocation, and the copy-on-write filesystem requirement for instant cloud branches.
+
 ## [0.51.0] - 2026-05-28
 
 ### Added

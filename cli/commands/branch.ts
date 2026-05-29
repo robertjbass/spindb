@@ -1,8 +1,9 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
-import { branchManager, type BranchNode } from '../../core/branch-manager'
+import { branchManager } from '../../core/branch-manager'
 import { isRemoteContainer } from '../../types'
+import { renderBranchTree } from '../ui/branch-tree'
 import {
   promptContainerSelect,
   promptContainerName,
@@ -15,7 +16,6 @@ import {
   keyValue,
   uiWarning,
   uiSuccess,
-  theme,
 } from '../ui/theme'
 import { exitWithError } from '../../core/error-handler'
 import {
@@ -191,7 +191,7 @@ branchCommand
       }
       console.log()
       console.log(header('Branch tree'))
-      renderBranchTree(tree, '')
+      renderBranchTree(tree)
       console.log()
     } catch (error) {
       return exitWithError({
@@ -648,25 +648,3 @@ branchCommand
       })
     }
   })
-
-function renderBranchTree(nodes: BranchNode[], prefix: string): void {
-  nodes.forEach((node, index) => {
-    const isLast = index === nodes.length - 1
-    const connector = prefix === '' ? '' : isLast ? '└─ ' : '├─ '
-    const statusBadge =
-      node.status === 'running'
-        ? theme.running
-        : node.status === 'created'
-          ? theme.created
-          : theme.stopped
-    const portStr = node.port ? chalk.gray(` :${node.port}`) : ''
-    const gitTag = node.gitBranch ? chalk.magenta(`  ⎇ ${node.gitBranch}`) : ''
-    console.log(
-      `${prefix}${connector}${chalk.cyan(node.name)} ${chalk.gray(
-        node.engine,
-      )}${portStr}  ${statusBadge}${gitTag}`,
-    )
-    const childPrefix = prefix === '' ? '  ' : prefix + (isLast ? '   ' : '│  ')
-    renderBranchTree(node.children, childPrefix)
-  })
-}
