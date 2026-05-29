@@ -10,6 +10,15 @@ Quick capture for ideas that need review and prioritization:
 
 ## High Priority
 
+### Database Branching
+
+Neon/Vercel-style copy-on-write branching, local, for every engine. See [docs/BRANCHING.md](docs/BRANCHING.md).
+
+- [x] **Phase 1 — branch primitive.** `spindb branch` (create/list/info/reset/rename/delete), copy-on-write data-dir clone with full-copy fallback (`core/cow-copy.ts`), auto stop→snapshot→restart of running sources, file-based (SQLite/DuckDB) support, lineage tree, interactive-menu actions, `--json` for all subcommands, unit + e2e tests.
+- [x] **Phase 2 — git-hook framework.** Tie git branch → DB branch (Vercel/Neon-style) via `core/git-branch-sync.ts`. `branch init` writes `.spindb/branch.json` + installs a chain-safe `post-checkout` hook; switching git branches swaps the active DB branch onto a **stable port** so `DATABASE_URL` never changes. Added `branch sync` (hook entrypoint), `branch status`, `branch prune`, `branch hooks install|uninstall`, plus a menu "Set up git branching" action. Server engines only. Cross-platform (POSIX-sh hook runs under Git Bash on Windows). Unit + PostgreSQL e2e tests.
+- [ ] **Phase 3 — downstream enablement.** layerbase-desktop `branchContainer()` IPC + modal; layerbase-cloud `POST /v1/databases/:id/branch` (flag: Hetzner ext4 volumes fall back to full copy — provision ZFS/Btrfs/XFS-reflink for instant cloud branches); web button via cloud API.
+- [ ] **Future — time-travel.** Branch-from-history via per-engine WAL archiving + PITR (PostgreSQL first).
+
 ### Layerbase Cloud — Engine Bypass Elimination
 
 These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due to missing SpinDB features. Fixing them lets layerbase-cloud use the standard `spindb start` path, reducing divergence.

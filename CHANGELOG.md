@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Database branching (`spindb branch`) — Neon/Vercel-style copy-on-write forks, local, for every engine.** A branch duplicates a container's data directory via a filesystem reflink/clonefile (APFS on macOS; Btrfs / XFS-reflink / ZFS on Linux), so it's effectively instant and shares disk blocks with its source until the two diverge. Where the filesystem can't do copy-on-write (ext4, NTFS) it transparently falls back to a full copy; `--json` reports `"method": "reflink"` vs `"copy"` either way. A running source is handled with an automatic stop → snapshot → restart cycle so the snapshot is consistent and downtime is minimal; file-based engines (SQLite/DuckDB) clone the backing file with no server involved. Branches record their parent and form a lineage tree.
+  - New commands: `spindb branch <source> [name]` (create; `--no-start`, `--port`, `--json`), `branch list` (lineage tree, `--json`), `branch info`, `branch reset` (discard a branch's changes and re-fork from the parent's current state), `branch rename` (repoints children), and `branch delete` (`--cascade` to delete a subtree; refuses to orphan children otherwise).
+  - Lineage surfaces across the CLI: `spindb info` shows **Branched From / Branched At / Git Branch**, and `spindb list --json` includes `branchParent`.
+  - Interactive menu: a container's actions now include **Branch container** (works whether running or stopped) and **Reset branch to "&lt;parent&gt;"** for containers that are themselves branches.
+  - `spindb clone` is unchanged (explicit full copy of a stopped container); branching shares its copy/config-rewrite path via the new `containerManager.copyContainerData()`. New modules: `core/cow-copy.ts` (reflink primitive + fallback) and `core/branch-manager.ts` (lifecycle orchestration). Engines that bake identity into their data dir fix it up via a new `prepareBranchedDataDir()` hook (ClickHouse regenerates `config.xml`; others are no-ops or self-heal on start).
+  - Not yet supported: time-travel (branch-from-history) and merge. Linked/remote databases cannot be branched locally.
+  - See [docs/BRANCHING.md](docs/BRANCHING.md).
+
+- **Git-driven branching — your git branch drives your database branch (Neon/Vercel-style), locally.** `spindb branch init --base <container>` wires a repo to a base container: it writes `.spindb/branch.json` and installs a chain-safe `post-checkout` git hook. From then on, switching git branches swaps the matching database branch onto a **stable port** (the base's port), so your app's `DATABASE_URL` never changes — one database branch is live at a time, created copy-on-write from the base on first checkout. New subcommands: `branch init`, `branch sync` (the hook entrypoint; also runnable manually), `branch status`, `branch prune` (delete DB branches whose git branch is gone), and `branch hooks install|uninstall`. Server engines only (the stable-port model needs a port). The git→DB mapping is deterministic (`main`→base, `feature/x`→`<base>__feature-x`), so the only persisted state is the shareable `.spindb/branch.json`. New module `core/git-branch-sync.ts`; interactive menu gains a **Set up git branching here** action. The POSIX-sh hook runs under Git Bash on Windows and never blocks a checkout.
+
 ## [0.50.8] - 2026-05-24
 
 ### Fixed
