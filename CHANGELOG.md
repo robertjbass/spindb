@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-05-28
+
 ### Added
 
 - **Database branching (`spindb branch`) — Neon/Vercel-style copy-on-write forks, local, for every engine.** A branch duplicates a container's data directory via a filesystem reflink/clonefile (APFS on macOS; Btrfs / XFS-reflink / ZFS on Linux), so it's effectively instant and shares disk blocks with its source until the two diverge. Where the filesystem can't do copy-on-write (ext4, NTFS) it transparently falls back to a full copy; `--json` reports `"method": "reflink"` vs `"copy"` either way. A running source is handled with an automatic stop → snapshot → restart cycle so the snapshot is consistent and downtime is minimal; file-based engines (SQLite/DuckDB) clone the backing file with no server involved. Branches record their parent and form a lineage tree.
