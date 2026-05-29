@@ -101,6 +101,8 @@ In `spindb` (interactive), a container's action menu includes **Branch container
 
 Branching lives entirely in SpinDB so every consumer gets it for free: **layerbase-desktop** calls `spindb branch` over IPC, and **layerbase-cloud** execs it inside the user's container. To deliver *instant* branching in the cloud, provision a copy-on-write filesystem (ZFS/Btrfs/XFS-reflink) for the data volumes — otherwise branches there are full copies.
 
+See **[BRANCHING-INTEGRATION.md](BRANCHING-INTEGRATION.md)** for the concrete desktop/cloud playbook — which commands to wrap, the `POST /branch` endpoint shape, port allocation, and the filesystem requirement.
+
 ## Git-driven branching
 
 Tie your **git branch** to a **database branch** automatically, the way Neon/Vercel preview branches work. As you switch git branches, the matching database branch is swapped onto a **stable port**, so your app's `DATABASE_URL` never changes.

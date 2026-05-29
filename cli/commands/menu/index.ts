@@ -2,18 +2,30 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { containerManager } from '../../../core/container-manager'
+import { branchManager } from '../../../core/branch-manager'
+import {
+  status as gitStatus,
+  sync as gitSync,
+  prune as gitPrune,
+  installHooks as gitInstallHooks,
+  uninstallHooks as gitUninstallHooks,
+  findRepoRoot,
+  loadConfig as loadGitConfig,
+} from '../../../core/git-branch-sync'
+import { renderBranchTree } from '../../ui/branch-tree'
 import {
   updateManager,
   type UpdateCheckResult,
 } from '../../../core/update-manager'
 import {
   promptInstallDependencies,
+  promptContainerSelect,
   enableGlobalEscape,
   checkAndResetEscape,
   escapeablePrompt,
   EscapeError,
 } from '../../ui/prompts'
-import { header, uiError, uiSuccess, uiWarning } from '../../ui/theme'
+import { header, keyValue, uiError, uiSuccess, uiWarning } from '../../ui/theme'
 import { MissingToolError } from '../../../core/error-handler'
 import {
   handleCreate,
@@ -38,9 +50,13 @@ async function showMainMenu(): Promise<void> {
   console.log()
 
   // Parallelize container list and config loading for faster startup
-  const [containers, config] = await Promise.all([
+  const [containers, config, gitConfig] = await Promise.all([
     containerManager.list(),
     configManager.getConfig(),
+    (async () => {
+      const root = await findRepoRoot()
+      return root ? loadGitConfig(root) : null
+    })(),
   ])
 
   // Check for updates on first menu load only (if auto-check is enabled)
@@ -91,6 +107,17 @@ async function showMainMenu(): Promise<void> {
     { name: `${chalk.magenta('↔')} Link remote database`, value: 'link' },
     ...(hasContainers
       ? [{ name: `${chalk.magenta('⊞')} Ports`, value: 'ports' }]
+      : []),
+    ...(hasContainers
+      ? [{ name: `${chalk.cyan('⎇')} Branches`, value: 'branches' }]
+      : []),
+    ...(gitConfig
+      ? [
+          {
+            name: `${chalk.magenta('⎇')} Git branching`,
+            value: 'git_branching',
+          },
+        ]
       : []),
     new inquirer.Separator(),
     { name: `${chalk.yellow('⚙')} Settings`, value: 'settings' },
@@ -154,6 +181,12 @@ async function showMainMenu(): Promise<void> {
       break
     case 'ports':
       await handlePorts()
+      break
+    case 'branches':
+      await handleBranches()
+      break
+    case 'git_branching':
+      await handleGitBranching()
       break
     case 'settings':
       await handleSettings()
@@ -238,6 +271,136 @@ async function handlePorts(): Promise<void> {
 
   console.log()
   await pressEnterToContinue()
+}
+
+async function handleBranches(): Promise<void> {
+  console.clear()
+  console.log(header('Branches'))
+  console.log()
+
+  const [tree, containers] = await Promise.all([
+    branchManager.getBranchTree(),
+    containerManager.list(),
+  ])
+
+  if (containers.length === 0) {
+    console.log(chalk.gray('  No containers found.'))
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
+
+  renderBranchTree(tree)
+  console.log()
+
+  const selected = await promptContainerSelect(
+    containers,
+    'Manage a branch (or go back):',
+    { includeBack: true },
+  )
+  if (selected) {
+    await showContainerSubmenu(selected, showMainMenu)
+  }
+}
+
+async function handleGitBranching(): Promise<void> {
+  console.clear()
+  console.log(header('Git branching'))
+  console.log()
+
+  const st = await gitStatus({})
+  if (!st) {
+    console.log(uiWarning('Git branching is not set up in this repo.'))
+    console.log(
+      chalk.gray(
+        '  Set it up from a container: Containers → (pick one) → Set up git branching here.',
+      ),
+    )
+    console.log()
+    await pressEnterToContinue()
+    return
+  }
+
+  console.log(keyValue('  Base', st.config.baseContainer))
+  console.log(keyValue('  Stable port', String(st.config.stablePort)))
+  console.log(keyValue('  Main branch', st.config.mainBranch))
+  console.log(keyValue('  Current branch', st.gitBranch))
+  console.log(keyValue('  Maps to', st.target))
+  console.log(keyValue('  Active now', st.active ?? '(none running)'))
+  console.log(keyValue('  Hook installed', st.hooksInstalled ? 'yes' : 'no'))
+  console.log()
+
+  const { action } = await escapeablePrompt<{ action: string }>([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'Git branching:',
+      choices: [
+        {
+          name: `${chalk.green('⎇')} Sync to current git branch`,
+          value: 'sync',
+        },
+        {
+          name: `${chalk.yellow('✂')} Prune orphaned branches`,
+          value: 'prune',
+        },
+        {
+          name: st.hooksInstalled
+            ? `${chalk.gray('↻')} Reinstall post-checkout hook`
+            : `${chalk.green('+')} Install post-checkout hook`,
+          value: 'hooks-install',
+        },
+        ...(st.hooksInstalled
+          ? [
+              {
+                name: `${chalk.gray('−')} Uninstall post-checkout hook`,
+                value: 'hooks-uninstall',
+              },
+            ]
+          : []),
+        new inquirer.Separator(),
+        { name: `${chalk.gray('←')} Back`, value: 'back' },
+      ],
+      pageSize: getPageSize(),
+    },
+  ])
+
+  if (action === 'back') return
+
+  if (action === 'sync') {
+    const spinner = createSpinner('Syncing database to current git branch...')
+    spinner.start()
+    try {
+      const result = await gitSync({})
+      spinner.succeed(
+        `Active database is now "${result.container}"${result.created ? ' (created)' : ''}`,
+      )
+    } catch (error) {
+      spinner.fail((error as Error).message)
+    }
+  } else if (action === 'prune') {
+    const spinner = createSpinner('Pruning orphaned branches...')
+    spinner.start()
+    try {
+      const { deleted } = await gitPrune({})
+      spinner.succeed(
+        deleted.length > 0
+          ? `Pruned ${deleted.length} branch(es)`
+          : 'Nothing to prune',
+      )
+    } catch (error) {
+      spinner.fail((error as Error).message)
+    }
+  } else if (action === 'hooks-install') {
+    await gitInstallHooks(st.repoRoot)
+    console.log(uiSuccess('post-checkout hook installed'))
+  } else if (action === 'hooks-uninstall') {
+    await gitUninstallHooks(st.repoRoot)
+    console.log(uiSuccess('post-checkout hook removed'))
+  }
+
+  await pressEnterToContinue()
+  await handleGitBranching()
 }
 
 async function handleUpdate(): Promise<void> {
