@@ -13,6 +13,14 @@ const execAsync = promisify(exec)
 type FindPortOptions = {
   preferredPort?: number
   portRange?: { start: number; end: number }
+  /**
+   * Extra ports to treat as unavailable on top of the running containers'
+   * ports. Used when branching/cloning so the new container never reuses the
+   * source's port: a running source is briefly stopped to take a consistent
+   * snapshot, which would otherwise make its port look free and get reassigned
+   * to the copy - leaving the copy unable to start once the source restarts.
+   */
+  excludePorts?: number[]
 }
 
 export class PortManager {
@@ -131,10 +139,14 @@ export class PortManager {
     const preferredPort = options.preferredPort ?? defaults.port
     const portRange = options.portRange ?? defaults.portRange
     const containerPorts = await this.getContainerPorts()
+    const unavailable = new Set<number>([
+      ...containerPorts,
+      ...(options.excludePorts ?? []),
+    ])
 
     // First try the preferred port
     if (
-      !containerPorts.includes(preferredPort) &&
+      !unavailable.has(preferredPort) &&
       (await this.isPortAvailable(preferredPort))
     ) {
       return {
@@ -145,7 +157,7 @@ export class PortManager {
 
     // Scan for available ports in the range
     for (let port = portRange.start; port <= portRange.end; port++) {
-      if (containerPorts.includes(port)) continue // Skip ports used by containers
+      if (unavailable.has(port)) continue // Skip container + explicitly-excluded ports
       if (port === preferredPort) continue // Already tried this one
 
       if (await this.isPortAvailable(port)) {

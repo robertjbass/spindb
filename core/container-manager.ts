@@ -27,9 +27,7 @@ import { duckdbRegistry } from '../engines/duckdb/registry'
 // recommended major. This keeps the displayed version consistent with whatever
 // binary spindb would currently use, instead of hardcoding shorthand `'3'` /
 // `'1'` that drifts away from the actual binary.
-function fileBasedEngineVersion(
-  engine: Engine.SQLite | Engine.DuckDB,
-): string {
+function fileBasedEngineVersion(engine: Engine.SQLite | Engine.DuckDB): string {
   const major = getEngineDefaults(engine).defaultVersion
   const dbEngine = getEngine(engine)
   return dbEngine.resolveFullVersion(major)
@@ -520,10 +518,16 @@ export class ContainerManager {
         config.port = options.port
       } else {
         const engineDefaults = getEngineDefaults(engine)
-        const { port } =
-          await portManager.findAvailablePortExcludingContainers({
+        const { port } = await portManager.findAvailablePortExcludingContainers(
+          {
             portRange: engineDefaults.portRange,
-          })
+            // Never reuse the source's port. Branching briefly stops a running
+            // source to snapshot it; without this the source's now-free port
+            // could be handed to the branch, which then fails to start once the
+            // source restarts and reclaims it.
+            excludePorts: [sourceConfig.port],
+          },
+        )
         config.port = port
       }
 
