@@ -392,6 +392,7 @@ export class ClickHouseEngine extends BaseEngine {
    */
   override async prepareBranchedDataDir(
     container: ContainerConfig,
+    _options: { sourceName: string },
   ): Promise<void> {
     await this.regenerateConfig(container.name, container.port)
   }

@@ -41,7 +41,7 @@ These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
 - [ ] **Proxy/reverse-proxy MVP** - Build system to deploy directly to containers with network access
-- [ ] **Git hook integration** - Add hooks for pre-commit, post-checkout, etc. to automate database workflows
+- [ ] **Additional git-hook automation** - The branch-sync `post-checkout` hook is done (see the Database Branching → Phase 2 item above). Explore further hooks (pre-commit, pre-push) for other database workflows — e.g. auto-backup before risky ops, or migration/seed checks.
 - [ ] **Refine API** - Clean up and stabilize the programmatic API surface
 - [ ] **Build package to mimic CLI** - Export package that provides CLI functionality programmatically
 - [ ] **Rethink testing processes** - Optimize test suite for faster execution time

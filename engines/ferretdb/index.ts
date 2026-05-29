@@ -1442,6 +1442,25 @@ export class FerretDBEngine extends BaseEngine {
   }
 
   /**
+   * After a branch/clone copies the data directory, the branch inherits the
+   * source's PostgreSQL backend port. Clear it so the next start() allocates a
+   * fresh free port — otherwise the branch's backend collides with the
+   * source's when both run (e.g. during the branch manager's
+   * stop -> snapshot -> restart of the source).
+   */
+  override async prepareBranchedDataDir(
+    container: ContainerConfig,
+    _options: { sourceName: string },
+  ): Promise<void> {
+    if (container.backendPort !== undefined) {
+      await containerManager.updateConfig(container.name, {
+        backendPort: undefined,
+      })
+      container.backendPort = undefined
+    }
+  }
+
+  /**
    * Get the path to mongosh (uses MongoDB's mongosh)
    * FerretDB is MongoDB-compatible, so it uses the same shell
    */

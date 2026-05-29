@@ -477,15 +477,17 @@ export class ContainerManager {
     const sourcePath = paths.getContainerPath(sourceName, { engine })
     const targetPath = paths.getContainerPath(targetName, { engine })
 
-    let method: CopyMethod = 'copy'
-    if (strategy === 'cow') {
-      method = (await cloneDirectory(sourcePath, targetPath)).method
-    } else {
-      await cp(sourcePath, targetPath, { recursive: true })
-    }
-
-    // If anything fails after the copy, clean up the target directory
+    // Copy the data directory, then write the new config. If anything fails —
+    // the copy itself, reading the config back, or the engine fixup hook —
+    // clean up the (possibly partial) target directory.
     try {
+      let method: CopyMethod = 'copy'
+      if (strategy === 'cow') {
+        method = (await cloneDirectory(sourcePath, targetPath)).method
+      } else {
+        await cp(sourcePath, targetPath, { recursive: true })
+      }
+
       // Update target config
       const config = await this.getConfig(targetName, { engine })
       if (!config) {

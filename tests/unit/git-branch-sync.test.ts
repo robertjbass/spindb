@@ -105,6 +105,9 @@ describe('git-branch-sync: post-checkout hook management', () => {
   })
 
   it('uninstall removes the managed block but keeps the custom hook', async () => {
+    // Self-contained: seed a hook with both a custom body and our managed block.
+    await writeFile(hookFile(), '#!/bin/sh\necho "my custom hook"\n')
+    await installHooks(repo)
     await uninstallHooks(repo)
     const content = await readFile(hookFile(), 'utf8')
     assert.ok(content.includes('my custom hook'))
