@@ -181,6 +181,19 @@ Every engine works the same way. Learn one, use them all.
 
 > See [CHEATSHEET.md](CHEATSHEET.md) for the complete command reference, connection strings, backup formats, scripting patterns, and more.
 
+### Branching (copy-on-write)
+
+Fork a database instantly, the way Neon/Vercel do — but locally and for **every engine**:
+
+```bash
+spindb branch myapp myapp-feature   # instant copy-on-write fork (auto stop/restart if running)
+spindb branch list                  # see the lineage tree
+spindb branch reset myapp-feature   # discard the branch's changes, re-fork from parent
+spindb branch delete myapp-feature
+```
+
+On copy-on-write filesystems (APFS on macOS; Btrfs / XFS-reflink / ZFS on Linux) a branch is instant and shares disk blocks with its source until they diverge; elsewhere it falls back to a full copy. See [docs/BRANCHING.md](docs/BRANCHING.md).
+
 ---
 
 ## Why SpinDB?

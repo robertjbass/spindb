@@ -13,6 +13,7 @@ import { paths } from '../config/paths'
 import { processManager } from './process-manager'
 import { portManager } from './port-manager'
 import { isWindows } from './platform-service'
+import { cloneDirectory, type CopyMethod } from './cow-copy'
 import { logDebug, UnsupportedOperationError } from './error-handler'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
@@ -26,12 +27,18 @@ import { duckdbRegistry } from '../engines/duckdb/registry'
 // recommended major. This keeps the displayed version consistent with whatever
 // binary spindb would currently use, instead of hardcoding shorthand `'3'` /
 // `'1'` that drifts away from the actual binary.
-function fileBasedEngineVersion(engine: 'sqlite' | 'duckdb'): string {
+function fileBasedEngineVersion(
+  engine: Engine.SQLite | Engine.DuckDB,
+): string {
   const major = getEngineDefaults(engine).defaultVersion
   const dbEngine = getEngine(engine)
   return dbEngine.resolveFullVersion(major)
 }
-import type { ContainerConfig } from '../types'
+import type {
+  ContainerConfig,
+  SQLiteRegistryEntry,
+  DuckDBRegistryEntry,
+} from '../types'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../types'
 
 export type CreateOptions = {
@@ -142,24 +149,35 @@ export class ContainerManager {
     return null
   }
 
+  // Convert a file-based registry entry to ContainerConfig format. Shared by
+  // getConfig and list so branch lineage (branchParent/branchedAt/gitBranch) is
+  // surfaced consistently. "running" status = the backing file exists.
+  private fileBasedEntryToConfig(
+    entry: SQLiteRegistryEntry | DuckDBRegistryEntry,
+    engine: Engine.SQLite | Engine.DuckDB,
+  ): ContainerConfig {
+    const fileExists = existsSync(entry.filePath)
+    return {
+      name: entry.name,
+      engine,
+      version: fileBasedEngineVersion(engine),
+      port: 0,
+      database: entry.filePath, // file-based: database field stores file path
+      databases: [entry.filePath],
+      created: entry.created,
+      status: fileExists ? 'running' : 'stopped',
+      ...(entry.branchParent ? { branchParent: entry.branchParent } : {}),
+      ...(entry.branchedAt ? { branchedAt: entry.branchedAt } : {}),
+      ...(entry.gitBranch ? { gitBranch: entry.gitBranch } : {}),
+    }
+  }
+
   private async getSqliteConfig(name: string): Promise<ContainerConfig | null> {
     const entry = await sqliteRegistry.get(name)
     if (!entry) {
       return null
     }
-
-    // Convert registry entry to ContainerConfig format
-    const fileExists = existsSync(entry.filePath)
-    return {
-      name: entry.name,
-      engine: Engine.SQLite,
-      version: fileBasedEngineVersion('sqlite'),
-      port: 0,
-      database: entry.filePath, // For SQLite, database field stores file path
-      databases: [entry.filePath],
-      created: entry.created,
-      status: fileExists ? 'running' : 'stopped', // "running" = file exists
-    }
+    return this.fileBasedEntryToConfig(entry, Engine.SQLite)
   }
 
   private async getDuckDBConfig(name: string): Promise<ContainerConfig | null> {
@@ -167,19 +185,7 @@ export class ContainerManager {
     if (!entry) {
       return null
     }
-
-    // Convert registry entry to ContainerConfig format
-    const fileExists = existsSync(entry.filePath)
-    return {
-      name: entry.name,
-      engine: Engine.DuckDB,
-      version: fileBasedEngineVersion('duckdb'),
-      port: 0,
-      database: entry.filePath, // For DuckDB, database field stores file path
-      databases: [entry.filePath],
-      created: entry.created,
-      status: fileExists ? 'running' : 'stopped', // "running" = file exists
-    }
+    return this.fileBasedEntryToConfig(entry, Engine.DuckDB)
   }
 
   // Migrates old container configs to include databases array.
@@ -273,36 +279,14 @@ export class ContainerManager {
 
     // List SQLite containers from registry
     const sqliteEntries = await sqliteRegistry.list()
-    const sqliteVersion = fileBasedEngineVersion('sqlite')
     for (const entry of sqliteEntries) {
-      const fileExists = existsSync(entry.filePath)
-      containers.push({
-        name: entry.name,
-        engine: Engine.SQLite,
-        version: sqliteVersion,
-        port: 0,
-        database: entry.filePath,
-        databases: [entry.filePath],
-        created: entry.created,
-        status: fileExists ? 'running' : 'stopped', // "running" = file exists
-      })
+      containers.push(this.fileBasedEntryToConfig(entry, Engine.SQLite))
     }
 
     // List DuckDB containers from registry
     const duckdbEntries = await duckdbRegistry.list()
-    const duckdbVersion = fileBasedEngineVersion('duckdb')
     for (const entry of duckdbEntries) {
-      const fileExists = existsSync(entry.filePath)
-      containers.push({
-        name: entry.name,
-        engine: Engine.DuckDB,
-        version: duckdbVersion,
-        port: 0,
-        database: entry.filePath,
-        databases: [entry.filePath],
-        created: entry.created,
-        status: fileExists ? 'running' : 'stopped', // "running" = file exists
-      })
+      containers.push(this.fileBasedEntryToConfig(entry, Engine.DuckDB))
     }
 
     // List server-based containers (PostgreSQL, MySQL, etc.)
@@ -445,10 +429,29 @@ export class ContainerManager {
     }
   }
 
-  async clone(
-    sourceName: string,
-    targetName: string,
-  ): Promise<ContainerConfig> {
+  /**
+   * Duplicate a server-based container's data directory under a new name and
+   * write a new container.json for it. Shared by `clone()` (full byte copy) and
+   * the branch manager (copy-on-write reflink). The caller is responsible for
+   * ensuring the source is in a copyable state (stopped, or a consistent
+   * snapshot); this method does the mechanical copy + config rewrite only.
+   *
+   * File-based engines (SQLite/DuckDB) are NOT handled here — their data lives
+   * in an external file tracked by a registry, so the branch manager copies the
+   * file and registers a new entry directly.
+   */
+  async copyContainerData(options: {
+    sourceName: string
+    targetName: string
+    /** 'cow' uses a copy-on-write reflink where the filesystem supports it; 'copy' is a full byte copy. */
+    strategy: 'cow' | 'copy'
+    /** Lineage to stamp on the new container (typically exactly one is set). */
+    lineage: { clonedFrom?: string; branchParent?: string }
+    /** Explicit port for the new container; when omitted, the next free port in the engine range is used. */
+    port?: number
+  }): Promise<{ config: ContainerConfig; method: CopyMethod }> {
+    const { sourceName, targetName, strategy, lineage } = options
+
     // Validate target name
     if (!this.isValidName(targetName)) {
       throw new Error(
@@ -469,54 +472,66 @@ export class ContainerManager {
       throw new Error(`Target container "${targetName}" already exists`)
     }
 
-    // Check source is not running
-    const running = await processManager.isRunning(sourceName, { engine })
-    if (running) {
-      throw new Error(
-        `Source container "${sourceName}" is running. Stop it first`,
-      )
-    }
-
-    // Copy container directory
+    // Duplicate the container directory: reflink for branches (instant where
+    // the filesystem supports it), full byte copy for clones.
     const sourcePath = paths.getContainerPath(sourceName, { engine })
     const targetPath = paths.getContainerPath(targetName, { engine })
 
-    await cp(sourcePath, targetPath, { recursive: true })
+    let method: CopyMethod = 'copy'
+    if (strategy === 'cow') {
+      method = (await cloneDirectory(sourcePath, targetPath)).method
+    } else {
+      await cp(sourcePath, targetPath, { recursive: true })
+    }
 
-    // If anything fails after copy, clean up the target directory
+    // If anything fails after the copy, clean up the target directory
     try {
       // Update target config
       const config = await this.getConfig(targetName, { engine })
       if (!config) {
-        throw new Error('Failed to read cloned container config')
+        throw new Error('Failed to read copied container config')
       }
 
       config.name = targetName
       config.created = new Date().toISOString()
-      config.clonedFrom = sourceName
+      // A freshly copied container is not running yet, regardless of what the
+      // source's persisted status said.
+      config.status = 'stopped'
 
-      // Assign new port (excluding ports already used by other containers)
-      const engineDefaults = getEngineDefaults(engine)
-      const { port } = await portManager.findAvailablePortExcludingContainers({
-        portRange: engineDefaults.portRange,
-      })
-      config.port = port
+      // Reset lineage, then apply the requested lineage so branch and clone
+      // metadata never leak into each other across repeated operations.
+      delete config.clonedFrom
+      delete config.branchParent
+      delete config.branchedAt
+      delete config.gitBranch
+      if (lineage.clonedFrom) {
+        config.clonedFrom = lineage.clonedFrom
+      }
+      if (lineage.branchParent) {
+        config.branchParent = lineage.branchParent
+        config.branchedAt = config.created
+      }
+
+      // Assign a port: an explicit one (stable-port git branches) or the next
+      // free port in the engine's range (excluding ports used by containers).
+      if (options.port !== undefined) {
+        config.port = options.port
+      } else {
+        const engineDefaults = getEngineDefaults(engine)
+        const { port } =
+          await portManager.findAvailablePortExcludingContainers({
+            portRange: engineDefaults.portRange,
+          })
+        config.port = port
+      }
 
       await this.saveConfig(targetName, { engine }, config)
 
-      // ClickHouse stores absolute paths in config.xml - regenerate with new paths
-      if (engine === Engine.ClickHouse) {
-        const clickhouseEngine = getEngine(Engine.ClickHouse)
-        if ('regenerateConfig' in clickhouseEngine) {
-          await (
-            clickhouseEngine as {
-              regenerateConfig: (name: string, port: number) => Promise<void>
-            }
-          ).regenerateConfig(targetName, config.port)
-        }
-      }
+      // Let the engine fix up any identity/paths baked into the copied data
+      // dir for the new name and port (e.g. ClickHouse regenerates config.xml).
+      await getEngine(engine).prepareBranchedDataDir(config, { sourceName })
 
-      return config
+      return { config, method }
     } catch (error) {
       // Clean up the copied directory on failure
       await rm(targetPath, { recursive: true, force: true }).catch(() => {
@@ -524,6 +539,35 @@ export class ContainerManager {
       })
       throw error
     }
+  }
+
+  async clone(
+    sourceName: string,
+    targetName: string,
+  ): Promise<ContainerConfig> {
+    // Get source config to determine the engine and verify it exists
+    const sourceConfig = await this.getConfig(sourceName)
+    if (!sourceConfig) {
+      throw new Error(`Source container "${sourceName}" not found`)
+    }
+
+    // Clone requires a stopped source (use `spindb branch` for live sources).
+    const running = await processManager.isRunning(sourceName, {
+      engine: sourceConfig.engine,
+    })
+    if (running) {
+      throw new Error(
+        `Source container "${sourceName}" is running. Stop it first`,
+      )
+    }
+
+    const { config } = await this.copyContainerData({
+      sourceName,
+      targetName,
+      strategy: 'copy',
+      lineage: { clonedFrom: sourceName },
+    })
+    return config
   }
 
   async rename(oldName: string, newName: string): Promise<ContainerConfig> {

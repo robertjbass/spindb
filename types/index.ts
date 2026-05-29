@@ -19,6 +19,16 @@ export type ContainerConfig = {
   created: string
   status: 'created' | 'running' | 'stopped' | 'linked'
   clonedFrom?: string
+  // Branching (`spindb branch`): the immediate source container this was
+  // branched from. Distinct from `clonedFrom` (a full copy via `spindb clone`):
+  // a branch is created with a copy-on-write reflink where the filesystem
+  // supports it, and participates in the branch lineage tree.
+  branchParent?: string
+  // ISO timestamp of when this branch was created.
+  branchedAt?: string
+  // Git branch this DB branch is bound to, when managed by the git-hook
+  // framework (`spindb branch init`). Unset for manually-created branches.
+  gitBranch?: string
   // Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis)
   binaryPath?: string
   // FerretDB-specific: version of the postgresql-documentdb backend (e.g., "17-0.107.0")
@@ -626,6 +636,9 @@ export type SQLiteRegistryEntry = {
   filePath: string // Absolute path to .sqlite file
   created: string // ISO timestamp
   lastVerified?: string // ISO timestamp of last existence check
+  branchParent?: string // Source container when created via `spindb branch`
+  branchedAt?: string // ISO timestamp of branch creation
+  gitBranch?: string // Git branch this DB branch is bound to (git-hook framework)
 }
 
 /**
@@ -647,6 +660,9 @@ export type DuckDBRegistryEntry = {
   filePath: string // Absolute path to .duckdb file
   created: string // ISO timestamp
   lastVerified?: string // ISO timestamp of last existence check
+  branchParent?: string // Source container when created via `spindb branch`
+  branchedAt?: string // ISO timestamp of branch creation
+  gitBranch?: string // Git branch this DB branch is bound to (git-hook framework)
 }
 
 /**
