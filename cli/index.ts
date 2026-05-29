@@ -12,6 +12,7 @@ import { backupCommand } from './commands/backup'
 import { backupsCommand } from './commands/backups'
 import { connectCommand } from './commands/connect'
 import { cloneCommand } from './commands/clone'
+import { branchCommand } from './commands/branch'
 import { menuCommand } from './commands/menu'
 import { configCommand } from './commands/config'
 import { depsCommand } from './commands/deps'
@@ -127,6 +128,7 @@ export async function run(): Promise<void> {
   program.addCommand(backupsCommand)
   program.addCommand(connectCommand)
   program.addCommand(cloneCommand)
+  program.addCommand(branchCommand)
   program.addCommand(menuCommand)
   program.addCommand(configCommand)
   program.addCommand(depsCommand)

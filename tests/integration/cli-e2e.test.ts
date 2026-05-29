@@ -11,7 +11,7 @@ import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
-import { rm, mkdir } from 'fs/promises'
+import { rm, mkdir, mkdtemp } from 'fs/promises'
 
 import {
   generateTestName,
@@ -22,6 +22,14 @@ import {
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
 import { Engine } from '../../types'
+import { tmpdir } from 'os'
+import { containerManager } from '../../core/container-manager'
+import { processManager } from '../../core/process-manager'
+import {
+  initRepo,
+  sync as gitSync,
+  prune as gitPrune,
+} from '../../core/git-branch-sync'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const execAsync = promisify(exec)
@@ -235,6 +243,53 @@ describe('CLI PostgreSQL Workflow', () => {
     console.log('   SQL executed successfully')
   })
 
+  it('should branch a running container (auto stop/restart) and copy data', async () => {
+    const branchName = generateTestName('clipgbr')
+
+    // Seed a table on the running source
+    const { exitCode: seedExit, stderr: seedErr } = await runCLI(
+      `run ${containerName} --sql "CREATE TABLE branch_demo (id INT); INSERT INTO branch_demo VALUES (1),(2)"`,
+    )
+    assert(seedExit === 0, `Seeding source should succeed. stderr: ${seedErr}`)
+
+    // Branch the RUNNING source — exercises auto stop -> snapshot -> restart
+    const { stdout, exitCode, stderr } = await runCLI(
+      `branch ${containerName} ${branchName} --json`,
+    )
+    assert(
+      exitCode === 0,
+      `Branch should succeed. stderr: ${stderr}, stdout: ${stdout}`,
+    )
+    const result = JSON.parse(stdout.trim())
+    assertEqual(result.success, true, 'Branch should report success')
+    assertEqual(
+      result.branchParent,
+      containerName,
+      'branchParent should be the source',
+    )
+
+    // The source must be running again after branching
+    const sourceReady = await waitForReady(Engine.PostgreSQL, testPort)
+    assert(sourceReady, 'Source should be running again after branching')
+
+    // The branch was auto-started on its own (auto-assigned) port — wait until
+    // it's accepting connections before querying it.
+    const branchReady = await waitForReady(Engine.PostgreSQL, result.port)
+    assert(branchReady, 'Branch should be ready on its own port')
+
+    // The branch should carry the seeded data
+    const { stdout: q, exitCode: qExit } = await runCLI(
+      `query ${branchName} "SELECT COUNT(*) AS n FROM branch_demo" --json`,
+    )
+    assert(qExit === 0, `Branch query should succeed. stdout: ${q}`)
+    const parsed = JSON.parse(q.trim())
+    assertEqual(Number(parsed.rows[0].n), 2, 'Branch should contain seeded rows')
+
+    // Clean up the branch so later source assertions are unaffected
+    await runCLI(`branch delete ${branchName} --force`)
+    console.log('   Branched running container; data copied and source stayed up')
+  })
+
   it('should stop container via CLI', async () => {
     console.log(`\n Stopping container "${containerName}"...`)
 
@@ -359,6 +414,126 @@ describe('CLI SQLite Workflow', () => {
     assert(exitCode === 0, `Delete should succeed. stderr: ${stderr}`)
     assert(!existsSync(dbPath), 'Database file should be deleted')
     console.log('   SQLite container and file deleted')
+  })
+})
+
+type TreeNode = { name: string; children: TreeNode[] }
+function findTreeNode(nodes: TreeNode[], name: string): TreeNode | undefined {
+  for (const node of nodes) {
+    if (node.name === name) return node
+    const found = findTreeNode(node.children, name)
+    if (found) return found
+  }
+  return undefined
+}
+
+describe('CLI Branch Workflow (SQLite)', () => {
+  let source: string
+  let branch: string
+  const testDir = join(__dirname, '../.test-cli-branch')
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+    await mkdir(testDir, { recursive: true })
+    source = generateTestName('brsrc')
+    branch = generateTestName('brchild')
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+    if (existsSync(testDir)) {
+      await rm(testDir, { recursive: true, force: true })
+    }
+  })
+
+  it('creates and seeds a source SQLite database', async () => {
+    const dbPath = join(testDir, `${source}.sqlite`)
+    const { exitCode, stderr } = await runCLI(
+      `create ${source} --engine sqlite --path "${dbPath}"`,
+    )
+    assert(exitCode === 0, `Create source should succeed. stderr: ${stderr}`)
+    const { exitCode: seedExit } = await runCLI(
+      `run ${source} --sql "CREATE TABLE t (id INTEGER); INSERT INTO t VALUES (1),(2),(3)"`,
+    )
+    assert(seedExit === 0, 'Seeding source should succeed')
+  })
+
+  it('branches the source, recording lineage and copying data', async () => {
+    const { stdout, exitCode, stderr } = await runCLI(
+      `branch ${source} ${branch} --json`,
+    )
+    assert(exitCode === 0, `Branch should succeed. stderr: ${stderr}`)
+    const result = JSON.parse(stdout.trim())
+    assertEqual(result.success, true, 'Branch should report success')
+    assertEqual(result.branchParent, source, 'branchParent should be the source')
+    assert(
+      result.method === 'reflink' || result.method === 'copy',
+      'Branch should report a copy method',
+    )
+
+    const { stdout: q } = await runCLI(
+      `query ${branch} "SELECT COUNT(*) AS n FROM t" --json`,
+    )
+    assertEqual(
+      Number(JSON.parse(q.trim()).rows[0].n),
+      3,
+      'Branch should contain the source rows',
+    )
+  })
+
+  it('nests the branch under its parent in branch list --json', async () => {
+    const { stdout, exitCode } = await runCLI('branch list --json')
+    assert(exitCode === 0, 'branch list should succeed')
+    const tree = JSON.parse(stdout)
+    const parentNode = findTreeNode(tree, source)
+    assert(parentNode !== undefined, 'Parent should appear in the tree')
+    assert(
+      (parentNode?.children ?? []).some((c) => c.name === branch),
+      'Branch should be nested under its parent',
+    )
+  })
+
+  it('resets the branch to discard divergence', async () => {
+    await runCLI(`query ${branch} "INSERT INTO t VALUES (99)"`)
+    const { stdout: before } = await runCLI(
+      `query ${branch} "SELECT COUNT(*) AS n FROM t" --json`,
+    )
+    assertEqual(
+      Number(JSON.parse(before.trim()).rows[0].n),
+      4,
+      'Branch should have diverged to 4 rows',
+    )
+
+    const { exitCode } = await runCLI(`branch reset ${branch} --force --json`)
+    assert(exitCode === 0, 'Reset should succeed')
+
+    const { stdout: after } = await runCLI(
+      `query ${branch} "SELECT COUNT(*) AS n FROM t" --json`,
+    )
+    assertEqual(
+      Number(JSON.parse(after.trim()).rows[0].n),
+      3,
+      'Branch should be back to 3 rows after reset',
+    )
+  })
+
+  it('guards deletion of a parent with children, then cascades', async () => {
+    const { exitCode: guarded } = await runCLI(
+      `branch delete ${source} --force --json`,
+    )
+    assert(guarded !== 0, 'Deleting a parent with a child should be refused')
+
+    const { stdout, exitCode } = await runCLI(
+      `branch delete ${source} --force --cascade --json`,
+    )
+    assert(exitCode === 0, 'Cascade delete should succeed')
+    const result = JSON.parse(stdout.trim())
+    assert(
+      result.deleted.includes(source) && result.deleted.includes(branch),
+      'Both source and branch should be deleted',
+    )
   })
 })
 
@@ -816,5 +991,115 @@ describe('CLI Clone Workflow', () => {
       `Delete clone should succeed. stdout: ${cloneOut}, stderr: ${cloneErr}`,
     )
     console.log('   Containers deleted')
+  })
+})
+
+describe('CLI Git Branching (PostgreSQL)', () => {
+  let base: string
+  let testPort: number
+  let repo: string
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    base = generateTestName('gitbase')
+    // Minimal git repo on the default branch with one commit (so we can branch).
+    repo = await mkdtemp(join(tmpdir(), 'spindb-gitrepo-'))
+    await execAsync('git init -q', { cwd: repo })
+    await execAsync('git config user.email test@example.com', { cwd: repo })
+    await execAsync('git config user.name Test', { cwd: repo })
+    await execAsync('git commit -q --allow-empty -m init', { cwd: repo })
+    console.log(`   Using base: ${base}, port: ${testPort}, repo: ${repo}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+    if (existsSync(repo)) {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('starts the base container and enables git branching', async () => {
+    const { exitCode: createExit } = await runCLI(
+      `create ${base} --engine postgresql --port ${testPort} --no-start`,
+    )
+    assert(createExit === 0, 'create base should succeed')
+    const { exitCode: startExit, stderr } = await runCLI(`start ${base}`)
+    assert(startExit === 0, `start base should succeed. stderr: ${stderr}`)
+    assert(
+      await waitForReady(Engine.PostgreSQL, testPort),
+      'base should be ready',
+    )
+
+    const { config } = await initRepo({ baseContainer: base, cwd: repo })
+    assertEqual(config.stablePort, testPort, 'stable port should be base port')
+    assert(
+      existsSync(join(repo, '.spindb', 'branch.json')),
+      'branch config written',
+    )
+    assert(
+      existsSync(join(repo, '.git', 'hooks', 'post-checkout')),
+      'post-checkout hook installed',
+    )
+  })
+
+  it('swaps to a feature branch DB on the stable port', async () => {
+    await execAsync('git checkout -q -b feature/login', { cwd: repo })
+    const result = await gitSync({ cwd: repo })
+    assertEqual(result.isBase, false, 'feature branch is not the base')
+    assertEqual(
+      result.container,
+      `${base}__feature-login`,
+      'computed branch container name',
+    )
+
+    assert(
+      await processManager.isRunning(result.container, {
+        engine: Engine.PostgreSQL,
+      }),
+      'feature branch should be running',
+    )
+    const featureConfig = await containerManager.getConfig(result.container)
+    assertEqual(featureConfig?.port, testPort, 'feature runs on the stable port')
+    assert(
+      !(await processManager.isRunning(base, { engine: Engine.PostgreSQL })),
+      'base should be stopped while the feature branch is active',
+    )
+    assert(
+      await waitForReady(Engine.PostgreSQL, testPort),
+      'stable port should serve the feature DB',
+    )
+  })
+
+  it('swaps back to the base when returning to the main branch', async () => {
+    await execAsync('git checkout -q -', { cwd: repo })
+    const result = await gitSync({ cwd: repo })
+    assertEqual(result.isBase, true, 'main branch maps to the base')
+    assert(
+      await processManager.isRunning(base, { engine: Engine.PostgreSQL }),
+      'base should be running again',
+    )
+    assert(
+      !(await processManager.isRunning(`${base}__feature-login`, {
+        engine: Engine.PostgreSQL,
+      })),
+      'feature branch should be stopped',
+    )
+  })
+
+  it('prunes the branch DB after its git branch is deleted', async () => {
+    await execAsync('git branch -D feature/login', { cwd: repo })
+    const { deleted } = await gitPrune({ cwd: repo })
+    assert(
+      deleted.includes(`${base}__feature-login`),
+      'should prune the orphaned branch DB',
+    )
+    assert(
+      !(await containerManager.exists(`${base}__feature-login`)),
+      'branch container should be removed',
+    )
   })
 })

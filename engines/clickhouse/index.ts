@@ -385,6 +385,18 @@ export class ClickHouseEngine extends BaseEngine {
     logDebug(`Regenerated ClickHouse config after rename: ${configPath}`)
   }
 
+  /**
+   * After a branch/clone copies the data directory, config.xml still points at
+   * the source container's absolute data/log/pid paths. Regenerate it for the
+   * new container name and port before first start.
+   */
+  override async prepareBranchedDataDir(
+    container: ContainerConfig,
+    _options: { sourceName: string },
+  ): Promise<void> {
+    await this.regenerateConfig(container.name, container.port)
+  }
+
   // Get the path to clickhouse binary for a version
   async getClickHousePath(version: string): Promise<string> {
     const { platform, arch } = this.getPlatformInfo()

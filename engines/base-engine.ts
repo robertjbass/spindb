@@ -320,6 +320,28 @@ export abstract class BaseEngine {
   }
 
   /**
+   * Fix up a freshly branched/cloned data directory before its first start.
+   *
+   * Branching duplicates a container's data directory verbatim (usually via a
+   * copy-on-write reflink). Most engines start happily from a byte-identical
+   * copy, but some bake the container's name, port, or cluster identity into
+   * on-disk state that must be rewritten for the new container:
+   *   - ClickHouse: regenerate config.xml (it embeds absolute data/log/pid paths).
+   *   - Weaviate: self-heals in start() — its RAFT identity check detects the
+   *     new port and resets cluster state, so no override is needed here.
+   * Default implementation is a no-op.
+   *
+   * @param container - the new container's config, with its final name and port
+   * @param options.sourceName - the container it was branched/cloned from
+   */
+  async prepareBranchedDataDir(
+    _container: ContainerConfig,
+    _options: { sourceName: string },
+  ): Promise<void> {
+    // Default: no-op. Override in engines that bake identity into the data dir.
+  }
+
+  /**
    * Stop pgweb if running for this container.
    * Called from stop() in engines that support pgweb (PostgreSQL, CockroachDB, FerretDB).
    */

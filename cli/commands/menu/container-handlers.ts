@@ -15,6 +15,11 @@ import {
   containerManager,
   updateRenameTracking,
 } from '../../../core/container-manager'
+import { branchManager } from '../../../core/branch-manager'
+import {
+  initRepo as gitInitRepo,
+  findRepoRoot,
+} from '../../../core/git-branch-sync'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
@@ -1320,6 +1325,29 @@ export async function showContainerSubmenu(
       : disabledItem('◇', 'Clone container'),
   )
 
+  // Branch container - copy-on-write fork. Available even while running: a
+  // running source is briefly stopped, snapshotted, and restarted automatically.
+  actionChoices.push({
+    name: `${chalk.cyan('⎇')} Branch container`,
+    value: 'branch',
+  })
+
+  // Reset to parent - only for containers that are themselves branches
+  if (config.branchParent) {
+    actionChoices.push({
+      name: `${chalk.yellow('↺')} Reset branch to "${config.branchParent}"`,
+      value: 'reset_branch',
+    })
+  }
+
+  // Git branching - wire this container to the current git repo (server engines)
+  if (!isFileBasedDB && !config.remote) {
+    actionChoices.push({
+      name: `${chalk.magenta('⎇')} Set up git branching here`,
+      value: 'git_branch_init',
+    })
+  }
+
   // Detach - only for file-based DBs (unregisters without deleting file)
   if (isFileBasedDB) {
     actionChoices.push({
@@ -1415,6 +1443,15 @@ export async function showContainerSubmenu(
     }
     case 'clone':
       await handleCloneFromSubmenu(containerName, showMainMenu)
+      return
+    case 'branch':
+      await handleBranchFromSubmenu(containerName, showMainMenu)
+      return
+    case 'reset_branch':
+      await handleResetBranchFromSubmenu(containerName, showMainMenu)
+      return
+    case 'git_branch_init':
+      await handleGitBranchInit(containerName, showMainMenu)
       return
     case 'copy':
       await handleCopyConnectionString(containerName, activeDatabase)
@@ -2341,6 +2378,141 @@ async function handleCloneFromSubmenu(
     console.log(uiError((error as Error).message))
     await pressEnterToContinue()
   }
+}
+
+async function handleBranchFromSubmenu(
+  sourceName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const sourceConfig = await containerManager.getConfig(sourceName)
+  if (!sourceConfig) {
+    console.log(uiError(`Container "${sourceName}" not found`))
+    return
+  }
+
+  const { branchName } = await escapeablePrompt<{ branchName: string }>([
+    {
+      type: 'input',
+      name: 'branchName',
+      message: 'Name for the new branch:',
+      default: `${sourceName}-branch`,
+      validate: (input: string) => {
+        if (!input) return 'Name is required'
+        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
+          return 'Name must start with a letter and contain only letters, numbers, hyphens, and underscores'
+        }
+        return true
+      },
+    },
+  ])
+
+  if (await containerManager.exists(branchName, { engine: sourceConfig.engine })) {
+    console.log(uiError(`Container "${branchName}" already exists`))
+    await pressEnterToContinue()
+    return
+  }
+
+  const spinner = createSpinner(`Branching ${sourceName} → ${branchName}...`)
+  spinner.start()
+
+  try {
+    const result = await branchManager.createBranch({
+      source: sourceName,
+      name: branchName,
+    })
+    const methodNote = result.method === 'reflink' ? ' (copy-on-write)' : ''
+    spinner.succeed(`Created branch "${branchName}" from "${sourceName}"${methodNote}`)
+
+    if (result.warning) console.log(uiWarning(result.warning))
+    console.log()
+    console.log(
+      connectionBox(branchName, result.connectionString, result.config.port),
+    )
+
+    await showContainerSubmenu(branchName, showMainMenu)
+  } catch (error) {
+    spinner.fail(`Failed to branch "${sourceName}"`)
+    console.log(uiError((error as Error).message))
+    await pressEnterToContinue()
+  }
+}
+
+async function handleResetBranchFromSubmenu(
+  branchName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const config = await containerManager.getConfig(branchName)
+  if (!config) {
+    console.log(uiError(`Container "${branchName}" not found`))
+    return
+  }
+  if (!config.branchParent) {
+    console.log(uiError(`"${branchName}" is not a branch`))
+    await pressEnterToContinue()
+    return
+  }
+
+  const confirmed = await promptConfirm(
+    `Reset "${branchName}" to match "${config.branchParent}"? This discards all changes in the branch.`,
+    false,
+  )
+  if (!confirmed) {
+    console.log(uiWarning('Cancelled'))
+    await showContainerSubmenu(branchName, showMainMenu)
+    return
+  }
+
+  const spinner = createSpinner(`Resetting ${branchName}...`)
+  spinner.start()
+  try {
+    const result = await branchManager.resetBranch(branchName)
+    spinner.succeed(`Reset "${branchName}" to "${config.branchParent}"`)
+    if (result.warning) console.log(uiWarning(result.warning))
+    await showContainerSubmenu(branchName, showMainMenu)
+  } catch (error) {
+    spinner.fail(`Failed to reset "${branchName}"`)
+    console.log(uiError((error as Error).message))
+    await pressEnterToContinue()
+  }
+}
+
+async function handleGitBranchInit(
+  containerName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const repoRoot = await findRepoRoot()
+  if (!repoRoot) {
+    console.log(
+      uiWarning(
+        'Not a git repository. Launch spindb from your project directory to set up git branching.',
+      ),
+    )
+    await pressEnterToContinue()
+    await showContainerSubmenu(containerName, showMainMenu)
+    return
+  }
+
+  const spinner = createSpinner('Setting up git branching...')
+  spinner.start()
+  try {
+    const { config } = await gitInitRepo({ baseContainer: containerName })
+    spinner.succeed(`Git branching enabled (stable port ${config.stablePort})`)
+    console.log(
+      chalk.gray(
+        '  Switch git branches and the matching database follows automatically.',
+      ),
+    )
+    console.log(
+      chalk.gray('  Your DATABASE_URL never changes (port stays ') +
+        chalk.green(String(config.stablePort)) +
+        chalk.gray(').'),
+    )
+  } catch (error) {
+    spinner.fail('Failed to set up git branching')
+    console.log(uiError((error as Error).message))
+  }
+  await pressEnterToContinue()
+  await showContainerSubmenu(containerName, showMainMenu)
 }
 
 async function handleDetachContainer(

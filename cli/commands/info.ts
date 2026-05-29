@@ -188,6 +188,27 @@ async function displayContainerInfo(
         chalk.gray(config.clonedFrom),
     )
   }
+  if (config.branchParent) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Branched From:'.padEnd(14)) +
+        chalk.gray(config.branchParent),
+    )
+  }
+  if (config.branchedAt) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Branched At:'.padEnd(14)) +
+        chalk.gray(formatDate(config.branchedAt)),
+    )
+  }
+  if (config.gitBranch) {
+    console.log(
+      chalk.gray('  ') +
+        chalk.white('Git Branch:'.padEnd(14)) +
+        chalk.magenta(config.gitBranch),
+    )
+  }
   console.log()
   console.log(chalk.gray('  ') + chalk.white('Connection String:'))
   console.log(chalk.gray('  ') + chalk.cyan(connectionString))
