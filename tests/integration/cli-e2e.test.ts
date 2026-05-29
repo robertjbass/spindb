@@ -272,6 +272,11 @@ describe('CLI PostgreSQL Workflow', () => {
     const sourceReady = await waitForReady(Engine.PostgreSQL, testPort)
     assert(sourceReady, 'Source should be running again after branching')
 
+    // The branch was auto-started on its own (auto-assigned) port — wait until
+    // it's accepting connections before querying it.
+    const branchReady = await waitForReady(Engine.PostgreSQL, result.port)
+    assert(branchReady, 'Branch should be ready on its own port')
+
     // The branch should carry the seeded data
     const { stdout: q, exitCode: qExit } = await runCLI(
       `query ${branchName} "SELECT COUNT(*) AS n FROM branch_demo" --json`,

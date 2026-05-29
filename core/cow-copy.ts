@@ -90,13 +90,14 @@ async function fallbackToDeepCopy(
   error: unknown,
 ): Promise<CopyMethod> {
   logDebug(
-    `Copy-on-write clone unavailable, falling back to full copy: ${
+    `Copy-on-write clone of "${dst}" unavailable, falling back to full copy: ${
       (error as Error).message
     }`,
   )
-  await rm(dst, { recursive: true, force: true }).catch(() => {
-    // Nothing to clean up, or cleanup failed — deepCopy overwrites regardless.
-  })
+  // A failed reflink may have left a partial destination behind. Remove it
+  // before the full copy; if cleanup itself fails, surface that error rather
+  // than copy into a dirty target. (force:true already ignores a missing dst.)
+  await rm(dst, { recursive: true, force: true })
   await deepCopy(src, dst)
   return 'copy'
 }

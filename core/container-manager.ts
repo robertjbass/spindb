@@ -551,6 +551,17 @@ export class ContainerManager {
       throw new Error(`Source container "${sourceName}" not found`)
     }
 
+    // copyContainerData duplicates a server container's data directory.
+    // File-based engines (SQLite/DuckDB) keep their data in an external file
+    // tracked by a registry, which it doesn't handle — point users to branch,
+    // which forks the backing file and registers a new entry.
+    if (isFileBasedEngine(sourceConfig.engine)) {
+      throw new Error(
+        `Cloning file-based containers (${sourceConfig.engine}) is not supported. ` +
+          `Use "spindb branch ${sourceName} ${targetName}" to fork it instead.`,
+      )
+    }
+
     // Clone requires a stopped source (use `spindb branch` for live sources).
     const running = await processManager.isRunning(sourceName, {
       engine: sourceConfig.engine,
@@ -606,13 +617,13 @@ export class ContainerManager {
         await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
       }
 
-      // Now update registry - remove old entry and add new one with updated name
+      // Now update registry - remove old entry and add new one with updated name.
+      // Spread the existing entry so lineage fields (branchParent/branchedAt/
+      // gitBranch) survive the rename instead of being dropped.
       await sqliteRegistry.remove(oldName)
       await sqliteRegistry.add({
+        ...entry,
         name: newName,
-        filePath: entry.filePath,
-        created: entry.created,
-        lastVerified: entry.lastVerified,
       })
 
       // Return updated config
@@ -637,13 +648,13 @@ export class ContainerManager {
         await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
       }
 
-      // Now update registry - remove old entry and add new one with updated name
+      // Now update registry - remove old entry and add new one with updated name.
+      // Spread the existing entry so lineage fields (branchParent/branchedAt/
+      // gitBranch) survive the rename instead of being dropped.
       await duckdbRegistry.remove(oldName)
       await duckdbRegistry.add({
+        ...entry,
         name: newName,
-        filePath: entry.filePath,
-        created: entry.created,
-        lastVerified: entry.lastVerified,
       })
 
       // Return updated config
