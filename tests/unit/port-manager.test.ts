@@ -214,6 +214,39 @@ describe('PortManager', () => {
         portManager.isPortAvailable = originalIsPortAvailable
       }
     })
+
+    it('should skip ports in excludePorts even when otherwise free', async () => {
+      const portManager = new PortManager()
+      const originalGetContainerPorts =
+        portManager.getContainerPorts.bind(portManager)
+      const originalIsPortAvailable =
+        portManager.isPortAvailable.bind(portManager)
+
+      // No running containers, and every port is bindable...
+      portManager.getContainerPorts = async () => []
+      portManager.isPortAvailable = async () => true
+
+      try {
+        // ...but the source's port (59990) is explicitly excluded. This is the
+        // branch/clone case: the source is briefly stopped to snapshot it, so
+        // its port looks free - it must still not be reassigned to the copy,
+        // which would then fail to start once the source restarts.
+        const result = await portManager.findAvailablePortExcludingContainers({
+          preferredPort: 59990,
+          portRange: { start: 59990, end: 59995 },
+          excludePorts: [59990],
+        })
+
+        assert(
+          result.port !== 59990,
+          'Should not return an excluded port even when it is free',
+        )
+        assertEqual(result.port, 59991, 'Should fall through to the next port')
+      } finally {
+        portManager.getContainerPorts = originalGetContainerPorts
+        portManager.isPortAvailable = originalIsPortAvailable
+      }
+    })
   })
 })
 

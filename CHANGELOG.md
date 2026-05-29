@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.2] - 2026-05-29
+
+### Fixed
+
+- **Branching (and cloning) no longer reuses the source container's port.** To take a consistent snapshot, a running source is briefly stopped before its data dir is copied. Port allocation for the new container only excluded the ports of *running* containers, so the source's just-freed port could be handed to the branch/clone; the source then restarted and reclaimed it, leaving the new container unable to start (`started: false`, e.g. "pg_ctl ... could not start server"). `copyContainerData` now passes the source's own port through a new `excludePorts` option to the allocator, so a copy is never assigned the source's port regardless of the source's transient running state. Branching with an explicit `--port` was already unaffected.
+
 ## [0.51.1] - 2026-05-29
 
 ### Added
