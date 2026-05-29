@@ -101,6 +101,29 @@ In `spindb` (interactive), a container's action menu includes **Branch container
 
 Branching lives entirely in SpinDB so every consumer gets it for free: **layerbase-desktop** calls `spindb branch` over IPC, and **layerbase-cloud** execs it inside the user's container. To deliver *instant* branching in the cloud, provision a copy-on-write filesystem (ZFS/Btrfs/XFS-reflink) for the data volumes — otherwise branches there are full copies.
 
-## Git-driven branching (planned)
+## Git-driven branching
 
-A planned framework will tie your **git branch** to a **database branch** automatically (Neon/Vercel-style): a `post-checkout` hook swaps the active database branch onto a stable port as you switch git branches, so your `DATABASE_URL` never changes. See the roadmap in [TODO.md](../TODO.md).
+Tie your **git branch** to a **database branch** automatically, the way Neon/Vercel preview branches work. As you switch git branches, the matching database branch is swapped onto a **stable port**, so your app's `DATABASE_URL` never changes.
+
+```bash
+# One-time, from your project repo: pick the container that backs this repo
+spindb branch init --base myapp        # writes .spindb/branch.json + installs a post-checkout hook
+
+# From now on, just use git:
+git checkout -b feature/login          # hook → DB branch "myapp__feature-login" goes live on the stable port
+#   ... your app keeps connecting to the same DATABASE_URL ...
+git checkout main                      # hook → the base DB is live again on the stable port
+
+spindb branch status                   # show config, current git branch, active DB, hook state
+spindb branch prune                    # delete DB branches whose git branch is gone
+spindb branch hooks install            # (re)install the hook — teammates run this after cloning
+spindb branch hooks uninstall
+```
+
+### How it works
+
+- **One live at a time.** Every git-branch DB is created from the base with the base's port baked in, but only the branch for the current git branch is *running* on that port. spindb only treats running containers as occupying a port, so the stopped siblings sharing it is fine.
+- **Deterministic naming.** The git "main" branch (whatever was current at `init`) maps to the base container itself; other branches map to `<base>__<sanitized-branch>` (e.g. `feature/login` → `myapp__feature-login`).
+- **Minimal state.** The only file written is `.spindb/branch.json` at the repo root (`baseContainer`, `engine`, `stablePort`, `mainBranch`). Commit it to share the convention — teammates just run `spindb branch hooks install`. Which branches exist and which is active are derived from spindb's registry, so there's nothing to drift.
+- **Chain-safe hook.** `branch init` adds a managed block to `.git/hooks/post-checkout` (preserving any existing hook). The block is POSIX `sh`, so it also runs under Git Bash on Windows, and it only fires on a branch checkout — never blocking the checkout if spindb isn't installed.
+- **Server engines only.** The stable-port model doesn't apply to file-based engines (SQLite/DuckDB), which have no port — `branch init` rejects them.

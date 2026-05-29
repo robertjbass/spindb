@@ -9,8 +9,24 @@ import {
   promptConfirm,
 } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
-import { connectionBox, header, keyValue, uiWarning, theme } from '../ui/theme'
+import {
+  connectionBox,
+  header,
+  keyValue,
+  uiWarning,
+  uiSuccess,
+  theme,
+} from '../ui/theme'
 import { exitWithError } from '../../core/error-handler'
+import {
+  initRepo,
+  sync as gitSync,
+  prune as gitPrune,
+  status as gitStatus,
+  installHooks,
+  uninstallHooks,
+  findRepoRoot,
+} from '../../core/git-branch-sync'
 
 export const branchCommand = new Command('branch').description(
   'Branch a database — an instant copy-on-write fork (Neon/Vercel-style)',
@@ -404,6 +420,235 @@ branchCommand
  * Render the branch forest as an indented tree. Roots have no glyph; children
  * are drawn with ├─ / └─ connectors.
  */
+// ---- git-driven branching ----
+
+branchCommand
+  .command('init [base]')
+  .description(
+    'Set up git-driven branching for this repo (writes .spindb/branch.json + installs a post-checkout hook)',
+  )
+  .option('-j, --json', 'Output result as JSON')
+  .action(async (base: string | undefined, options: { json?: boolean }) => {
+    try {
+      let baseContainer = base
+      if (!baseContainer) {
+        if (options.json) {
+          return exitWithError({
+            message: 'Base container name is required',
+            json: true,
+          })
+        }
+        const containers = await containerManager.list()
+        const eligible = containers.filter(
+          (c) => !isRemoteContainer(c) && c.status !== 'linked' && c.port > 0,
+        )
+        if (eligible.length === 0) {
+          console.log(
+            uiWarning(
+              'No server-based containers found. Create one with: spindb create',
+            ),
+          )
+          return
+        }
+        const selected = await promptContainerSelect(
+          eligible,
+          'Select the base container for this repo:',
+        )
+        if (!selected) return
+        baseContainer = selected
+      }
+
+      const { repoRoot, config } = await initRepo({ baseContainer })
+      if (options.json) {
+        console.log(
+          JSON.stringify({
+            success: true,
+            repoRoot,
+            baseContainer: config.baseContainer,
+            stablePort: config.stablePort,
+            mainBranch: config.mainBranch,
+            hooksInstalled: true,
+          }),
+        )
+      } else {
+        console.log(uiSuccess('Git branching enabled for this repo'))
+        console.log(
+          chalk.gray('  Base container: ') + chalk.cyan(config.baseContainer),
+        )
+        console.log(
+          chalk.gray('  Stable port:    ') +
+            chalk.green(String(config.stablePort)) +
+            chalk.gray('  (your DATABASE_URL never changes)'),
+        )
+        console.log(
+          chalk.gray('  Main branch:    ') + chalk.cyan(config.mainBranch),
+        )
+        console.log()
+        console.log(
+          chalk.gray(
+            '  Switch git branches and the matching database follows automatically.',
+          ),
+        )
+        console.log(
+          chalk.gray('  Tip: commit .spindb/branch.json to share it; ') +
+            chalk.gray('teammates run ') +
+            chalk.cyan('spindb branch hooks install'),
+        )
+      }
+    } catch (error) {
+      return exitWithError({
+        message: (error as Error).message,
+        json: options.json,
+      })
+    }
+  })
+
+branchCommand
+  .command('sync')
+  .description(
+    'Swap the active database branch to match the current git branch',
+  )
+  .option('--git-checkout', 'Invoked from the post-checkout hook (quieter)')
+  .option('-j, --json', 'Output result as JSON')
+  .action(async (options: { gitCheckout?: boolean; json?: boolean }) => {
+    try {
+      const result = await gitSync({ fromHook: options.gitCheckout })
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, ...result }))
+      } else if (!options.gitCheckout) {
+        const what = result.isBase
+          ? `base "${result.container}"`
+          : `branch "${result.container}"`
+        console.log(
+          uiSuccess(
+            `Active database is now ${what}${result.created ? ' (created)' : ''}`,
+          ),
+        )
+        console.log(chalk.gray('  ') + chalk.cyan(result.connectionString))
+      }
+    } catch (error) {
+      return exitWithError({
+        message: (error as Error).message,
+        json: options.json,
+      })
+    }
+  })
+
+branchCommand
+  .command('status')
+  .description('Show git-branching config and the active database branch')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (options: { json?: boolean }) => {
+    try {
+      const st = await gitStatus({})
+      if (!st) {
+        if (options.json) {
+          console.log(JSON.stringify({ configured: false }))
+          return
+        }
+        console.log(
+          uiWarning(
+            'Git branching is not set up here. Run: spindb branch init --base <container>',
+          ),
+        )
+        return
+      }
+      if (options.json) {
+        console.log(JSON.stringify({ configured: true, ...st }))
+        return
+      }
+      console.log()
+      console.log(header('Git branching'))
+      console.log(keyValue('Base', st.config.baseContainer))
+      console.log(keyValue('Stable port', String(st.config.stablePort)))
+      console.log(keyValue('Main branch', st.config.mainBranch))
+      console.log(keyValue('Current branch', st.gitBranch))
+      console.log(keyValue('Maps to', st.target))
+      console.log(keyValue('Active now', st.active ?? '(none running)'))
+      console.log(keyValue('Hook installed', st.hooksInstalled ? 'yes' : 'no'))
+      console.log()
+    } catch (error) {
+      return exitWithError({
+        message: (error as Error).message,
+        json: options.json,
+      })
+    }
+  })
+
+branchCommand
+  .command('prune')
+  .description('Delete database branches whose git branch no longer exists')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (options: { json?: boolean }) => {
+    try {
+      const spinner = options.json
+        ? null
+        : createSpinner('Pruning orphaned branches...')
+      spinner?.start()
+      const { deleted } = await gitPrune({})
+      spinner?.succeed(
+        deleted.length > 0
+          ? `Pruned ${deleted.length} branch(es)`
+          : 'Nothing to prune',
+      )
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, deleted }))
+      } else {
+        for (const name of deleted) {
+          console.log(chalk.gray('  removed ') + name)
+        }
+      }
+    } catch (error) {
+      return exitWithError({
+        message: (error as Error).message,
+        json: options.json,
+      })
+    }
+  })
+
+branchCommand
+  .command('hooks <action>')
+  .description(
+    'Install or uninstall the git post-checkout hook (action: install | uninstall)',
+  )
+  .option('-j, --json', 'Output as JSON')
+  .action(async (action: string, options: { json?: boolean }) => {
+    try {
+      if (action !== 'install' && action !== 'uninstall') {
+        return exitWithError({
+          message: `Unknown action "${action}". Use "install" or "uninstall".`,
+          json: options.json,
+        })
+      }
+      const repoRoot = await findRepoRoot()
+      if (!repoRoot) {
+        return exitWithError({
+          message: 'Not a git repository.',
+          json: options.json,
+        })
+      }
+      if (action === 'install') {
+        await installHooks(repoRoot)
+      } else {
+        await uninstallHooks(repoRoot)
+      }
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, action }))
+      } else {
+        console.log(
+          uiSuccess(
+            `post-checkout hook ${action === 'install' ? 'installed' : 'removed'}`,
+          ),
+        )
+      }
+    } catch (error) {
+      return exitWithError({
+        message: (error as Error).message,
+        json: options.json,
+      })
+    }
+  })
+
 function renderBranchTree(nodes: BranchNode[], prefix: string): void {
   nodes.forEach((node, index) => {
     const isLast = index === nodes.length - 1

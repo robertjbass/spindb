@@ -11,7 +11,7 @@ import { promisify } from 'util'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
-import { rm, mkdir } from 'fs/promises'
+import { rm, mkdir, mkdtemp } from 'fs/promises'
 
 import {
   generateTestName,
@@ -22,6 +22,14 @@ import {
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
 import { Engine } from '../../types'
+import { tmpdir } from 'os'
+import { containerManager } from '../../core/container-manager'
+import { processManager } from '../../core/process-manager'
+import {
+  initRepo,
+  sync as gitSync,
+  prune as gitPrune,
+} from '../../core/git-branch-sync'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const execAsync = promisify(exec)
@@ -978,5 +986,115 @@ describe('CLI Clone Workflow', () => {
       `Delete clone should succeed. stdout: ${cloneOut}, stderr: ${cloneErr}`,
     )
     console.log('   Containers deleted')
+  })
+})
+
+describe('CLI Git Branching (PostgreSQL)', () => {
+  let base: string
+  let testPort: number
+  let repo: string
+
+  before(async () => {
+    console.log('\n Cleaning up test containers...')
+    await cleanupTestContainers()
+    const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
+    testPort = ports[0]
+    base = generateTestName('gitbase')
+    // Minimal git repo on the default branch with one commit (so we can branch).
+    repo = await mkdtemp(join(tmpdir(), 'spindb-gitrepo-'))
+    await execAsync('git init -q', { cwd: repo })
+    await execAsync('git config user.email test@example.com', { cwd: repo })
+    await execAsync('git config user.name Test', { cwd: repo })
+    await execAsync('git commit -q --allow-empty -m init', { cwd: repo })
+    console.log(`   Using base: ${base}, port: ${testPort}, repo: ${repo}`)
+  })
+
+  after(async () => {
+    console.log('\n Final cleanup...')
+    await cleanupTestContainers()
+    if (existsSync(repo)) {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('starts the base container and enables git branching', async () => {
+    const { exitCode: createExit } = await runCLI(
+      `create ${base} --engine postgresql --port ${testPort} --no-start`,
+    )
+    assert(createExit === 0, 'create base should succeed')
+    const { exitCode: startExit, stderr } = await runCLI(`start ${base}`)
+    assert(startExit === 0, `start base should succeed. stderr: ${stderr}`)
+    assert(
+      await waitForReady(Engine.PostgreSQL, testPort),
+      'base should be ready',
+    )
+
+    const { config } = await initRepo({ baseContainer: base, cwd: repo })
+    assertEqual(config.stablePort, testPort, 'stable port should be base port')
+    assert(
+      existsSync(join(repo, '.spindb', 'branch.json')),
+      'branch config written',
+    )
+    assert(
+      existsSync(join(repo, '.git', 'hooks', 'post-checkout')),
+      'post-checkout hook installed',
+    )
+  })
+
+  it('swaps to a feature branch DB on the stable port', async () => {
+    await execAsync('git checkout -q -b feature/login', { cwd: repo })
+    const result = await gitSync({ cwd: repo })
+    assertEqual(result.isBase, false, 'feature branch is not the base')
+    assertEqual(
+      result.container,
+      `${base}__feature-login`,
+      'computed branch container name',
+    )
+
+    assert(
+      await processManager.isRunning(result.container, {
+        engine: Engine.PostgreSQL,
+      }),
+      'feature branch should be running',
+    )
+    const featureConfig = await containerManager.getConfig(result.container)
+    assertEqual(featureConfig?.port, testPort, 'feature runs on the stable port')
+    assert(
+      !(await processManager.isRunning(base, { engine: Engine.PostgreSQL })),
+      'base should be stopped while the feature branch is active',
+    )
+    assert(
+      await waitForReady(Engine.PostgreSQL, testPort),
+      'stable port should serve the feature DB',
+    )
+  })
+
+  it('swaps back to the base when returning to the main branch', async () => {
+    await execAsync('git checkout -q -', { cwd: repo })
+    const result = await gitSync({ cwd: repo })
+    assertEqual(result.isBase, true, 'main branch maps to the base')
+    assert(
+      await processManager.isRunning(base, { engine: Engine.PostgreSQL }),
+      'base should be running again',
+    )
+    assert(
+      !(await processManager.isRunning(`${base}__feature-login`, {
+        engine: Engine.PostgreSQL,
+      })),
+      'feature branch should be stopped',
+    )
+  })
+
+  it('prunes the branch DB after its git branch is deleted', async () => {
+    await execAsync('git branch -D feature/login', { cwd: repo })
+    const { deleted } = await gitPrune({ cwd: repo })
+    assert(
+      deleted.includes(`${base}__feature-login`),
+      'should prune the orphaned branch DB',
+    )
+    assert(
+      !(await containerManager.exists(`${base}__feature-login`)),
+      'branch container should be removed',
+    )
   })
 })

@@ -16,6 +16,10 @@ import {
   updateRenameTracking,
 } from '../../../core/container-manager'
 import { branchManager } from '../../../core/branch-manager'
+import {
+  initRepo as gitInitRepo,
+  findRepoRoot,
+} from '../../../core/git-branch-sync'
 import { getMissingDependencies } from '../../../core/dependency-manager'
 import { platformService } from '../../../core/platform-service'
 import { portManager } from '../../../core/port-manager'
@@ -1336,6 +1340,14 @@ export async function showContainerSubmenu(
     })
   }
 
+  // Git branching - wire this container to the current git repo (server engines)
+  if (!isFileBasedDB && !config.remote) {
+    actionChoices.push({
+      name: `${chalk.magenta('⎇')} Set up git branching here`,
+      value: 'git_branch_init',
+    })
+  }
+
   // Detach - only for file-based DBs (unregisters without deleting file)
   if (isFileBasedDB) {
     actionChoices.push({
@@ -1437,6 +1449,9 @@ export async function showContainerSubmenu(
       return
     case 'reset_branch':
       await handleResetBranchFromSubmenu(containerName, showMainMenu)
+      return
+    case 'git_branch_init':
+      await handleGitBranchInit(containerName, showMainMenu)
       return
     case 'copy':
       await handleCopyConnectionString(containerName, activeDatabase)
@@ -2459,6 +2474,45 @@ async function handleResetBranchFromSubmenu(
     console.log(uiError((error as Error).message))
     await pressEnterToContinue()
   }
+}
+
+async function handleGitBranchInit(
+  containerName: string,
+  showMainMenu: () => Promise<void>,
+): Promise<void> {
+  const repoRoot = await findRepoRoot()
+  if (!repoRoot) {
+    console.log(
+      uiWarning(
+        'Not a git repository. Launch spindb from your project directory to set up git branching.',
+      ),
+    )
+    await pressEnterToContinue()
+    await showContainerSubmenu(containerName, showMainMenu)
+    return
+  }
+
+  const spinner = createSpinner('Setting up git branching...')
+  spinner.start()
+  try {
+    const { config } = await gitInitRepo({ baseContainer: containerName })
+    spinner.succeed(`Git branching enabled (stable port ${config.stablePort})`)
+    console.log(
+      chalk.gray(
+        '  Switch git branches and the matching database follows automatically.',
+      ),
+    )
+    console.log(
+      chalk.gray('  Your DATABASE_URL never changes (port stays ') +
+        chalk.green(String(config.stablePort)) +
+        chalk.gray(').'),
+    )
+  } catch (error) {
+    spinner.fail('Failed to set up git branching')
+    console.log(uiError((error as Error).message))
+  }
+  await pressEnterToContinue()
+  await showContainerSubmenu(containerName, showMainMenu)
 }
 
 async function handleDetachContainer(

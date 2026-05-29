@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Not yet supported: time-travel (branch-from-history) and merge. Linked/remote databases cannot be branched locally.
   - See [docs/BRANCHING.md](docs/BRANCHING.md).
 
+- **Git-driven branching — your git branch drives your database branch (Neon/Vercel-style), locally.** `spindb branch init --base <container>` wires a repo to a base container: it writes `.spindb/branch.json` and installs a chain-safe `post-checkout` git hook. From then on, switching git branches swaps the matching database branch onto a **stable port** (the base's port), so your app's `DATABASE_URL` never changes — one database branch is live at a time, created copy-on-write from the base on first checkout. New subcommands: `branch init`, `branch sync` (the hook entrypoint; also runnable manually), `branch status`, `branch prune` (delete DB branches whose git branch is gone), and `branch hooks install|uninstall`. Server engines only (the stable-port model needs a port). The git→DB mapping is deterministic (`main`→base, `feature/x`→`<base>__feature-x`), so the only persisted state is the shareable `.spindb/branch.json`. New module `core/git-branch-sync.ts`; interactive menu gains a **Set up git branching here** action. The POSIX-sh hook runs under Git Bash on Windows and never blocks a checkout.
+
 ## [0.50.8] - 2026-05-24
 
 ### Fixed
