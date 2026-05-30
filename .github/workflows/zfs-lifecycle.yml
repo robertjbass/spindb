@@ -12,9 +12,6 @@ name: ZFS lifecycle (manual investigation)
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/zfs-lifecycle.yml'
 
 jobs:
   baseline-2_2_2:
