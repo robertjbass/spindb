@@ -1,0 +1,85 @@
+name: ZFS reflink guard
+
+# Guards the copy-on-write reflink path in core/cow-copy.ts — the primitive
+# `spindb branch` relies on, and the reason Layerbase cloud branching is instant
+# on ZFS. Stands up a throwaway file-backed zpool, runs cloneDirectory on it, and
+# asserts method == "reflink". If a change drops --reflink=always or block
+# cloning regresses, this fails. Only runs when the copy path or this guard
+# changes (the heavy ZFS setup isn't worth it on unrelated pushes).
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'core/cow-copy.ts'
+      - 'tests/integration/zfs-reflink.test.ts'
+      - '.github/workflows/zfs-reflink.yml'
+  pull_request:
+    paths:
+      - 'core/cow-copy.ts'
+      - 'tests/integration/zfs-reflink.test.ts'
+      - '.github/workflows/zfs-reflink.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reflink:
+    name: ZFS reflink
+    # 24.04 ships OpenZFS 2.2.2 — the first release with block cloning AND the
+    # fix for the 2.2.0/2.2.1 cloning corruption bug.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OpenZFS + load module + enable block cloning
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zfsutils-linux
+          sudo modprobe zfs
+          # Ubuntu ships block cloning DISABLED by default (zfs_bclone_enabled=0,
+          # a post-2.2.0/2.2.1-corruption safety default), so reflink would no-op.
+          # Enable it explicitly — prod does the same via deploy/setup.sh — so this
+          # guard exercises the real reflink path instead of passing by luck.
+          echo 1 | sudo tee /sys/module/zfs/parameters/zfs_bclone_enabled
+          zfs version
+
+      - name: Create file-backed zpool with block cloning
+        run: |
+          set -euxo pipefail
+          sudo truncate -s 3G /tmp/spindbci.img
+          sudo zpool create -o feature@block_cloning=enabled spindbci /tmp/spindbci.img
+          sudo zfs create spindbci/test
+          sudo chown -R "$(id -u):$(id -g)" /spindbci/test
+          # Fail fast + clearly if this runner can't reflink at all (e.g. ZFS
+          # module/version issue), before blaming the spindb code.
+          head -c 1M </dev/urandom > /spindbci/test/probe-a
+          cp --reflink=always /spindbci/test/probe-a /spindbci/test/probe-b
+          rm -f /spindbci/test/probe-a /spindbci/test/probe-b
+          echo "raw cp --reflink=always works on the pool"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run reflink guard
+        env:
+          SPINDB_ZFS_TEST_DIR: /spindbci/test
+        run: node --import tsx --test --test-reporter=spec tests/integration/zfs-reflink.test.ts
+        timeout-minutes: 5
+
+      - name: Teardown
+        if: always()
+        run: sudo zpool destroy spindbci || true

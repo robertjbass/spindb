@@ -1,0 +1,104 @@
+name: ZFS lifecycle (manual investigation)
+
+# Manual deep-dive prompted by the 2026-05-30 staging finding that OpenZFS
+# 2.2.2 block cloning has rough edges. Runs the FULL branch lifecycle on a
+# throwaway file-backed pool — reflink, then prod-style rm delete, then an
+# EXPLICIT zpool destroy (no `|| true`) — so we can see whether:
+#   (a) a clean reflink->destroy cycle even reproduces the "pool busy" teardown
+#       issue we hit on staging (which may have been a botched manual cleanup),
+#   (b) a freshly-built NEWER OpenZFS behaves any better.
+# Self-triggers on its own changes (workflow_dispatch needs the file on the
+# default branch; this lets us run it from dev during the spike).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  baseline-2_2_2:
+    name: "lifecycle on Ubuntu apt OpenZFS (2.2.2)"
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install OpenZFS from apt
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zfsutils-linux
+          sudo modprobe zfs
+          zfs version | head -1
+      - name: Full reflink lifecycle (reflink -> rm delete -> explicit destroy)
+        run: |
+          set -euxo pipefail
+          echo 1 | sudo tee /sys/module/zfs/parameters/zfs_bclone_enabled 2>/dev/null || true
+          sudo truncate -s 2G /tmp/lc.img
+          sudo zpool create -o feature@block_cloning=enabled lc /tmp/lc.img
+          sudo zfs create lc/d
+          M=$(zfs get -H -o value mountpoint lc/d)
+          sudo chown "$(id -u):$(id -g)" "$M"
+          head -c 200M </dev/urandom > "$M/parent"
+          sync -f "$M/parent"
+          # `cp --reflink=always` ERRORS if it cannot reflink (it never silently
+          # full-copies), so reaching the next line under `set -e` IS the proof
+          # the reflink happened. bclonesaved is async (txg) — informational only.
+          cp --reflink=always "$M/parent" "$M/clone"
+          echo "REFLINK OK (cp --reflink=always succeeded)"
+          sudo zpool sync lc; sleep 1
+          echo "  bclonesaved (informational): $(zpool get -Hp -o value bclonesaved lc)"
+          # prod-model branch delete: rm the cloned file (NOT zfs destroy a dataset)
+          rm "$M/clone"; sync; sleep 2
+          echo "rm-delete of clone OK"
+          # THE KEY TEST: explicit teardown — fails loudly if the pool is 'busy'
+          sudo zfs destroy lc/d
+          sudo zpool destroy lc
+          echo "TEARDOWN CLEAN (zfs destroy + zpool destroy succeeded with no busy)"
+          sudo rm -f /tmp/lc.img
+
+  newer-built:
+    name: "lifecycle on newer OpenZFS (built from latest release)"
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Build + install latest OpenZFS release
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          # OpenZFS documented Ubuntu build deps + libtirpc-dev (newer releases).
+          sudo apt-get install -y build-essential autoconf automake libtool gawk \
+            alien fakeroot dkms libblkid-dev uuid-dev libudev-dev libssl-dev \
+            zlib1g-dev libaio-dev libattr1-dev libelf-dev "linux-headers-$(uname -r)" \
+            python3 python3-dev python3-setuptools python3-cffi libffi-dev \
+            python3-packaging git jq curl libtirpc-dev libcurl4-openssl-dev libpam0g-dev
+          sudo modprobe -r zfs 2>/dev/null || true
+          sudo apt-get remove -y zfsutils-linux zfs-zed 2>/dev/null || true
+          TAG=$(curl -fsSL https://api.github.com/repos/openzfs/zfs/releases/latest | jq -r .tag_name)
+          echo "building OpenZFS $TAG"
+          cd /tmp
+          curl -fsSL -o zfs.tar.gz "https://github.com/openzfs/zfs/releases/download/${TAG}/${TAG}.tar.gz"
+          tar xf zfs.tar.gz
+          cd "${TAG}"
+          ./configure --prefix=/usr >/tmp/zfs-configure.log 2>&1 || { tail -40 /tmp/zfs-configure.log; exit 1; }
+          make -j"$(nproc)" >/tmp/zfs-make.log 2>&1 || { tail -40 /tmp/zfs-make.log; exit 1; }
+          sudo make install >/dev/null
+          sudo ldconfig
+          sudo depmod -a
+          sudo modprobe zfs
+          zfs version | head -2
+      - name: Full reflink lifecycle (reflink -> rm delete -> explicit destroy)
+        run: |
+          set -euxo pipefail
+          echo 1 | sudo tee /sys/module/zfs/parameters/zfs_bclone_enabled 2>/dev/null || true
+          sudo truncate -s 2G /tmp/lc.img
+          sudo zpool create -o feature@block_cloning=enabled lc /tmp/lc.img
+          sudo zfs create lc/d
+          M=$(zfs get -H -o value mountpoint lc/d)
+          sudo chown "$(id -u):$(id -g)" "$M"
+          head -c 200M </dev/urandom > "$M/parent"
+          sync -f "$M/parent"
+          cp --reflink=always "$M/parent" "$M/clone"
+          echo "REFLINK OK (cp --reflink=always succeeded)"
+          sudo zpool sync lc; sleep 1
+          echo "  bclonesaved (informational): $(zpool get -Hp -o value bclonesaved lc)"
+          rm "$M/clone"; sync; sleep 2
+          echo "rm-delete of clone OK"
+          sudo zfs destroy lc/d
+          sudo zpool destroy lc
+          echo "TEARDOWN CLEAN (zfs destroy + zpool destroy succeeded with no busy)"
+          sudo rm -f /tmp/lc.img

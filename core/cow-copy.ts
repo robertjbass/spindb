@@ -63,6 +63,16 @@ async function cloneWithStrategy(
   }
 
   if (platform === 'linux') {
+    // ZFS block cloning (and some other reflink filesystems) refuse to clone a
+    // source whose blocks aren't on disk yet: `cp --reflink=always` then fails
+    // with EAGAIN and we'd silently fall back to a full copy. Flush the source's
+    // filesystem first so the reflink can proceed. Best-effort — if `sync -f`
+    // isn't available the clone still tries, and the copy fallback still works.
+    try {
+      await spawnAsync('sync', ['-f', src])
+    } catch {
+      // sync unavailable/failed — proceed; worst case is a fallback full copy.
+    }
     // `--reflink=always` errors out on filesystems without reflink support
     // (e.g. ext4), so a failure here cleanly means "no CoW on this volume".
     // We deliberately avoid `--reflink=auto` because it silently falls back to
