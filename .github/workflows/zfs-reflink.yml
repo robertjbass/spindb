@@ -7,6 +7,9 @@ name: ZFS reflink guard
 # cloning regresses, this fails. Only runs when the copy path or this guard
 # changes (the heavy ZFS setup isn't worth it on unrelated pushes).
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, dev]

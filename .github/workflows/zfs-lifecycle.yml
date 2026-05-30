@@ -10,6 +10,9 @@ name: ZFS lifecycle (manual investigation)
 # Self-triggers on its own changes (workflow_dispatch needs the file on the
 # default branch; this lets us run it from dev during the spike).
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
 
