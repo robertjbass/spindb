@@ -35,12 +35,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OpenZFS + load module
+      - name: Install OpenZFS + load module + enable block cloning
         run: |
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y zfsutils-linux
           sudo modprobe zfs
+          # Ubuntu ships block cloning DISABLED by default (zfs_bclone_enabled=0,
+          # a post-2.2.0/2.2.1-corruption safety default), so reflink would no-op.
+          # Enable it explicitly — prod does the same via deploy/setup.sh — so this
+          # guard exercises the real reflink path instead of passing by luck.
+          echo 1 | sudo tee /sys/module/zfs/parameters/zfs_bclone_enabled
           zfs version
 
       - name: Create file-backed zpool with block cloning

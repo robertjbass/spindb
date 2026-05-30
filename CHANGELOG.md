@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.4] - 2026-05-30
+
+### Fixed
+
+- **Branching on ZFS:** `spindb branch` now flushes the source filesystem
+  (`sync -f`) before attempting a reflink on Linux. ZFS block cloning refuses to
+  clone a source whose blocks aren't on disk yet, returning `EAGAIN` — which made
+  `cp --reflink=always` fail and silently fall back to a full byte copy. Syncing
+  first lets the reflink proceed, so a branch on a ZFS volume is the intended
+  instant copy-on-write (`method: "reflink"`) instead of a hidden full copy.
+
 ## [0.51.3] - 2026-05-30
 
 ### Fixed
