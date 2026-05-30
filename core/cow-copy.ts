@@ -13,7 +13,7 @@
  * consumers know whether the branch was instant or a full copy.
  */
 
-import { cp, rm, writeFile } from 'fs/promises'
+import { cp, rm, writeFile, lstat } from 'fs/promises'
 import { join } from 'path'
 import { spawnAsync } from './spawn-utils'
 import { logDebug } from './error-handler'
@@ -103,7 +103,23 @@ async function fallbackToDeepCopy(
 }
 
 async function deepCopy(src: string, dst: string): Promise<void> {
-  await cp(src, dst, { recursive: true })
+  await cp(src, dst, {
+    recursive: true,
+    // Node's fs.cp throws ERR_FS_CP_SOCKET on socket/FIFO entries — e.g. a
+    // running PgBouncer's `.s.PGSQL` unix socket that lives inside a Postgres
+    // data dir — which fails the whole branch on a full (non-reflink) copy.
+    // These are ephemeral runtime artifacts the branch's own processes recreate
+    // on start, so skip any non-regular, non-directory, non-symlink entry.
+    filter: async (source) => {
+      try {
+        const st = await lstat(source)
+        return st.isFile() || st.isDirectory() || st.isSymbolicLink()
+      } catch {
+        // Can't stat it (e.g. it vanished mid-copy) — don't try to copy it.
+        return false
+      }
+    },
+  })
 }
 
 /**
