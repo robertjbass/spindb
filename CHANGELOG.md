@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.3] - 2026-05-30
+
+### Fixed
+
+- **Branching:** a full (non-reflink) branch copy no longer fails on socket or
+  FIFO files inside a data directory — e.g. a running PgBouncer's `.s.PGSQL`
+  unix socket in a Postgres data dir. These ephemeral runtime files are now
+  skipped (the branch's own processes recreate them on start) instead of
+  aborting the whole copy with `ERR_FS_CP_SOCKET`.
+
 ## [0.51.2] - 2026-05-29
 
 ### Fixed

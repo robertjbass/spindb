@@ -65,6 +65,43 @@ describe('cow-copy: cloneDirectory', () => {
       await rm(base, { recursive: true, force: true })
     }
   })
+
+  it(
+    'skips socket entries instead of failing the full copy (e.g. a live PgBouncer .s.PGSQL)',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'unix domain sockets are POSIX-only'
+          : false,
+    },
+    async () => {
+      const { createServer } = await import('node:net')
+      const { existsSync } = await import('node:fs')
+      const base = await mkdtemp(join(tmpdir(), 'spindb-cow-'))
+      const server = createServer()
+      try {
+        const src = join(base, 'src')
+        const dst = join(base, 'dst')
+        await mkdir(join(src, 'pgbouncer'), { recursive: true })
+        await writeFile(join(src, 'base.db'), 'rows')
+        // A live unix socket inside the data dir, mimicking pgbouncer's .s.PGSQL.
+        const sock = join(src, 'pgbouncer', '.s.PGSQL')
+        await new Promise<void>((resolve) => server.listen(sock, resolve))
+
+        // Force the full-copy (deepCopy) path regardless of the host filesystem.
+        const result = await cloneDirectory(src, dst, { platform: 'win32' })
+
+        assert.equal(result.method, 'copy')
+        // Regular file copies; the socket is skipped rather than throwing.
+        assert.equal(await readFile(join(dst, 'base.db'), 'utf8'), 'rows')
+        assert.equal(existsSync(join(dst, 'pgbouncer')), true)
+        assert.equal(existsSync(join(dst, 'pgbouncer', '.s.PGSQL')), false)
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()))
+        await rm(base, { recursive: true, force: true })
+      }
+    },
+  )
 })
 
 describe('cow-copy: detectCowSupport', () => {
