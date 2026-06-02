@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { cloneDirectory, detectCowSupport } from '../../core/cow-copy'
+import {
+  cloneDirectory,
+  detectCowSupport,
+  isTransientReflinkError,
+} from '../../core/cow-copy'
 
 describe('cow-copy: cloneDirectory', () => {
   it('clones a directory tree and reports a method', async () => {
@@ -113,5 +117,43 @@ describe('cow-copy: detectCowSupport', () => {
     } finally {
       await rm(base, { recursive: true, force: true })
     }
+  })
+})
+
+describe('cow-copy: isTransientReflinkError (EAGAIN retry classifier)', () => {
+  it('treats ZFS block-cloning EAGAIN as transient (so the reflink is retried)', () => {
+    // The exact message `cp --reflink=always` prints when ZFS can't clone a
+    // source whose blocks aren't in a committed txg yet.
+    assert.equal(
+      isTransientReflinkError(
+        new Error(
+          "cp: failed to clone 'dst' from 'src': Resource temporarily unavailable",
+        ),
+      ),
+      true,
+    )
+    assert.equal(isTransientReflinkError(new Error('reflink: EAGAIN')), true)
+  })
+
+  it('reads EAGAIN off a subprocess error stderr field', () => {
+    const err = Object.assign(new Error('cp exited with code 1'), {
+      stderr: 'cp: failed to clone: Resource temporarily unavailable',
+    })
+    assert.equal(isTransientReflinkError(err), true)
+  })
+
+  it('treats no-reflink-support errors as permanent (fall straight back to copy)', () => {
+    // ext4 / NTFS: `cp --reflink=always` fails with ENOTSUP, not EAGAIN —
+    // retrying can never help, so this must NOT be classified as transient.
+    assert.equal(
+      isTransientReflinkError(
+        new Error(
+          "cp: failed to clone 'dst' from 'src': Operation not supported",
+        ),
+      ),
+      false,
+    )
+    assert.equal(isTransientReflinkError(new Error('some other failure')), false)
+    assert.equal(isTransientReflinkError('plain string error'), false)
   })
 })
