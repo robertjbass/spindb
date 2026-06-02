@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.5] - 2026-06-02
+
+### Fixed
+
+- **Branching on ZFS (follow-up to 0.51.4):** `spindb branch` still silently fell
+  back to a full byte copy on ZFS hosts. The `sync -f` added in 0.51.4 flushes the
+  file but does **not** force the block-clone-ready transaction group — only
+  `zpool sync` does, which an unprivileged container can't run. So
+  `cp --reflink=always` kept losing the race to ZFS's txg commit, failing with
+  `EAGAIN` ("Resource temporarily unavailable") and producing `method: "copy"`
+  instead of `"reflink"` — defeating instant branching, the whole point of a ZFS
+  host. The reflink is now retried across the txg-commit window (~5s); a genuine
+  no-reflink-support failure (e.g. `ENOTSUP` on ext4) still falls back to a full
+  copy immediately. Verified on a ZFS host (a retry loop succeeds once the txg
+  commits and `feature@block_cloning` activates).
+
 ## [0.51.4] - 2026-05-30
 
 ### Fixed

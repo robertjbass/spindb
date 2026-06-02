@@ -63,31 +63,78 @@ async function cloneWithStrategy(
   }
 
   if (platform === 'linux') {
-    // ZFS block cloning (and some other reflink filesystems) refuse to clone a
-    // source whose blocks aren't on disk yet: `cp --reflink=always` then fails
-    // with EAGAIN and we'd silently fall back to a full copy. Flush the source's
-    // filesystem first so the reflink can proceed. Best-effort — if `sync -f`
-    // isn't available the clone still tries, and the copy fallback still works.
-    try {
-      await spawnAsync('sync', ['-f', src])
-    } catch {
-      // sync unavailable/failed — proceed; worst case is a fallback full copy.
+    // ZFS block cloning refuses a source whose blocks aren't in a committed
+    // transaction group yet: `cp --reflink=always` then fails with EAGAIN
+    // ("Resource temporarily unavailable"). This is TRANSIENT — it clears once
+    // ZFS commits the txg (~zfs_txg_timeout, 5s default). `sync -f` flushes the
+    // file but does NOT force the block-clone-ready txg (only `zpool sync` does,
+    // which an unprivileged container can't run), so a single attempt routinely
+    // loses the race and we'd silently fall back to a full copy — defeating the
+    // whole point of branching on ZFS. Retry the reflink across the commit
+    // window. A NON-EAGAIN failure (e.g. ENOTSUP on ext4) means the volume has
+    // no reflink support at all — fall back immediately, no point retrying.
+    //
+    // We deliberately avoid `--reflink=auto` because it silently falls back to a
+    // full copy, which would make us report 'reflink' when nothing was shared.
+    const REFLINK_MAX_ATTEMPTS = 12
+    const REFLINK_RETRY_DELAY_MS = 1500
+    let lastError: unknown
+    for (let attempt = 1; attempt <= REFLINK_MAX_ATTEMPTS; attempt++) {
+      // Best-effort flush each attempt; harmless if `sync` is unavailable.
+      try {
+        await spawnAsync('sync', ['-f', src])
+      } catch {
+        // sync unavailable/failed — proceed; worst case is a fallback full copy.
+      }
+      try {
+        // Force the C locale: `cp` reports its EAGAIN error via strerror(), whose
+        // text is localized. In a non-English locale the message wouldn't match
+        // isTransientReflinkError() and we'd misclassify the transient txg race as
+        // a permanent failure and abandon the reflink.
+        await spawnAsync('cp', ['-R', '--reflink=always', src, dst], {
+          env: { LC_ALL: 'C' },
+        })
+        return 'reflink'
+      } catch (error) {
+        lastError = error
+        if (!isTransientReflinkError(error)) {
+          // No CoW on this volume (ext4 etc.) — retrying can't help.
+          return fallbackToDeepCopy(src, dst, error)
+        }
+        // EAGAIN: the failed clone may have left a partial dst behind — clear it,
+        // wait for the txg to commit, and retry.
+        await rm(dst, { recursive: true, force: true }).catch(() => {})
+        if (attempt < REFLINK_MAX_ATTEMPTS) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, REFLINK_RETRY_DELAY_MS),
+          )
+        }
+      }
     }
-    // `--reflink=always` errors out on filesystems without reflink support
-    // (e.g. ext4), so a failure here cleanly means "no CoW on this volume".
-    // We deliberately avoid `--reflink=auto` because it silently falls back to
-    // a full copy, which would make us report 'reflink' when nothing was shared.
-    try {
-      await spawnAsync('cp', ['-R', '--reflink=always', src, dst])
-      return 'reflink'
-    } catch (error) {
-      return fallbackToDeepCopy(src, dst, error)
-    }
+    // Still EAGAIN after the full commit window — fall back to a real copy so the
+    // branch still succeeds (just not instant).
+    return fallbackToDeepCopy(src, dst, lastError)
   }
 
   // Windows (NTFS has no reflink) and any unknown platform: full copy.
   await deepCopy(src, dst)
   return 'copy'
+}
+
+/**
+ * `cp --reflink=always` fails with EAGAIN ("Resource temporarily unavailable")
+ * when ZFS block cloning can't yet clone the source because its blocks aren't in
+ * a committed txg — a transient race that clears on the next txg commit.
+ * Distinguish it from a real "no reflink support" failure (ENOTSUP/EOPNOTSUPP on
+ * ext4, NTFS, etc.) so we retry the former and fall back immediately on the latter.
+ */
+export function isTransientReflinkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  const stderr =
+    typeof error === 'object' && error !== null && 'stderr' in error
+      ? String((error as { stderr?: unknown }).stderr ?? '')
+      : ''
+  return /resource temporarily unavailable|EAGAIN/i.test(`${message} ${stderr}`)
 }
 
 /**
