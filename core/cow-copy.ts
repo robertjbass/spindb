@@ -87,7 +87,13 @@ async function cloneWithStrategy(
         // sync unavailable/failed — proceed; worst case is a fallback full copy.
       }
       try {
-        await spawnAsync('cp', ['-R', '--reflink=always', src, dst])
+        // Force the C locale: `cp` reports its EAGAIN error via strerror(), whose
+        // text is localized. In a non-English locale the message wouldn't match
+        // isTransientReflinkError() and we'd misclassify the transient txg race as
+        // a permanent failure and abandon the reflink.
+        await spawnAsync('cp', ['-R', '--reflink=always', src, dst], {
+          env: { LC_ALL: 'C' },
+        })
         return 'reflink'
       } catch (error) {
         lastError = error
