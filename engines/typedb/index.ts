@@ -1041,7 +1041,9 @@ export class TypeDBEngine extends BaseEngine {
     options?: QueryOptions,
   ): Promise<QueryResult> {
     const { port, version } = container
-    const db = container.database
+    // Honor a caller-supplied database (the `-d` flag in `spindb query`); fall
+    // back to the container's default. Matches the other engines' executeQuery.
+    const db = options?.database || container.database
 
     if (!db) {
       throw new Error(

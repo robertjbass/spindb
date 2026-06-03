@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `redefine`/`update` recognition plus pure-read detection it lacked before; an
   explicit `transactionType` still overrides). The logic mirrors
   layerbase-cloud's `detectTypedbTxType` and the two are kept in lockstep.
+- **TypeDB `spindb query -d <database>` is now honored.** TypeDB's `executeQuery`
+  read only the container's default database and ignored the `-d` / `--database`
+  flag, so queries always ran against the default. It now uses
+  `options.database || container.database`, matching every other engine.
 
 ## [0.51.6] - 2026-06-02
 
