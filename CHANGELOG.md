@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.6] - 2026-06-02
+
+### Fixed
+
+- **libSQL start no longer attempts (and fails) to "create database":** `spindb
+  start` unconditionally called `engine.createDatabase()` to ensure the target
+  database exists, but single-database engines — libSQL, SQLite, Redis, Valkey,
+  QuestDB, TigerBeetle, DuckDB — reject it because the instance/file IS the
+  database. For libSQL this surfaced `✖ Failed to create database "<name>"` plus a
+  `createDatabase error` log on every start/wake, and callers that scrape start
+  output (e.g. the cloud setup-database.sh wake/migration path) read it as a
+  failure signal. The call is now gated on `canCreateDatabase(engine)`, so
+  single-database engines skip it entirely — a clean start with no spurious error.
+
 ## [0.51.5] - 2026-06-02
 
 ### Fixed

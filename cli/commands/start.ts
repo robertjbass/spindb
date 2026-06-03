@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { startWithRetry } from '../../core/start-with-retry'
+import { canCreateDatabase } from '../../core/database-capabilities'
 import { getEngine } from '../../engines'
 import { postgresqlEngine } from '../../engines/postgresql'
 import { getEngineDefaults } from '../../config/defaults'
@@ -283,9 +284,17 @@ export const startCommand = new Command('start')
           spinner?.succeed(`Container "${containerName}" started`)
         }
 
-        // Ensure user's database exists (may already exist, which is fine)
+        // Ensure user's database exists (may already exist, which is fine).
+        // Skip engines that don't support multiple databases (libsql, sqlite,
+        // redis, valkey, questdb, tigerbeetle, duckdb): the instance/file IS the
+        // database, so createDatabase throws UnsupportedOperationError and
+        // surfaces a spurious "Failed to create database" on every start/wake.
         const defaultDb = engineDefaults.superuser
-        if (config.database && config.database !== defaultDb) {
+        if (
+          canCreateDatabase(config.engine) &&
+          config.database &&
+          config.database !== defaultDb
+        ) {
           const dbSpinner = options.json
             ? null
             : createSpinner(`Ensuring database "${config.database}" exists...`)
