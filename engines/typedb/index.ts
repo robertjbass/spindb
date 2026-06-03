@@ -659,37 +659,44 @@ export class TypeDBEngine extends BaseEngine {
     let attempt = 0
     while (Date.now() - startTime < timeoutMs) {
       attempt++
+      let healthy = false
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 5000)
       try {
         const response = await fetch(`http://127.0.0.1:${httpPort}/health`, {
           signal: controller.signal,
         })
-        clearTimeout(timer)
-
-        if (response.ok) {
-          // Confirm this is the server we started, not a foreign TypeDB that
-          // happens to hold the port. A version mismatch means we're talking to
-          // someone else's server (the protocol-7-vs-8 incident's root cause) -
-          // looping won't fix that, so fail loudly. A null reading is transient;
-          // keep polling.
-          const serverVersion = await this.fetchServerVersion(httpPort)
-          if (serverVersion && serverVersion !== expectedVersion) {
-            throw new Error(
-              `Port ${httpPort} is serving TypeDB ${serverVersion}, but this ` +
-                `container expects ${expectedVersion}. A different TypeDB server ` +
-                `is running on this port - stop it, or recreate the container on ` +
-                `a different port.`,
-            )
-          }
-          logDebug(`TypeDB ready on HTTP port ${httpPort}`)
-          return true
-        }
+        healthy = response.ok
       } catch {
-        clearTimeout(timer)
+        // Transport/timeout errors are transient - keep polling. Only the
+        // /health fetch is retried here; the version check below must NOT be,
+        // or its mismatch error would be swallowed and surface as a generic
+        // start timeout.
         if (attempt <= 3 || attempt % 10 === 0) {
           logDebug(`Health check attempt ${attempt} failed`)
         }
+      } finally {
+        clearTimeout(timer)
+      }
+
+      if (healthy) {
+        // Confirm this is the server we started, not a foreign TypeDB that
+        // happens to hold the port. A version mismatch means we're talking to
+        // someone else's server (the protocol-7-vs-8 incident's root cause) -
+        // looping won't fix that, so fail loudly. This throw is deliberately
+        // OUTSIDE the fetch try/catch so it propagates to start() instead of
+        // being retried. A null reading is transient; keep polling.
+        const serverVersion = await this.fetchServerVersion(httpPort)
+        if (serverVersion && serverVersion !== expectedVersion) {
+          throw new Error(
+            `Port ${httpPort} is serving TypeDB ${serverVersion}, but this ` +
+              `container expects ${expectedVersion}. A different TypeDB server ` +
+              `is running on this port - stop it, or recreate the container on ` +
+              `a different port.`,
+          )
+        }
+        logDebug(`TypeDB ready on HTTP port ${httpPort}`)
+        return true
       }
       await new Promise((resolve) => setTimeout(resolve, checkInterval))
     }
