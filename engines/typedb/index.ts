@@ -47,6 +47,7 @@ import {
   validateTypeDBIdentifier,
   requireTypeDBConsolePath,
   getConsoleBaseArgs,
+  detectTypedbTxType,
   TYPEDB_DEFAULT_USERNAME,
   TYPEDB_DEFAULT_PASSWORD,
 } from './cli-utils'
@@ -993,18 +994,10 @@ export class TypeDBEngine extends BaseEngine {
       // Run inline TypeQL via temp script file
       // TypeDB console --command mode doesn't support multi-step transaction flows;
       // each --command is a standalone top-level command. Transactions require --script.
-      const upperSql = options.sql.trim().toUpperCase()
-      let txType: 'read' | 'write' | 'schema'
-      if (options.transactionType) {
-        txType = options.transactionType
-      } else if (
-        upperSql.startsWith('DEFINE') ||
-        upperSql.startsWith('UNDEFINE')
-      ) {
-        txType = 'schema'
-      } else {
-        txType = 'write'
-      }
+      // Caller override wins; otherwise classify the buffer the same way the
+      // query path does, so `spindb run` and `spindb query` agree.
+      const txType: 'read' | 'write' | 'schema' =
+        options.transactionType ?? detectTypedbTxType(options.sql)
       const txEnd = txType === 'read' ? 'close' : 'commit'
       const scriptContent = `transaction ${txType} ${db}\n\n${options.sql}\n\n${txEnd}\n`
       const tempScript = join(
@@ -1048,7 +1041,9 @@ export class TypeDBEngine extends BaseEngine {
     options?: QueryOptions,
   ): Promise<QueryResult> {
     const { port, version } = container
-    const db = container.database
+    // Honor a caller-supplied database (the `-d` flag in `spindb query`); fall
+    // back to the container's default. Matches the other engines' executeQuery.
+    const db = options?.database || container.database
 
     if (!db) {
       throw new Error(
@@ -1060,7 +1055,12 @@ export class TypeDBEngine extends BaseEngine {
 
     // TypeDB console --command mode doesn't support multi-step transaction flows;
     // each --command is a standalone top-level command. Use temp script for queries.
-    const scriptContent = `transaction read ${db}\n\n${query}\n\nclose\n`
+    // The transaction type must match what the query needs - a read transaction
+    // rejects schema (`define`/`undefine`/`redefine`) and data writes
+    // (`insert`/`delete`/`update`/`put`), so detect it from the whole buffer.
+    const txType = detectTypedbTxType(query)
+    const txEnd = txType === 'read' ? 'close' : 'commit'
+    const scriptContent = `transaction ${txType} ${db}\n\n${query}\n\n${txEnd}\n`
     const tempScript = join(
       tmpdir(),
       `spindb-typedb-query-${Date.now()}-${Math.random().toString(36).slice(2)}.tqls`,
