@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.7] - 2026-06-03
+
+### Fixed
+
+- **TypeDB `spindb query` now picks the right transaction type (schema / write
+  were impossible before):** the TypeDB `executeQuery` path — what `spindb query`
+  runs — hardcoded `transaction read`, so every schema query (`define` /
+  `undefine` / `redefine`) failed with `[TSV8]` and every data write (`insert` /
+  `delete` / `update` / `put`, including `match …; insert (…) isa rel;` relation
+  pipelines) failed with `[TSV9]`. Only read queries worked. `executeQuery` now
+  detects the required transaction type from the whole query buffer and opens a
+  `schema`, `write`, or `read` transaction accordingly (committing for
+  schema/write, closing for read). This unblocks creating schema and data —
+  including relations — through `spindb query` (and any GUI built on it, e.g.
+  Layerbase Desktop).
+- The detection lives in a new shared `detectTypedbTxType()` helper
+  (`engines/typedb/cli-utils.ts`): `define`/`undefine`/`redefine` → schema, a
+  data-mutation clause (`insert`/`delete`/`update`/`put`) anywhere → write,
+  otherwise read. It scans the full buffer (not just the leading keyword) so a
+  `match … insert` pipeline is correctly classified as a write, and strips `#` /
+  `//` line comments and string literals first (so a keyword inside a value like
+  `has title "define the roadmap"` doesn't cause a false match). `runScript`
+  (`spindb run`) now uses the same helper,
+  so `spindb run` and `spindb query` classify identically (and `run` gains
+  `redefine`/`update` recognition plus pure-read detection it lacked before; an
+  explicit `transactionType` still overrides). The logic mirrors
+  layerbase-cloud's `detectTypedbTxType` and the two are kept in lockstep.
+
 ## [0.51.6] - 2026-06-02
 
 ### Fixed

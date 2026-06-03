@@ -14,6 +14,40 @@ import { normalizeVersion } from './version-maps'
 export const TYPEDB_NOT_FOUND_ERROR =
   'TypeDB binary not found. Run: spindb engines download typedb <version>'
 
+/**
+ * Classify a TypeQL query into the TypeDB transaction type it requires.
+ *
+ * TypeDB 3.x has three transaction types and rejects a query run under the
+ * wrong one (`[TSV8]` for schema, `[TSV9]` for data). The whole query buffer
+ * is one transaction, so the classification must look at the *entire* query,
+ * not just the leading keyword - a `match $x ...; insert (...) isa rel;`
+ * pipeline starts with `match` but is a write.
+ *
+ *   - schema: contains define / undefine / redefine
+ *   - write:  contains a data-mutation clause (insert / delete / update / put)
+ *   - read:   anything else (match / fetch / reduce / sort / ...)
+ *
+ * Schema wins over write, and write wins over read. Line comments (`#` and
+ * `//`) and string literals are stripped first, so keywords inside a comment or
+ * a value (e.g. `insert ... has title "define the roadmap"`) don't trigger a
+ * false match.
+ *
+ * This mirrors layerbase-cloud's `detectTypedbTxType` - the two must stay in
+ * lockstep so the desktop (via spindb) and the cloud classify identically.
+ */
+export function detectTypedbTxType(query: string): 'read' | 'write' | 'schema' {
+  const stripped = query
+    .replace(/#[^\n]*/g, '') // strip `#` line comments
+    .replace(/\/\/[^\n]*/g, '') // strip `//` line comments
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""') // blank string literals so keywords
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''") // inside values don't trigger a match
+    .toUpperCase()
+
+  if (/\b(?:DEFINE|UNDEFINE|REDEFINE)\b/.test(stripped)) return 'schema'
+  if (/\b(?:INSERT|DELETE|UPDATE|PUT)\b/.test(stripped)) return 'write'
+  return 'read'
+}
+
 /** Default TypeDB credentials (TypeDB 3.x requires authentication) */
 export const TYPEDB_DEFAULT_USERNAME = 'admin'
 export const TYPEDB_DEFAULT_PASSWORD = 'password'
