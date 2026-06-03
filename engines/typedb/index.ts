@@ -30,6 +30,7 @@ import {
   assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
+import { portManager } from '../../core/port-manager'
 import { typedbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import {
@@ -173,9 +174,21 @@ export class TypeDBEngine extends BaseEngine {
    * Initialize a new TypeDB data directory
    * Creates the directory structure and config.yml for TypeDB
    */
+  // TypeDB 3.11+ binds a dedicated localhost admin port (default 1728, the same
+  // for every server). To let multiple TypeDB containers run at once, give each
+  // its own admin port derived from the container port and offset clear of the
+  // gRPC (port) and HTTP (port + 6271) bands. Returns null for < 3.11, whose
+  // config schema has no `server.admin` block - so existing 3.8.x containers are
+  // left untouched when their config is regenerated.
+  private adminPortFor(version: string, port: number): number | null {
+    const [major, minor] = normalizeVersion(version).split('.').map(Number)
+    const supportsAdmin = major > 3 || (major === 3 && minor >= 11)
+    return supportsAdmin ? port + 6372 : null
+  }
+
   async initDataDir(
     containerName: string,
-    _version: string,
+    version: string,
     options: Record<string, unknown> = {},
   ): Promise<string> {
     const containerDir = paths.getContainerPath(containerName, {
@@ -191,6 +204,7 @@ export class TypeDBEngine extends BaseEngine {
     // Get port from options or use default
     const port = (options.port as number) || engineDef.defaultPort
     const httpPort = port + 6271 // Default: 1729 + 6271 = 8000
+    const adminPort = this.adminPortFor(version, port) // 3.11+ only; null otherwise
 
     // Generate config.yml for this container
     // Must include all required sections: server (with authentication, encryption), storage, logging, diagnostics
@@ -204,6 +218,13 @@ export class TypeDBEngine extends BaseEngine {
       '  http:',
       '    enabled: true',
       `    address: ${(options.bindAddress as string) ?? '127.0.0.1'}:${httpPort}`,
+      // TypeDB 3.11+ requires a `server.admin` block (the `port` field is
+      // mandatory). Give each container a unique admin port so concurrent
+      // TypeDB containers don't all fight over the default 1728. Omitted for
+      // < 3.11, which doesn't understand this block.
+      ...(adminPort !== null
+        ? ['  admin:', '    enabled: true', `    port: ${adminPort}`]
+        : []),
       '  authentication:',
       '    token-expiration-seconds: 5000',
       '  encryption:',
@@ -321,6 +342,32 @@ export class TypeDBEngine extends BaseEngine {
       return {
         port,
         connectionString: this.getConnectionString(container),
+      }
+    }
+
+    // Refuse to start if our gRPC or HTTP port is already held by another
+    // process. TypeDB's readiness check and console both address the server by
+    // port alone, so a foreign server here (e.g. a different TypeDB version on
+    // the default 1729 / 8000) would be silently used instead of ours - which
+    // surfaces later as opaque driver/protocol errors at query time. Fail loudly
+    // up front instead. (We only get here when our own server is NOT running -
+    // the alreadyRunning check above already returned for that case.)
+    const httpPort = port + 6271
+    const adminPort = this.adminPortFor(version, port)
+    const portsToCheck =
+      adminPort !== null ? [port, httpPort, adminPort] : [port, httpPort]
+    for (const p of portsToCheck) {
+      if (!(await portManager.isPortAvailable(p))) {
+        const user = await portManager.getPortUser(p)
+        const label =
+          p === httpPort ? ' (HTTP)' : p === adminPort ? ' (admin)' : ''
+        throw new Error(
+          `Cannot start TypeDB "${name}": port ${p}${label}` +
+            ` is already in use by another process - likely a different TypeDB ` +
+            `server. Stop it, or recreate this container on a different port ` +
+            `(spindb create ... --port <n>).` +
+            (user ? `\n  ${user.replace(/\n/g, '\n  ')}` : ''),
+        )
       }
     }
 
@@ -517,17 +564,44 @@ export class TypeDBEngine extends BaseEngine {
     }
 
     // Wait for server to be ready
-    const httpPort = port + 6271
     logDebug(
       `Waiting for TypeDB server to be ready on port ${port} (HTTP: ${httpPort})...`,
     )
-    const ready = await this.waitForReady(httpPort, port)
+    const ready = await this.waitForReady(
+      httpPort,
+      port,
+      normalizeVersion(version),
+    )
     logDebug(`waitForReady returned: ${ready}`)
 
     if (!ready) {
       throw new Error(
         `TypeDB failed to start within timeout. Container: ${name}`,
       )
+    }
+
+    // Confirm the server that answered is the one we launched, not a foreign
+    // process that grabbed the port between the pre-flight check and bind. The
+    // launcher execs the server binary, so proc.pid is the listening pid on
+    // macOS/Linux. If a different pid owns the port, our server didn't bind -
+    // stop our orphan and fail loudly instead of using someone else's server.
+    // (Empty result = lookup unavailable; don't false-fail on it.)
+    if (!isWindows && proc.pid) {
+      const owners = await platformService
+        .findProcessByPort(port)
+        .catch(() => [] as number[])
+      if (owners.length > 0 && !owners.includes(proc.pid)) {
+        try {
+          process.kill(proc.pid, 'SIGTERM')
+        } catch {
+          // our process already exited
+        }
+        throw new Error(
+          `Cannot start TypeDB "${name}": port ${port} is held by another ` +
+            `process (pid ${owners.join(', ')}), not the server we launched ` +
+            `(pid ${proc.pid}). A different TypeDB server is using this port.`,
+        )
+      }
     }
 
     // On Windows with .bat launcher, the recorded PID is cmd.exe (not the actual server).
@@ -552,10 +626,30 @@ export class TypeDBEngine extends BaseEngine {
     }
   }
 
+  // Fetch the version the server on this HTTP port reports. TypeDB exposes
+  // GET /v1/version -> { "version": "3.11.5", ... }. Returns null if the
+  // endpoint is unreachable or doesn't report a version.
+  private async fetchServerVersion(httpPort: number): Promise<string | null> {
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 5000)
+      const response = await fetch(`http://127.0.0.1:${httpPort}/v1/version`, {
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      if (!response.ok) return null
+      const body = (await response.json()) as { version?: unknown }
+      return typeof body.version === 'string' ? body.version : null
+    } catch {
+      return null
+    }
+  }
+
   // Wait for TypeDB to be ready via HTTP health check
   private async waitForReady(
     httpPort: number,
     _mainPort: number,
+    expectedVersion: string,
     timeoutMs = 60000,
   ): Promise<boolean> {
     logDebug(`waitForReady called for HTTP port ${httpPort}`)
@@ -565,23 +659,44 @@ export class TypeDBEngine extends BaseEngine {
     let attempt = 0
     while (Date.now() - startTime < timeoutMs) {
       attempt++
+      let healthy = false
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 5000)
       try {
         const response = await fetch(`http://127.0.0.1:${httpPort}/health`, {
           signal: controller.signal,
         })
-        clearTimeout(timer)
-
-        if (response.ok) {
-          logDebug(`TypeDB ready on HTTP port ${httpPort}`)
-          return true
-        }
+        healthy = response.ok
       } catch {
-        clearTimeout(timer)
+        // Transport/timeout errors are transient - keep polling. Only the
+        // /health fetch is retried here; the version check below must NOT be,
+        // or its mismatch error would be swallowed and surface as a generic
+        // start timeout.
         if (attempt <= 3 || attempt % 10 === 0) {
           logDebug(`Health check attempt ${attempt} failed`)
         }
+      } finally {
+        clearTimeout(timer)
+      }
+
+      if (healthy) {
+        // Confirm this is the server we started, not a foreign TypeDB that
+        // happens to hold the port. A version mismatch means we're talking to
+        // someone else's server (the protocol-7-vs-8 incident's root cause) -
+        // looping won't fix that, so fail loudly. This throw is deliberately
+        // OUTSIDE the fetch try/catch so it propagates to start() instead of
+        // being retried. A null reading is transient; keep polling.
+        const serverVersion = await this.fetchServerVersion(httpPort)
+        if (serverVersion && serverVersion !== expectedVersion) {
+          throw new Error(
+            `Port ${httpPort} is serving TypeDB ${serverVersion}, but this ` +
+              `container expects ${expectedVersion}. A different TypeDB server ` +
+              `is running on this port - stop it, or recreate the container on ` +
+              `a different port.`,
+          )
+        }
+        logDebug(`TypeDB ready on HTTP port ${httpPort}`)
+        return true
       }
       await new Promise((resolve) => setTimeout(resolve, checkInterval))
     }
@@ -646,7 +761,7 @@ export class TypeDBEngine extends BaseEngine {
 
   // Get TypeDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
-    const { port } = container
+    const { port, version } = container
     const httpPort = port + 6271
 
     try {
@@ -659,6 +774,16 @@ export class TypeDBEngine extends BaseEngine {
       clearTimeout(timer)
 
       if (response.ok) {
+        // A healthy server on the port isn't necessarily ours - guard against a
+        // foreign TypeDB on the same port being reported as this container.
+        const expected = normalizeVersion(version)
+        const serverVersion = await this.fetchServerVersion(httpPort)
+        if (serverVersion && serverVersion !== expected) {
+          return {
+            running: false,
+            message: `A different TypeDB version (${serverVersion}) is running on port ${port}; this container expects ${expected}.`,
+          }
+        }
         return { running: true, message: 'TypeDB is running' }
       }
       return { running: false, message: 'TypeDB is not running' }
