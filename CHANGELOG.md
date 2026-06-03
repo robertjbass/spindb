@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.51.7] - 2026-06-03
+## [0.52.0] - 2026-06-03
+
+### Added
+
+- **TypeDB 3.11.5** (via hostdb 0.33.0). `defaults["3"]` now resolves to 3.11.5, so new `typedb 3` containers provision the current release. TypeDB 3.11 raised the network protocol version from 7 to 8, so the previously bundled 3.8.0 (protocol 7) could not interoperate with current TypeDB 3.11.x servers/drivers. 3.8.0 remains resolvable + downloadable for existing containers (deprecated in hostdb).
+
+### Fixed
+
+- **TypeDB start no longer adopts a foreign server on the port.** `start()` previously decided the server was up using only `GET /health`, so if a different TypeDB process already held the gRPC/HTTP port (e.g. a developer's own TypeDB on the default 1729 / 8000), spindb's console silently talked to *that* server. Combined with the old 3.8.0 (protocol 7) vs current 3.11.x (protocol 8) split, this surfaced as opaque "incompatible driver version" errors. Now: a **pre-spawn port guard** refuses to start when the port is already in use (reporting the occupant), a **post-spawn PID-ownership check** confirms the listening process is the one spindb launched, and **`waitForReady()` / `status()` verify `GET /v1/version`** matches the container's expected version before reporting ready/running.
+- **Multiple TypeDB 3.11+ containers can run concurrently.** TypeDB 3.11 added a mandatory localhost admin port that defaults to a fixed 1728 for every server, so a second 3.11 container failed to bind it. spindb now writes a unique per-container `server.admin` port (derived from the container port) for 3.11+, and includes it in the start-time port guard. Containers < 3.11 are unaffected (no `server.admin` block, so existing 3.8.x configs stay valid when regenerated).
+
+### Changed
+
+- Bumped `hostdb` 0.32.0 → 0.33.0.
 
 ### Fixed
 
