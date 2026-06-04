@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-06-03
+
+### Added
+
+- **Configurable TypeDB HTTP-port offset (`SPINDB_TYPEDB_HTTP_OFFSET`).** TypeDB binds its HTTP API at the gRPC port plus an offset, defaulting to 6271 (so the stock 1729 gRPC maps to TypeDB's default 8000 HTTP). Set `SPINDB_TYPEDB_HTTP_OFFSET` to a positive integer to move it — a host that publishes a fixed port block (e.g. a managed cloud) can put the HTTP port at a small in-block offset so it's reachable directly on the host instead of through a container shell. The default is unchanged, so local and desktop usage is unaffected. All HTTP-port derivations — `config.yml` generation, the start-time port-availability guard, the status `/health` probe, the HTTP query client, and `spindb ports` — go through a single helper so they stay consistent under an override, and the offset is read fresh on every start.
+
 ## [0.53.0] - 2026-06-03
 
 ### Added

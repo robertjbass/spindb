@@ -53,6 +53,40 @@ export const TYPEDB_DEFAULT_USERNAME = 'admin'
 export const TYPEDB_DEFAULT_PASSWORD = 'password'
 
 /**
+ * Offset from the gRPC (main) port to TypeDB's HTTP API port. Defaults to
+ * 6271 so the stock 1729 gRPC maps to TypeDB's default 8000 HTTP.
+ *
+ * Override with SPINDB_TYPEDB_HTTP_OFFSET (a positive integer). Layerbase
+ * cloud sets a small in-block offset so the HTTP port can be published to
+ * the host alongside gRPC inside the user's port block - the default 6271
+ * lands far outside a published block and is unreachable from the host
+ * (which is why cloud otherwise has to shell HTTP calls through
+ * `docker exec`). Like detectTypedbTxType, the default must stay in
+ * lockstep with layerbase-cloud's TYPEDB_HTTP_PORT_OFFSET.
+ */
+export const DEFAULT_TYPEDB_HTTP_OFFSET = 6271
+
+export function typedbHttpOffset(): number {
+  const raw = process.env.SPINDB_TYPEDB_HTTP_OFFSET
+  if (!raw) return DEFAULT_TYPEDB_HTTP_OFFSET
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_TYPEDB_HTTP_OFFSET
+}
+
+/**
+ * The HTTP API port for a TypeDB server whose gRPC (main) port is
+ * `basePort`. All spindb code paths that talk to the HTTP API - config.yml
+ * generation, the start-time port-availability check, the status probe, and
+ * the HTTP query client - derive the port through this one function so they
+ * stay consistent under an SPINDB_TYPEDB_HTTP_OFFSET override.
+ */
+export function typedbHttpPort(basePort: number): number {
+  return basePort + typedbHttpOffset()
+}
+
+/**
  * Get standard TypeDB console connection arguments including authentication.
  * TypeDB 3.x requires --username and --password for all console operations.
  *
