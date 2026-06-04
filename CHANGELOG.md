@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-06-03
+
+### Added
+
+- **TypeDB queries return structured conceptRows over the HTTP API.** Structured callers (`spindb query --json`, the desktop/cloud consoles) now run TypeDB 3.x queries through its HTTP `/v1/query` API and get back **conceptRows** — entities, attributes, and types as JSON objects — instead of the console's text dump, matching the result shape the managed cloud already renders. A new `QueryOptions.structured` flag (set by `--json`) gates the path; the human table output (no `--json`) stays on the console text, byte-for-byte unchanged. Falls back to the console on any transport/availability failure, and genuine query errors (bad TypeQL, type-inference) surface instead of being retried. TypeDB-only — `executeQuery` is per-engine, so no other engine is affected.
+
 ## [0.52.0] - 2026-06-03
 
 ### Added

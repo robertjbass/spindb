@@ -272,6 +272,10 @@ export type QueryResult = {
 }
 
 export type QueryOptions = {
+  // Request structured engine output instead of human-readable text. Set by
+  // the CLI's `--json` flag. Today only TypeDB acts on it (HTTP conceptRows
+  // vs console text); other engines ignore it.
+  structured?: boolean
   database?: string
   namespace?: string // For SurrealDB namespace override
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' // For REST API engines
