@@ -1180,14 +1180,19 @@ export class TypeDBEngine extends BaseEngine {
     // get TypeDB 3.x's HTTP /v1/query conceptRows — entities/attributes/types
     // as JSON objects, matching the rich result the managed cloud renders. The
     // human table output (no --json) stays on the console path below, byte-for-
-    // byte unchanged. On any transport/availability failure we also fall
-    // through to the console so existing setups keep working; a genuine query
-    // error (bad TypeQL, type-inference) is re-thrown, not retried.
+    // byte unchanged. A genuine query error (bad TypeQL, type-inference) is
+    // re-thrown. Transport/availability failures fall back to the console only
+    // for READ queries: a mutating query may have already committed over HTTP,
+    // so retrying it on the console could duplicate the write — those re-throw.
     if (options?.structured) {
       try {
         return await this.executeQueryViaHttp(port, db, query, options)
       } catch (error) {
         if (error instanceof TypedbQueryError) throw error
+        // A transport failure after a mutating HTTP request may have already
+        // committed server-side; retrying on the console could duplicate the
+        // write. Only fall back for read-only queries.
+        if (detectTypedbTxType(query) !== 'read') throw error
         logDebug(
           `TypeDB HTTP query failed (${
             error instanceof Error ? error.message : String(error)
@@ -1571,10 +1576,16 @@ async function typedbHttpSignin(
 function shapeTypedbConceptRows(body: TypedbQueryResponse): QueryResult {
   const answers = Array.isArray(body.answers) ? body.answers : []
 
-  // Writes with no returned rows (define, undefine, plain insert): report OK
-  // in the single-cell shape the console path also uses for non-tabular output.
-  if (body.answerType === 'ok' || answers.length === 0) {
+  // A schema/data write with no returned rows (define, undefine, plain insert)
+  // reports `ok` — surface a single OK cell so callers show success feedback.
+  if (body.answerType === 'ok') {
     return { columns: ['result'], rows: [{ result: 'OK' }], rowCount: 1 }
+  }
+
+  // An empty read (a match with no matches) is genuinely zero rows — don't
+  // synthesize an 'OK' cell for it.
+  if (answers.length === 0) {
+    return { columns: [], rows: [], rowCount: 0 }
   }
 
   const toRow = (a: unknown): Record<string, unknown> => {
