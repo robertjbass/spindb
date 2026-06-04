@@ -8,6 +8,7 @@ import { uiError, uiInfo } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { Engine, type ContainerConfig } from '../../types'
 import { loadEnginesJson } from '../../config/engines-registry'
+import { typedbHttpPort } from '../../engines/typedb/cli-utils'
 
 function getSecondaryPorts(
   config: ContainerConfig,
@@ -24,7 +25,7 @@ function getSecondaryPorts(
       ports.push({ port: config.port + 1, label: 'gRPC' })
       break
     case 'typedb':
-      ports.push({ port: config.port + 6271, label: 'HTTP' })
+      ports.push({ port: typedbHttpPort(config.port), label: 'HTTP' })
       break
     case 'questdb':
       ports.push({ port: config.port + 188, label: 'HTTP Console' })

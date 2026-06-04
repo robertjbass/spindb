@@ -49,6 +49,7 @@ import {
   requireTypeDBConsolePath,
   getConsoleBaseArgs,
   detectTypedbTxType,
+  typedbHttpPort,
   TYPEDB_DEFAULT_USERNAME,
   TYPEDB_DEFAULT_PASSWORD,
 } from './cli-utils'
@@ -203,7 +204,7 @@ export class TypeDBEngine extends BaseEngine {
 
     // Get port from options or use default
     const port = (options.port as number) || engineDef.defaultPort
-    const httpPort = port + 6271 // Default: 1729 + 6271 = 8000
+    const httpPort = typedbHttpPort(port) // base + 6271 (8000) by default
     const adminPort = this.adminPortFor(version, port) // 3.11+ only; null otherwise
 
     // Generate config.yml for this container
@@ -352,7 +353,7 @@ export class TypeDBEngine extends BaseEngine {
     // surfaces later as opaque driver/protocol errors at query time. Fail loudly
     // up front instead. (We only get here when our own server is NOT running -
     // the alreadyRunning check above already returned for that case.)
-    const httpPort = port + 6271
+    const httpPort = typedbHttpPort(port)
     const adminPort = this.adminPortFor(version, port)
     const portsToCheck =
       adminPort !== null ? [port, httpPort, adminPort] : [port, httpPort]
@@ -762,7 +763,7 @@ export class TypeDBEngine extends BaseEngine {
   // Get TypeDB server status
   async status(container: ContainerConfig): Promise<StatusResult> {
     const { port, version } = container
-    const httpPort = port + 6271
+    const httpPort = typedbHttpPort(port)
 
     try {
       const controller = new AbortController()
@@ -1290,7 +1291,7 @@ export class TypeDBEngine extends BaseEngine {
     query: string,
     options?: QueryOptions,
   ): Promise<QueryResult> {
-    const base = `http://127.0.0.1:${port + 6271}` // gRPC port + 6271 = HTTP API
+    const base = `http://127.0.0.1:${typedbHttpPort(port)}` // base + HTTP offset
     const username = options?.username || TYPEDB_DEFAULT_USERNAME
     const password = options?.password || TYPEDB_DEFAULT_PASSWORD
 
