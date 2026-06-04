@@ -16,7 +16,7 @@
 
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, writeFile, unlink, stat, readdir } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, stat, readdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { BaseEngine } from '../base-engine'
@@ -50,6 +50,7 @@ import {
   getConsoleBaseArgs,
   detectTypedbTxType,
   typedbHttpPort,
+  parseTypedbHttpOffsetFromConfig,
   TYPEDB_DEFAULT_USERNAME,
   TYPEDB_DEFAULT_PASSWORD,
 } from './cli-utils'
@@ -204,7 +205,27 @@ export class TypeDBEngine extends BaseEngine {
 
     // Get port from options or use default
     const port = (options.port as number) || engineDef.defaultPort
-    const httpPort = typedbHttpPort(port) // base + 6271 (8000) by default
+
+    // Preserve the per-container HTTP offset across restarts. initDataDir runs
+    // on every start and regenerates config.yml, so recover the offset this
+    // container was created with from its existing config (the source of
+    // truth) rather than re-reading the process env each time - otherwise a
+    // container created with a non-default SPINDB_TYPEDB_HTTP_OFFSET would
+    // silently move its HTTP port on the next start. Fresh creates (no
+    // existing config) fall back to the env/default offset.
+    const configPath = join(containerDir, 'config.yml')
+    let recoveredOffset: number | null = null
+    if (existsSync(configPath)) {
+      try {
+        recoveredOffset = parseTypedbHttpOffsetFromConfig(
+          await readFile(configPath, 'utf-8'),
+        )
+      } catch {
+        recoveredOffset = null
+      }
+    }
+    const httpPort =
+      recoveredOffset !== null ? port + recoveredOffset : typedbHttpPort(port)
     const adminPort = this.adminPortFor(version, port) // 3.11+ only; null otherwise
 
     // Generate config.yml for this container

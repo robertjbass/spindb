@@ -87,6 +87,34 @@ export function typedbHttpPort(basePort: number): number {
 }
 
 /**
+ * Recover the HTTP offset a TypeDB container was created with by reading its
+ * existing config.yml. spindb regenerates config.yml on every start, so the
+ * offset must persist across restarts as a property of the container -
+ * otherwise a container created with a non-default SPINDB_TYPEDB_HTTP_OFFSET
+ * would silently move its HTTP port the next time it starts (re-reading the
+ * process env, which may differ or be unset), breaking any caller that
+ * expects the original port. This matters when one host runs many TypeDB
+ * containers with different offsets: each config.yml is its own source of
+ * truth.
+ *
+ * config.yml lists the gRPC `server.address` first, then the
+ * `http.address`, so the offset is simply (http port - gRPC port). Returns
+ * null when the config can't be parsed (e.g. a fresh create, before any
+ * config exists), so callers fall back to the env/default offset.
+ */
+export function parseTypedbHttpOffsetFromConfig(
+  configYml: string,
+): number | null {
+  const ports = [...configYml.matchAll(/address:\s*[\d.]+:(\d+)/g)].map((m) =>
+    Number.parseInt(m[1], 10),
+  )
+  const [grpcPort, httpPort] = ports
+  if (!Number.isInteger(grpcPort) || !Number.isInteger(httpPort)) return null
+  const offset = httpPort - grpcPort
+  return offset > 0 ? offset : null
+}
+
+/**
  * Get standard TypeDB console connection arguments including authentication.
  * TypeDB 3.x requires --username and --password for all console operations.
  *
