@@ -1176,6 +1176,26 @@ export class TypeDBEngine extends BaseEngine {
       )
     }
 
+    // Structured callers (`spindb query --json`, the desktop/cloud consoles)
+    // get TypeDB 3.x's HTTP /v1/query conceptRows — entities/attributes/types
+    // as JSON objects, matching the rich result the managed cloud renders. The
+    // human table output (no --json) stays on the console path below, byte-for-
+    // byte unchanged. On any transport/availability failure we also fall
+    // through to the console so existing setups keep working; a genuine query
+    // error (bad TypeQL, type-inference) is re-thrown, not retried.
+    if (options?.structured) {
+      try {
+        return await this.executeQueryViaHttp(port, db, query, options)
+      } catch (error) {
+        if (error instanceof TypedbQueryError) throw error
+        logDebug(
+          `TypeDB HTTP query failed (${
+            error instanceof Error ? error.message : String(error)
+          }); falling back to console`,
+        )
+      }
+    }
+
     const consolePath = await this.getConsolePath(version)
 
     // TypeDB console --command mode doesn't support multi-step transaction flows;
@@ -1248,6 +1268,54 @@ export class TypeDBEngine extends BaseEngine {
     } finally {
       await unlink(tempScript).catch(() => {})
     }
+  }
+
+  /**
+   * Run a TypeQL query through TypeDB 3.x's HTTP API and return structured
+   * conceptRows (entities/attributes/types as JSON objects), matching the
+   * shape the managed cloud renders. Mirrors layerbase-cloud's query-proxy:
+   * sign in for a token, POST /v1/query, then unwrap each answer's `data`
+   * envelope so the columns are the query variables. Throws TypedbQueryError
+   * on a query-level failure so executeQuery surfaces it rather than retrying
+   * on the console.
+   */
+  private async executeQueryViaHttp(
+    port: number,
+    db: string,
+    query: string,
+    options?: QueryOptions,
+  ): Promise<QueryResult> {
+    const base = `http://127.0.0.1:${port + 6271}` // gRPC port + 6271 = HTTP API
+    const username = options?.username || TYPEDB_DEFAULT_USERNAME
+    const password = options?.password || TYPEDB_DEFAULT_PASSWORD
+
+    const token = await typedbHttpSignin(base, username, password)
+
+    const transactionType = detectTypedbTxType(query)
+    const res = await typedbHttpFetch(
+      `${base}/v1/query`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          databaseName: db,
+          transactionType,
+          query,
+          commit: transactionType !== 'read',
+        }),
+      },
+      60_000,
+    )
+
+    if (!res.ok) {
+      throw new TypedbQueryError(await readTypedbHttpError(res))
+    }
+
+    const body = (await res.json()) as TypedbQueryResponse
+    return shapeTypedbConceptRows(body)
   }
 
   /**
@@ -1418,3 +1486,127 @@ export class TypeDBEngine extends BaseEngine {
 }
 
 export const typedbEngine = new TypeDBEngine()
+
+// ── TypeDB HTTP /v1/query transport (structured conceptRows) ────────────────
+// TypeDB 3.x exposes a REST/HTTP API on `gRPC port + 6271`. Querying through
+// it (instead of the text-only console) yields structured concept answers,
+// matching what layerbase-cloud's query-proxy renders. These are the
+// spindb-local equivalent: a direct fetch to 127.0.0.1 (the cloud shells the
+// same calls through docker-exec curl because its TypeDB port is in-container).
+
+type TypedbQueryResponse = {
+  queryType?: string
+  answerType?: 'ok' | 'conceptRows' | 'conceptDocuments'
+  answers?: unknown[]
+  warning?: string
+}
+
+/**
+ * Raised when TypeDB's HTTP API rejects a query (bad TypeQL, type-inference,
+ * auth). Distinct from transport failures so executeQuery surfaces it to the
+ * caller instead of silently retrying on the console.
+ */
+class TypedbQueryError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'TypedbQueryError'
+  }
+}
+
+// fetch with an abort-based timeout, matching fetchServerVersion's pattern.
+async function typedbHttpFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function typedbHttpSignin(
+  base: string,
+  username: string,
+  password: string,
+): Promise<string> {
+  const res = await typedbHttpFetch(
+    `${base}/v1/signin`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    },
+    15_000,
+  )
+  if (!res.ok) {
+    // Explicit auth rejection: the console path uses the same credentials and
+    // would fail identically, so surface it instead of falling back.
+    if (res.status === 401 || res.status === 403) {
+      throw new TypedbQueryError(
+        `TypeDB authentication failed (${res.status}). Check the database username and password.`,
+      )
+    }
+    // Other failures are likely transport/server issues — let the caller fall
+    // back to the console path.
+    throw new Error(`TypeDB signin failed: ${res.status} ${res.statusText}`)
+  }
+  const parsed = (await res.json()) as { token?: unknown }
+  if (typeof parsed.token !== 'string' || !parsed.token) {
+    throw new Error('TypeDB signin response missing "token"')
+  }
+  return parsed.token
+}
+
+/**
+ * Convert a TypeDB /v1/query response into spindb's QueryResult. `conceptRows`
+ * answers arrive as `{ data: { <var>: <concept> }, involvedBlocks: [...] }`;
+ * unwrap `data` so the columns are the query variables. `conceptDocuments`
+ * (from `fetch`) pass through as-is. Rendering each concept to a readable
+ * label is the consumer's job (the desktop / cloud query console).
+ */
+function shapeTypedbConceptRows(body: TypedbQueryResponse): QueryResult {
+  const answers = Array.isArray(body.answers) ? body.answers : []
+
+  // Writes with no returned rows (define, undefine, plain insert): report OK
+  // in the single-cell shape the console path also uses for non-tabular output.
+  if (body.answerType === 'ok' || answers.length === 0) {
+    return { columns: ['result'], rows: [{ result: 'OK' }], rowCount: 1 }
+  }
+
+  const toRow = (a: unknown): Record<string, unknown> => {
+    if (!a || typeof a !== 'object' || Array.isArray(a)) return { value: a }
+    const obj = a as Record<string, unknown>
+    if (body.answerType === 'conceptRows') {
+      const data = obj.data
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        return data as Record<string, unknown>
+      }
+    }
+    return obj
+  }
+  const rows = answers.map(toRow)
+
+  const columns = new Set<string>()
+  for (const row of rows) {
+    for (const key of Object.keys(row)) columns.add(key)
+  }
+
+  return { columns: Array.from(columns), rows, rowCount: rows.length }
+}
+
+async function readTypedbHttpError(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '')
+  try {
+    const parsed = JSON.parse(text) as { code?: string; message?: string }
+    if (parsed.message) {
+      return parsed.code ? `${parsed.code}: ${parsed.message}` : parsed.message
+    }
+  } catch {
+    // not JSON — fall through to the raw text
+  }
+  return text.slice(0, 500) || `${res.status} ${res.statusText}`
+}

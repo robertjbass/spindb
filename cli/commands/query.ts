@@ -247,6 +247,9 @@ export const queryCommand = new Command('query')
         const result = await engine.executeQuery(config, query, {
           database,
           namespace: options.namespace,
+          // `--json` callers (scripts, the desktop console) get structured
+          // engine output; the human table path stays on text.
+          structured: options.json,
           ...remoteQueryOptions,
         })
 
