@@ -39,8 +39,8 @@ The `version-maps.ts` file must stay synchronized with hostdb's `releases.json`:
 ```typescript
 export const MYSQL_VERSION_MAP: Record<string, string> = {
   '8.0': '8.0.40',
-  '8.4': '8.4.3',
-  '9': '9.5.0',
+  '8.4': '8.4.9',
+  '9': '9.6.0',
 }
 ```
 
