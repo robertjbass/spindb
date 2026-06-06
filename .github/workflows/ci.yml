@@ -1908,12 +1908,23 @@ jobs:
   # ============================================
   # Rename and Clone Tests
   # Tests container rename and clone operations. Uses PostgreSQL as the
-  # representative engine. clone uses strategy:'copy' (a plain fs.cp byte copy),
-  # so rename/clone is platform-agnostic in spindb's own code; the only OS that
-  # genuinely diverges for fs.rename/fs.cp (file locking, NTFS quirks) is Windows.
-  # Linux covers the POSIX path that macOS would duplicate, so the macOS leg is
-  # dropped. The platform-divergent CoW reflink path (branch, strategy:'cow') is
-  # covered separately by zfs-reflink.yml / zfs-lifecycle.yml.
+  # representative engine.
+  #
+  # This matrix is intentionally small because the rename/clone code is
+  # platform-agnostic:
+  # - clone(): container-manager.ts calls copyContainerData with strategy:'copy',
+  #   i.e. a full directory copy (fs.cp), never copy-on-write.
+  # - rename(): no macOS-specific branch. atomicMoveDirectory tries fs.rename and
+  #   falls back to copy+delete on EXDEV (error-code-driven, cross-filesystem);
+  #   it only *retries* on Windows (EBUSY from held file handles: AV, search
+  #   indexer, mmap'd stores, JVM cleanup). Windows is the one OS that diverges.
+  # - rename() regenerates ClickHouse config.xml (absolute paths); likewise
+  #   copyContainerData() runs prepareBranchedDataDir, which for ClickHouse
+  #   regenerates config.xml.
+  #
+  # Linux covers the POSIX path macOS would duplicate, so the macOS leg is
+  # dropped. The platform-divergent CoW/reflink path (branch, strategy:'cow') is
+  # exercised separately by zfs-reflink.yml / zfs-lifecycle.yml (cp --reflink=always).
   # ============================================
   test-rename-clone:
     name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
@@ -2056,9 +2067,13 @@ jobs:
   # ClickHouse Rename Test
   # Tests that config.xml paths are regenerated after rename.
   # The fix under test (regenerateConfig rewriting absolute paths in config.xml)
-  # is platform-agnostic POSIX path logic, so a single Linux leg fully covers it.
-  # ClickHouse's own macOS/start coverage lives in the test-clickhouse job;
-  # ClickHouse is not available on Windows.
+  # has no per-OS branch: the paths come from Node's path.join (paths.getContainer*
+  # in config/paths.ts) and generateClickHouseConfig embeds them with literal
+  # forward slashes (e.g. ${dataDir}/, ${tmpDir}/). That makes the rewrite behave
+  # identically on Linux and macOS - it is not inherently platform-agnostic (on
+  # Windows path.join would emit backslashes, mixing separators), but ClickHouse
+  # is macOS/Linux only, so a single Linux leg fully covers the rewrite. ClickHouse's
+  # own start coverage lives in the test-clickhouse job.
   # ============================================
   test-clickhouse-rename:
     name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
