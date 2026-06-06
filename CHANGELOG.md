@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`spindb branch create --path <path>`** for file-based engines (SQLite/DuckDB): writes the branch's backing file to an explicit path (creating its parent dir if needed) instead of the default container dir. Lets an embedding host that serves SQLite/DuckDB through a shim (e.g. layerbase-cloud's pgsqlite/duckgres) place the branch file exactly where the shim looks. `--path` is rejected for server engines.
+- **`spindb branch create --path <path>`** for file-based engines (SQLite/DuckDB): writes the branch's backing file to an explicit path (creating its parent dir if needed) instead of the default container dir. Lets an embedding host that serves SQLite/DuckDB through a shim (e.g. layerbase-cloud's pgsqlite/duckgres) place the branch file exactly where the shim looks. `--path` is rejected for server engines, and refuses to write onto an existing file (so it never clobbers a pre-existing or source file).
 
 ### Fixed
 
