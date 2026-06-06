@@ -30,7 +30,8 @@ on:
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
 #
-# Full matrix available via: ci-full.yml (manual dispatch or weekly)
+# This workflow runs the full matrix on PRs to main; trigger it manually on any
+# branch from the Actions tab (workflow_dispatch).
 # See TESTING_STRATEGY.md for rollback instructions.
 # =============================================================================
 
@@ -61,13 +62,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -87,13 +88,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -113,13 +114,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -158,13 +159,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -222,13 +223,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -284,13 +285,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -364,13 +365,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -425,13 +426,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -486,13 +487,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -546,13 +547,13 @@ jobs:
             label: macOS ARM64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -643,13 +644,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -740,13 +741,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -802,13 +803,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -862,13 +863,13 @@ jobs:
             label: macOS ARM64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -941,13 +942,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1020,13 +1021,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1096,13 +1097,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1150,6 +1151,10 @@ jobs:
   # CockroachDB uses PostgreSQL wire protocol for client connections
   # Windows: delete tests skipped (RocksDB file handle locking)
   # ============================================
+  # macos-15-intel (darwin-x64) is intentionally omitted here: CockroachDB is the
+  # most expensive macOS-Intel engine leg (~5min) and Intel is GitHub's scarcest,
+  # queue-forming runner. The darwin-x64 binary is still validated by the other
+  # macOS-Intel engine jobs; macOS ARM64 + Linux + Windows cover CockroachDB.
   test-cockroachdb:
     name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -1163,9 +1168,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1174,13 +1176,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1265,13 +1267,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1355,13 +1357,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1450,13 +1452,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1539,13 +1541,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1627,13 +1629,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1715,13 +1717,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1805,13 +1807,13 @@ jobs:
             label: macOS ARM64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1868,13 +1870,13 @@ jobs:
             label: macOS ARM64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -1908,12 +1910,23 @@ jobs:
   # ============================================
   # Rename and Clone Tests
   # Tests container rename and clone operations. Uses PostgreSQL as the
-  # representative engine. clone uses strategy:'copy' (a plain fs.cp byte copy),
-  # so rename/clone is platform-agnostic in spindb's own code; the only OS that
-  # genuinely diverges for fs.rename/fs.cp (file locking, NTFS quirks) is Windows.
-  # Linux covers the POSIX path that macOS would duplicate, so the macOS leg is
-  # dropped. The platform-divergent CoW reflink path (branch, strategy:'cow') is
-  # covered separately by zfs-reflink.yml / zfs-lifecycle.yml.
+  # representative engine.
+  #
+  # This matrix is intentionally small because the rename/clone code is
+  # platform-agnostic:
+  # - clone(): container-manager.ts calls copyContainerData with strategy:'copy',
+  #   i.e. a full directory copy (fs.cp), never copy-on-write.
+  # - rename(): no macOS-specific branch. atomicMoveDirectory tries fs.rename and
+  #   falls back to copy+delete on EXDEV (error-code-driven, cross-filesystem);
+  #   it only *retries* on Windows (EBUSY from held file handles: AV, search
+  #   indexer, mmap'd stores, JVM cleanup). Windows is the one OS that diverges.
+  # - rename() regenerates ClickHouse config.xml (absolute paths); likewise
+  #   copyContainerData() runs prepareBranchedDataDir, which for ClickHouse
+  #   regenerates config.xml.
+  #
+  # Linux covers the POSIX path macOS would duplicate, so the macOS leg is
+  # dropped. The platform-divergent CoW/reflink path (branch, strategy:'cow') is
+  # exercised separately by zfs-reflink.yml / zfs-lifecycle.yml (cp --reflink=always).
   # ============================================
   test-rename-clone:
     name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
@@ -1930,13 +1943,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -2056,9 +2069,13 @@ jobs:
   # ClickHouse Rename Test
   # Tests that config.xml paths are regenerated after rename.
   # The fix under test (regenerateConfig rewriting absolute paths in config.xml)
-  # is platform-agnostic POSIX path logic, so a single Linux leg fully covers it.
-  # ClickHouse's own macOS/start coverage lives in the test-clickhouse job;
-  # ClickHouse is not available on Windows.
+  # has no per-OS branch: the paths come from Node's path.join (paths.getContainer*
+  # in config/paths.ts) and generateClickHouseConfig embeds them with literal
+  # forward slashes (e.g. ${dataDir}/, ${tmpDir}/). That makes the rewrite behave
+  # identically on Linux and macOS - it is not inherently platform-agnostic (on
+  # Windows path.join would emit backslashes, mixing separators), but ClickHouse
+  # is macOS/Linux only, so a single Linux leg fully covers the rewrite. ClickHouse's
+  # own start coverage lives in the test-clickhouse job.
   # ============================================
   test-clickhouse-rename:
     name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
@@ -2072,13 +2089,13 @@ jobs:
             label: Linux x64 24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -2201,13 +2218,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -2285,13 +2302,13 @@ jobs:
             label: Win x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -2388,7 +2405,7 @@ jobs:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -2429,13 +2446,13 @@ jobs:
   #   timeout-minutes: 120
   #   steps:
   #     - name: Checkout
-  #       uses: actions/checkout@v4
+  #       uses: actions/checkout@v6
   #
   #     - name: Setup pnpm
   #       uses: pnpm/action-setup@v4
   #
   #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
+  #       uses: actions/setup-node@v6
   #       with:
   #         node-version: '22'
   #         cache: 'pnpm'
@@ -2703,7 +2720,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build Docker test image
         run: docker build -t spindb-e2e -f tests/docker/Dockerfile .
@@ -2727,7 +2744,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Checkout
-  #       uses: actions/checkout@v4
+  #       uses: actions/checkout@v6
   #
   #     - name: Set up QEMU for ARM64 emulation
   #       uses: docker/setup-qemu-action@v3
@@ -2805,13 +2822,13 @@ jobs:
   #         - clickhouse
   #   steps:
   #     - name: Checkout
-  #       uses: actions/checkout@v4
+  #       uses: actions/checkout@v6
   #
   #     - name: Setup pnpm
   #       uses: pnpm/action-setup@v4
   #
   #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
+  #       uses: actions/setup-node@v6
   #       with:
   #         node-version: '22'
   #         cache: 'pnpm'

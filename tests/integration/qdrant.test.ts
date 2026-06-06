@@ -28,6 +28,7 @@ import {
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
 import { getDefaultUsername, saveCredentials } from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
+import { branchManager } from '../../core/branch-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
@@ -481,6 +482,124 @@ describe('Qdrant Integration Tests', () => {
         await containerManager.delete(targetName, { force: true }).catch(
           () => {},
         )
+      }
+    }
+  })
+
+  it('should branch a running container and start the branch with its data', async () => {
+    // Regression guard for the Qdrant branch-start fix (storage_path /
+    // snapshots_path must be re-pointed when a branched data dir boots, or the
+    // branch server never starts). When that regresses, createBranch returns
+    // started:false plus a warning, and the branch port never becomes ready.
+    console.log(`\n Branching a running Qdrant container...`)
+
+    const engine = getEngine(ENGINE)
+    await engine.ensureBinaries(TEST_VERSION, () => {})
+
+    // Source HTTP + gRPC on [0]/[1], branch HTTP + gRPC on [2]/[3].
+    const branchPorts = await findConsecutiveFreePorts(
+      4,
+      TEST_PORTS.qdrant.base + 40,
+    )
+    const sourcePort = branchPorts[0]
+    const branchPort = branchPorts[2]
+    const sourceName = generateTestName('qdrant-branch-src')
+    const branchName = generateTestName('qdrant-branch')
+
+    try {
+      // Stand up a running source with data.
+      await containerManager.create(sourceName, {
+        engine: ENGINE,
+        version: TEST_VERSION,
+        port: sourcePort,
+        database: DATABASE,
+      })
+      await engine.initDataDir(sourceName, TEST_VERSION, { port: sourcePort })
+
+      const sourceConfig = await containerManager.getConfig(sourceName)
+      assert(sourceConfig !== null, 'Source container config should exist')
+      await engine.start(sourceConfig!)
+      await containerManager.updateConfig(sourceName, { status: 'running' })
+      assert(
+        await waitForReady(ENGINE, sourcePort),
+        'Source Qdrant should be ready',
+      )
+
+      assert(
+        await createQdrantCollection(sourcePort, TEST_COLLECTION, 4),
+        'Should create source collection',
+      )
+      assert(
+        await insertQdrantPoints(sourcePort, TEST_COLLECTION, [
+          { id: 1, vector: [0.1, 0.2, 0.3, 0.4], payload: { name: 'test1' } },
+          { id: 2, vector: [0.2, 0.3, 0.4, 0.5], payload: { name: 'test2' } },
+          { id: 3, vector: [0.3, 0.4, 0.5, 0.6], payload: { name: 'test3' } },
+        ]),
+        'Should insert source points',
+      )
+
+      // Branch it: auto stop -> CoW clone -> restart source -> start branch.
+      const result = await branchManager.createBranch({
+        source: sourceName,
+        name: branchName,
+        port: branchPort,
+      })
+
+      // The regression assertion: the branch server must actually start.
+      assertEqual(
+        result.warning,
+        undefined,
+        `Branch should start cleanly (warning: ${result.warning})`,
+      )
+      assert(
+        result.started,
+        'Branch server should have started (regression: storage_path not re-pointed on boot)',
+      )
+
+      // Lineage is stamped on the branch.
+      const branchConfig = await containerManager.getConfig(branchName)
+      assert(branchConfig !== null, 'Branch container config should exist')
+      assertEqual(
+        branchConfig?.branchParent,
+        sourceName,
+        'Branch should record its source as branchParent',
+      )
+
+      // The branch serves the source's data on its own port.
+      assert(
+        await waitForReady(ENGINE, branchPort),
+        'Branched Qdrant should be ready on its own port',
+      )
+      const branchPoints = await getQdrantPointCount(branchPort, TEST_COLLECTION)
+      assertEqual(
+        branchPoints,
+        3,
+        'Branch should carry the 3 points present at branch time',
+      )
+
+      // The source is restarted and still serving after the branch.
+      assert(
+        await waitForReady(ENGINE, sourcePort),
+        'Source Qdrant should still be running after branching',
+      )
+
+      console.log('   ✓ Branch started independently with the source data')
+    } finally {
+      const branchConfig = await containerManager.getConfig(branchName)
+      if (branchConfig) {
+        await engine.stop(branchConfig).catch(() => {})
+        await waitForStopped(branchName, ENGINE, 90000).catch(() => false)
+        await containerManager
+          .delete(branchName, { force: true })
+          .catch(() => {})
+      }
+      const srcConfig = await containerManager.getConfig(sourceName)
+      if (srcConfig) {
+        await engine.stop(srcConfig).catch(() => {})
+        await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
+        await containerManager
+          .delete(sourceName, { force: true })
+          .catch(() => {})
       }
     }
   })
