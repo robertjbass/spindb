@@ -113,13 +113,17 @@ function patchQdrantConfig(
   // config (e.g. from `spindb branch`) still points at the SOURCE's container
   // dir, so a branched Qdrant would open the source's (locked) storage and fail
   // to start. Always re-point them at this container's own dirs.
+  // Function replacers so any `$` in a path is never interpreted as a
+  // replacement pattern (`$1`, `$&`, `$$`, ...).
   config = config.replace(
     /^(\s*storage_path:\s*).+/m,
-    `$1${normalizePathForQdrant(options.dataDir)}`,
+    (_m, prefix: string) =>
+      `${prefix}${normalizePathForQdrant(options.dataDir)}`,
   )
   config = config.replace(
     /^(\s*snapshots_path:\s*).+/m,
-    `$1${normalizePathForQdrant(options.snapshotsDir)}`,
+    (_m, prefix: string) =>
+      `${prefix}${normalizePathForQdrant(options.snapshotsDir)}`,
   )
   if (options.bindAddress !== undefined) {
     config = config.replace(/^(\s*host:\s*).+/m, `$1${options.bindAddress}`)
