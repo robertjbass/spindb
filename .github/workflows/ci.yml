@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -91,7 +91,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -117,7 +117,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -162,7 +162,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -175,7 +175,7 @@ jobs:
 
       # Cache PostgreSQL binaries - these are ~100MB+ downloads
       - name: Cache PostgreSQL binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: pg-cache
         with:
           path: ~/.spindb/bin
@@ -226,7 +226,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -239,7 +239,7 @@ jobs:
 
       # Cache MariaDB binaries - these are ~100MB+ downloads
       - name: Cache MariaDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: mariadb-cache
         with:
           path: ~/.spindb/bin
@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -319,7 +319,7 @@ jobs:
 
       # Cache MySQL binaries - these are ~100MB+ downloads
       - name: Cache MySQL binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: mysql-cache
         with:
           path: ~/.spindb/bin
@@ -368,7 +368,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -381,7 +381,7 @@ jobs:
 
       # Cache SQLite binaries - these are downloaded from hostdb
       - name: Cache SQLite binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: sqlite-cache
         with:
           path: ~/.spindb/bin
@@ -429,7 +429,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -442,7 +442,7 @@ jobs:
 
       # Cache DuckDB binaries - these are downloaded from hostdb
       - name: Cache DuckDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: duckdb-cache
         with:
           path: ~/.spindb/bin
@@ -490,7 +490,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -503,7 +503,7 @@ jobs:
 
       # Cache MongoDB binaries - these are downloaded from hostdb
       - name: Cache MongoDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: mongodb-cache
         with:
           path: ~/.spindb/bin
@@ -550,7 +550,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -563,7 +563,7 @@ jobs:
 
       # Cache FerretDB binaries - includes both ferretdb AND postgresql-documentdb
       - name: Cache FerretDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: ferretdb-cache
         with:
           path: ~/.spindb/bin
@@ -647,7 +647,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -660,7 +660,7 @@ jobs:
 
       # Cache FerretDB v1 binaries - ferretdb proxy + plain PostgreSQL
       - name: Cache FerretDB v1 binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: ferretdb-v1-cache
         with:
           path: ~/.spindb/bin
@@ -744,7 +744,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -758,7 +758,7 @@ jobs:
       # Cache Redis binaries - these are downloaded from hostdb
       # Cache key includes version suffix to bust cache when extraction logic changes
       - name: Cache Redis binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: redis-cache
         with:
           path: ~/.spindb/bin
@@ -806,7 +806,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -820,7 +820,7 @@ jobs:
       # Cache Valkey binaries - these are downloaded from hostdb
       # Cache key includes version suffix to bust cache when extraction logic changes
       - name: Cache Valkey binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: valkey-cache
         with:
           path: ~/.spindb/bin
@@ -866,7 +866,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -879,7 +879,7 @@ jobs:
 
       # Cache ClickHouse binaries - these are downloaded from hostdb
       - name: Cache ClickHouse binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: clickhouse-cache
         with:
           path: ~/.spindb/bin
@@ -945,7 +945,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -958,7 +958,7 @@ jobs:
 
       # Cache Qdrant binaries - these are downloaded from hostdb
       - name: Cache Qdrant binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: qdrant-cache
         with:
           path: ~/.spindb/bin
@@ -1024,7 +1024,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1037,7 +1037,7 @@ jobs:
 
       # Cache Meilisearch binaries - these are downloaded from hostdb
       - name: Cache Meilisearch binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: meilisearch-cache
         with:
           path: ~/.spindb/bin
@@ -1100,7 +1100,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1113,7 +1113,7 @@ jobs:
 
       # Cache CouchDB binaries - these are downloaded from hostdb
       - name: Cache CouchDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: couchdb-cache
         with:
           path: ~/.spindb/bin
@@ -1179,7 +1179,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1192,7 +1192,7 @@ jobs:
 
       # Cache CockroachDB binaries - these are downloaded from hostdb
       - name: Cache CockroachDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cockroachdb-cache
         with:
           path: ~/.spindb/bin
@@ -1270,7 +1270,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1283,7 +1283,7 @@ jobs:
 
       # Cache SurrealDB binaries - these are downloaded from hostdb
       - name: Cache SurrealDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: surrealdb-cache
         with:
           path: ~/.spindb/bin
@@ -1360,7 +1360,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1374,7 +1374,7 @@ jobs:
       # Cache QuestDB binaries - these are downloaded from hostdb
       # Cache key v2: bust cache after fixing extraction logic
       - name: Cache QuestDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: questdb-cache
         with:
           path: ~/.spindb/bin
@@ -1455,7 +1455,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1468,7 +1468,7 @@ jobs:
 
       # Cache TypeDB binaries - these are downloaded from hostdb
       - name: Cache TypeDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: typedb-cache
         with:
           path: ~/.spindb/bin
@@ -1544,7 +1544,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1557,7 +1557,7 @@ jobs:
 
       # Cache InfluxDB binaries - these are downloaded from hostdb
       - name: Cache InfluxDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: influxdb-cache
         with:
           path: ~/.spindb/bin
@@ -1632,7 +1632,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1645,7 +1645,7 @@ jobs:
 
       # Cache Weaviate binaries - these are downloaded from hostdb
       - name: Cache Weaviate binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: weaviate-cache
         with:
           path: ~/.spindb/bin
@@ -1720,7 +1720,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1733,7 +1733,7 @@ jobs:
 
       # Cache TigerBeetle binaries - these are downloaded from hostdb
       - name: Cache TigerBeetle binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: tigerbeetle-cache
         with:
           path: ~/.spindb/bin
@@ -1810,7 +1810,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1823,7 +1823,7 @@ jobs:
 
       # Cache LibSQL binaries - these are downloaded from hostdb
       - name: Cache LibSQL binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: libsql-cache
         with:
           path: ~/.spindb/bin
@@ -1873,7 +1873,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1886,7 +1886,7 @@ jobs:
 
       # Cache PostgreSQL and SQLite binaries - these are downloads from hostdb
       - name: Cache binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: binaries-cache
         with:
           path: ~/.spindb/bin
@@ -1946,7 +1946,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1959,7 +1959,7 @@ jobs:
 
       # Cache PostgreSQL binaries
       - name: Cache PostgreSQL binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: pg-cache
         with:
           path: ~/.spindb/bin
@@ -2092,7 +2092,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -2105,7 +2105,7 @@ jobs:
 
       # Cache ClickHouse binaries
       - name: Cache ClickHouse binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: ch-cache
         with:
           path: ~/.spindb/bin
@@ -2221,7 +2221,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -2305,7 +2305,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -2400,7 +2400,7 @@ jobs:
             label: Win x64
     steps:
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
@@ -2449,7 +2449,7 @@ jobs:
   #       uses: actions/checkout@v6
   #
   #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v4
+  #       uses: pnpm/action-setup@v6
   #
   #     - name: Setup Node.js
   #       uses: actions/setup-node@v6
@@ -2462,7 +2462,7 @@ jobs:
   #
   #     # Cache all engine binaries together
   #     - name: Cache all engine binaries
-  #       uses: actions/cache@v4
+  #       uses: actions/cache@v5
   #       with:
   #         path: ~/.spindb/bin
   #         key: spindb-windows-all-v1-${{ runner.os }}-${{ runner.arch }}
@@ -2747,12 +2747,12 @@ jobs:
   #       uses: actions/checkout@v6
   #
   #     - name: Set up QEMU for ARM64 emulation
-  #       uses: docker/setup-qemu-action@v3
+  #       uses: docker/setup-qemu-action@v4
   #       with:
   #         platforms: arm64
   #
   #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
+  #       uses: docker/setup-buildx-action@v4
   #
   #     - name: Build ARM64 Docker test image
   #       run: |
@@ -2825,7 +2825,7 @@ jobs:
   #       uses: actions/checkout@v6
   #
   #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v4
+  #       uses: pnpm/action-setup@v6
   #
   #     - name: Setup Node.js
   #       uses: actions/setup-node@v6
@@ -2838,7 +2838,7 @@ jobs:
   #
   #     # Cache binaries for all engines
   #     - name: Cache binaries
-  #       uses: actions/cache@v4
+  #       uses: actions/cache@v5
   #       with:
   #         path: ~/.spindb/bin
   #         key: spindb-arm64-${{ matrix.test }}-${{ runner.os }}-${{ runner.arch }}

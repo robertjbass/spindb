@@ -44,7 +44,7 @@ jobs:
           echo "Latest PostgreSQL major version: $LATEST_PG"
 
       - name: Compare versions and comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const configuredPg = '${{ steps.configured.outputs.pg_version }}';
