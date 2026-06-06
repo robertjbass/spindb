@@ -255,6 +255,16 @@ class BranchManager {
       path ?? join(paths.getContainerPath(name, { engine }), `${name}${ext}`)
     const targetDir = dirname(targetFile)
 
+    // With an explicit path the target dir may be shared and the file may
+    // already exist (or even BE the source's file). Refuse up front rather than
+    // clobber it — this also guarantees the failure-cleanup below only ever
+    // removes a file this call created.
+    if (path && existsSync(targetFile)) {
+      throw new Error(
+        `Cannot branch to "${targetFile}": a file already exists there. Choose a different --path or remove it first.`,
+      )
+    }
+
     await mkdir(targetDir, { recursive: true })
 
     let method: CopyMethod

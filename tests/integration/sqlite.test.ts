@@ -266,6 +266,10 @@ describe('SQLite Integration Tests', () => {
       !existsSync(branchPath),
       'Branch file should be removed when the branch is deleted',
     )
+    assert(
+      existsSync(dirname(branchPath)),
+      'Explicit-path parent directory should be preserved after deleting the branch',
+    )
 
     console.log(`   ✓ Branched to ${branchPath} — lineage + data + cleanup verified`)
   })
