@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-06-05
+
+### Changed
+
+- **Pin `hostdb` to `0.33.1`.** Picks up the re-hosted MySQL 8.4.9 and 9.6.0 `linux-x64` binaries, now MySQL's official `-minimal` build (~872 MB → 135 MB and ~1042 MB → 138 MB). Same `mysqld`/`mysql`/`mysqldump`/`mysqladmin` binaries and the same resolved versions — only the `linux-x64` download payload shrinks. Verified end-to-end (`spindb create → seed → backup → restore`) against the minimal build.
+
 ## [0.54.0] - 2026-06-03
 
 ### Added
