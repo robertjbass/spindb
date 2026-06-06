@@ -1907,8 +1907,13 @@ jobs:
 
   # ============================================
   # Rename and Clone Tests
-  # Tests container rename and clone operations across platforms
-  # Uses PostgreSQL as representative engine
+  # Tests container rename and clone operations. Uses PostgreSQL as the
+  # representative engine. clone uses strategy:'copy' (a plain fs.cp byte copy),
+  # so rename/clone is platform-agnostic in spindb's own code; the only OS that
+  # genuinely diverges for fs.rename/fs.cp (file locking, NTFS quirks) is Windows.
+  # Linux covers the POSIX path that macOS would duplicate, so the macOS leg is
+  # dropped. The platform-divergent CoW reflink path (branch, strategy:'cow') is
+  # covered separately by zfs-reflink.yml / zfs-lifecycle.yml.
   # ============================================
   test-rename-clone:
     name: Rename & Clone ${{ matrix.icon }} ${{ matrix.label }}
@@ -1920,9 +1925,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
-            icon: 🍏
-            label: macOS ARM64
           - os: windows-latest
             icon: 🪟
             label: Win x64
@@ -2052,29 +2054,22 @@ jobs:
 
   # ============================================
   # ClickHouse Rename Test
-  # Tests that config.xml paths are regenerated after rename
-  # ClickHouse is not available on Windows
+  # Tests that config.xml paths are regenerated after rename.
+  # The fix under test (regenerateConfig rewriting absolute paths in config.xml)
+  # is platform-agnostic POSIX path logic, so a single Linux leg fully covers it.
+  # ClickHouse's own macOS/start coverage lives in the test-clickhouse job;
+  # ClickHouse is not available on Windows.
   # ============================================
   test-clickhouse-rename:
     name: ClickHouse Rename ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      max-parallel: 4 # Limit parallel jobs to reduce runner contention
       matrix:
         include:
-          - os: ubuntu-22.04
-            icon: 🐧
-            label: Linux x64 22.04
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
-          - os: macos-14
-            icon: 🍏
-            label: macOS ARM64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
