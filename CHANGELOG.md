@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Qdrant branches now start + serve.** On start, `patchQdrantConfig` re-points `storage_path`/`snapshots_path` at the container's own dirs. Previously a branched Qdrant inherited the source's absolute storage path (the cloned config was only port-patched), so it opened the source's (locked) storage and timed out starting — leaving the branch stopped (and, in an embedding host, rolled back).
 - File-based branch creation no longer removes the **target directory** on copy failure when an explicit `--path` is given — it removes only the file it wrote (the directory may be shared, e.g. the user's home dir).
 
 ## [0.54.2] - 2026-06-06
