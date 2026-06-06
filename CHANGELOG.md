@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-06-06
+
+### Changed
+
+- **Pin `hostdb` to `0.33.2`.** hostdb 0.33.2 disables MySQL **8.4.3** (`enabled: false`) - it is superseded by 8.4.9 (the current 8.4 LTS patch, a minimal build). The MySQL version-map wrappers rebuild from hostdb's snapshot, so 8.4.3 is automatically dropped from the resolvable/listed versions; `'8.4'` continues to resolve to 8.4.9. No functional change to any other version.
+
 ## [0.54.1] - 2026-06-05
 
 ### Changed
