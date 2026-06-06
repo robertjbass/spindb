@@ -30,7 +30,8 @@ on:
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
 #
-# Full matrix available via: ci-full.yml (manual dispatch or weekly)
+# This workflow runs the full matrix on PRs to main; trigger it manually on any
+# branch from the Actions tab (workflow_dispatch).
 # See TESTING_STRATEGY.md for rollback instructions.
 # =============================================================================
 
@@ -1150,6 +1151,10 @@ jobs:
   # CockroachDB uses PostgreSQL wire protocol for client connections
   # Windows: delete tests skipped (RocksDB file handle locking)
   # ============================================
+  # macos-15-intel (darwin-x64) is intentionally omitted here: CockroachDB is the
+  # most expensive macOS-Intel engine leg (~5min) and Intel is GitHub's scarcest,
+  # queue-forming runner. The darwin-x64 binary is still validated by the other
+  # macOS-Intel engine jobs; macOS ARM64 + Linux + Windows cover CockroachDB.
   test-cockroachdb:
     name: CockroachDB ${{ matrix.icon }} ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -1163,9 +1168,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64

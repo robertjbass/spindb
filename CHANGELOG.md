@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.1] - 2026-06-06
+
+CI and test hardening only — no runtime changes.
+
+### Added
+
+- **Qdrant branch-start regression test.** A new integration test in the `test-qdrant` job branches a running Qdrant container and asserts the branch server actually starts and serves the source's data on its own port. This locks in the 0.55.0 fix where a branched Qdrant inherited the source's absolute `storage_path` and failed to boot — the bug previously shipped without a CI guard.
+
+### Changed
+
+- **Dropped the `macos-15-intel` (darwin-x64) leg from the CockroachDB CI job.** It was the most expensive macOS-Intel engine run on GitHub's scarcest, queue-forming runner. CockroachDB stays covered on macOS ARM64, Linux, and Windows, and the darwin-x64 binary is still validated by the other Intel engine jobs.
+- **Corrected the rename/clone and clickhouse-rename CI matrix comments** to match the code: `clone` uses a full `fs.cp` copy (not copy-on-write), `rename` has no macOS-specific branch (only a Windows `EBUSY` retry plus an `EXDEV` cross-filesystem fallback), and ClickHouse `config.xml` path regeneration depends on Node `path.join` + literal forward slashes rather than being "platform-agnostic POSIX logic." The CoW/reflink path is covered separately by `zfs-reflink.yml`.
+
+### Removed
+
+- **`ci-full.yml`.** It was a manually-synced duplicate of `ci.yml` that had already drifted (it was missing the `test-libsql` job). `ci.yml` already runs the full matrix on PRs to `main` and supports manual `workflow_dispatch`, so nothing is lost.
+
 ## [0.55.0] - 2026-06-06
 
 ### Added
