@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.3] - 2026-06-06
+
+### Changed
+
+- **CI: move the remaining GitHub Actions off the deprecated Node 20 runtime.** A prior pass bumped `actions/checkout`/`setup-node` to v6, but several actions were still on Node 20: `pnpm/action-setup@v4 -> v6`, `actions/cache@v4 -> v5`, `actions/github-script@v7 -> v9`, `docker/setup-buildx-action@v3 -> v4`, `docker/setup-qemu-action@v3 -> v4`. This clears the "Node.js 20 actions are deprecated" warnings entirely.
+- **Pin `hostdb` to `0.33.5`** (was 0.33.4). Picks up hostdb's latest release; it's a CI-only maintenance bump on the hostdb side with no package-content change (same resolved versions / `releases.json`), so this is dependency hygiene only - no behavior change.
+
 ## [0.55.2] - 2026-06-06
 
 CI, test, and dependency maintenance — no change to resolvable versions or binaries.
