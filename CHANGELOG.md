@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-06-06
+
+### Added
+
+- **`spindb branch create --path <path>`** for file-based engines (SQLite/DuckDB): writes the branch's backing file to an explicit path (creating its parent dir if needed) instead of the default container dir. Lets an embedding host that serves SQLite/DuckDB through a shim (e.g. layerbase-cloud's pgsqlite/duckgres) place the branch file exactly where the shim looks. `--path` is rejected for server engines.
+
+### Fixed
+
+- File-based branch creation no longer removes the **target directory** on copy failure when an explicit `--path` is given — it removes only the file it wrote (the directory may be shared, e.g. the user's home dir).
+
 ## [0.54.2] - 2026-06-06
 
 ### Changed
