@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-06-06
+
+### Added
+
+- **`spindb branch create --path <path>`** for file-based engines (SQLite/DuckDB): writes the branch's backing file to an explicit path (creating its parent dir if needed) instead of the default container dir. Lets an embedding host that serves SQLite/DuckDB through a shim (e.g. layerbase-cloud's pgsqlite/duckgres) place the branch file exactly where the shim looks. `--path` is rejected for server engines, and refuses to write onto an existing file (so it never clobbers a pre-existing or source file).
+
+### Fixed
+
+- **Qdrant branches now start + serve.** On start, `patchQdrantConfig` re-points `storage_path`/`snapshots_path` at the container's own dirs. Previously a branched Qdrant inherited the source's absolute storage path (the cloned config was only port-patched), so it opened the source's (locked) storage and timed out starting — leaving the branch stopped (and, in an embedding host, rolled back).
+- File-based branch creation no longer removes the **target directory** on copy failure when an explicit `--path` is given — it removes only the file it wrote (the directory may be shared, e.g. the user's home dir).
+
 ## [0.54.2] - 2026-06-06
 
 ### Changed

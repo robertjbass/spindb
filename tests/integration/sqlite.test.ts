@@ -21,6 +21,7 @@ import {
 } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
+import { branchManager } from '../../core/branch-manager'
 import { getEngine } from '../../engines'
 import { sqliteRegistry } from '../../engines/sqlite/registry'
 import { configManager } from '../../core/config-manager'
@@ -206,6 +207,71 @@ describe('SQLite Integration Tests', () => {
     assertEqual(rowCount, EXPECTED_ROW_COUNT - 1, 'Should have one less row')
 
     console.log(`   ✓ Row deleted, now have ${rowCount} rows`)
+  })
+
+  it('should branch to an explicit --path (placement + lineage + data)', async () => {
+    console.log(`\n🌿 Branching to an explicit --path...`)
+
+    const branchName = generateTestName('sqlite-test-branch')
+    // A nested, not-yet-existing dir: proves dirname() is created and the branch
+    // file lands exactly where the caller asks. layerbase-cloud relies on this
+    // to put the file where pgsqlite/duckgres looks; the old behavior always
+    // wrote to the container dir (which failed in the cloud's root-owned tree).
+    const branchPath = join(TEST_DIR, 'branch-out', `${branchName}.sqlite`)
+
+    await branchManager.createBranch({
+      source: containerName,
+      name: branchName,
+      path: branchPath,
+    })
+
+    // 1) The branch file is written exactly at --path (not the container dir).
+    assert(
+      existsSync(branchPath),
+      `Branch file should exist at the requested --path: ${branchPath}`,
+    )
+
+    // 2) Registry records the explicit path + the lineage.
+    const entry = await sqliteRegistry.get(branchName)
+    assert(entry !== null, 'Branch should be registered')
+    assertEqual(
+      entry?.filePath,
+      branchPath,
+      'Registry filePath should equal the --path',
+    )
+    assertEqual(
+      entry?.branchParent,
+      containerName,
+      'Branch should record its parent for lineage',
+    )
+
+    // 3) The branch carries the source's rows as an independent copy.
+    const { execFile } = await import('child_process')
+    const { promisify } = await import('util')
+    const execFileAsync = promisify(execFile)
+    const sqlite3 = await getSqlite3Path()
+    const { stdout } = await execFileAsync(sqlite3, [
+      branchPath,
+      'SELECT COUNT(*) FROM test_user',
+    ])
+    assertEqual(
+      parseInt(stdout.trim(), 10),
+      EXPECTED_ROW_COUNT - 1,
+      'Branch should carry the source rows present at branch time',
+    )
+
+    // 4) Deleting the branch removes only the file we wrote (never the dir).
+    await branchManager.deleteBranch(branchName)
+    assert(
+      !existsSync(branchPath),
+      'Branch file should be removed when the branch is deleted',
+    )
+    assert(
+      existsSync(dirname(branchPath)),
+      'Explicit-path parent directory should be preserved after deleting the branch',
+    )
+
+    console.log(`   ✓ Branched to ${branchPath} — lineage + data + cleanup verified`)
   })
 
   it('should backup database (SQL format)', async () => {

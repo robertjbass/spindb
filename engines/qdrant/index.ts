@@ -97,11 +97,34 @@ log_level: INFO
  */
 function patchQdrantConfig(
   existingConfig: string,
-  options: { port: number; grpcPort: number; bindAddress?: string },
+  options: {
+    port: number
+    grpcPort: number
+    dataDir: string
+    snapshotsDir: string
+    bindAddress?: string
+  },
 ): string {
+  const normalizePathForQdrant = (p: string) => p.replace(/\\/g, '/')
   let config = existingConfig
   config = config.replace(/^(\s*http_port:\s*)\d+/m, `$1${options.port}`)
   config = config.replace(/^(\s*grpc_port:\s*)\d+/m, `$1${options.grpcPort}`)
+  // storage_path/snapshots_path are absolute and container-specific. A cloned
+  // config (e.g. from `spindb branch`) still points at the SOURCE's container
+  // dir, so a branched Qdrant would open the source's (locked) storage and fail
+  // to start. Always re-point them at this container's own dirs.
+  // Function replacers so any `$` in a path is never interpreted as a
+  // replacement pattern (`$1`, `$&`, `$$`, ...).
+  config = config.replace(
+    /^(\s*storage_path:\s*).+/m,
+    (_m, prefix: string) =>
+      `${prefix}${normalizePathForQdrant(options.dataDir)}`,
+  )
+  config = config.replace(
+    /^(\s*snapshots_path:\s*).+/m,
+    (_m, prefix: string) =>
+      `${prefix}${normalizePathForQdrant(options.snapshotsDir)}`,
+  )
   if (options.bindAddress !== undefined) {
     config = config.replace(/^(\s*host:\s*).+/m, `$1${options.bindAddress}`)
   }
@@ -499,6 +522,8 @@ export class QdrantEngine extends BaseEngine {
       const patchedConfig = patchQdrantConfig(existingConfig, {
         port,
         grpcPort,
+        dataDir,
+        snapshotsDir,
         bindAddress,
       })
       await writeFile(configPath, patchedConfig)

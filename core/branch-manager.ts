@@ -21,7 +21,7 @@
 
 import { existsSync } from 'fs'
 import { mkdir, rm } from 'fs/promises'
-import { join, extname } from 'path'
+import { join, extname, dirname } from 'path'
 import { paths } from '../config/paths'
 import { containerManager } from './container-manager'
 import { processManager } from './process-manager'
@@ -88,8 +88,14 @@ class BranchManager {
     port?: number
     /** Git branch this DB branch is bound to (git-hook framework). */
     gitBranch?: string
+    /**
+     * File-based engines only (SQLite/DuckDB): write the branch's backing file
+     * to this exact path instead of the default container dir. Lets a caller
+     * (e.g. layerbase-cloud) place the file where its server shim expects it.
+     */
+    path?: string
   }): Promise<CreateBranchResult> {
-    const { source, name, start = true, port, gitBranch } = options
+    const { source, name, start = true, port, gitBranch, path } = options
 
     if (!containerManager.isValidName(name)) {
       throw new Error(
@@ -112,12 +118,19 @@ class BranchManager {
       throw new Error(`Container "${name}" already exists`)
     }
 
+    if (path && !isFileBasedEngine(engine)) {
+      throw new Error(
+        'The --path option is only supported for file-based engines (SQLite, DuckDB).',
+      )
+    }
+
     if (isFileBasedEngine(engine)) {
       return this.createFileBasedBranch({
         source,
         name,
         engine: engine as FileBasedEngine,
         gitBranch,
+        path,
       })
     }
 
@@ -220,8 +233,9 @@ class BranchManager {
     name: string
     engine: FileBasedEngine
     gitBranch?: string
+    path?: string
   }): Promise<CreateBranchResult> {
-    const { source, name, engine, gitBranch } = opts
+    const { source, name, engine, gitBranch, path } = opts
 
     const sourceEntry = await this.fileRegistryGet(engine, source)
     if (!sourceEntry) {
@@ -234,8 +248,22 @@ class BranchManager {
     const ext =
       extname(sourceEntry.filePath) ||
       (engine === Engine.SQLite ? '.sqlite' : '.duckdb')
-    const targetDir = paths.getContainerPath(name, { engine })
-    const targetFile = join(targetDir, `${name}${ext}`)
+    // With an explicit path, write the branch file exactly there (the caller
+    // owns the location — e.g. layerbase-cloud points pgsqlite/duckgres at it).
+    // Otherwise fall back to the per-branch container dir.
+    const targetFile =
+      path ?? join(paths.getContainerPath(name, { engine }), `${name}${ext}`)
+    const targetDir = dirname(targetFile)
+
+    // With an explicit path the target dir may be shared and the file may
+    // already exist (or even BE the source's file). Refuse up front rather than
+    // clobber it — this also guarantees the failure-cleanup below only ever
+    // removes a file this call created.
+    if (path && existsSync(targetFile)) {
+      throw new Error(
+        `Cannot branch to "${targetFile}": a file already exists there. Choose a different --path or remove it first.`,
+      )
+    }
 
     await mkdir(targetDir, { recursive: true })
 
@@ -253,8 +281,15 @@ class BranchManager {
         ...(gitBranch ? { gitBranch } : {}),
       })
     } catch (error) {
-      // Clean up the partially-created branch directory on failure.
-      await rm(targetDir, { recursive: true, force: true }).catch(() => {})
+      // Clean up the partial branch on failure. With an explicit path the
+      // target dir may be shared (e.g. the home dir), so remove only the file
+      // we wrote — never the directory. The default container dir is dedicated
+      // to this branch, so it's safe to remove whole.
+      if (path) {
+        await rm(targetFile, { force: true }).catch(() => {})
+      } else {
+        await rm(targetDir, { recursive: true, force: true }).catch(() => {})
+      }
       throw error
     }
 

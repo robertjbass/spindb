@@ -41,11 +41,20 @@ branchCommand
   .option('-j, --json', 'Output result as JSON')
   .option('--no-start', "Don't start the branch after creating it")
   .option('-p, --port <port>', 'Run the branch on a specific port')
+  .option(
+    '--path <path>',
+    'File-based engines (SQLite/DuckDB) only: write the branch file to this path instead of the default container dir',
+  )
   .action(
     async (
       source: string | undefined,
       name: string | undefined,
-      options: { json?: boolean; start?: boolean; port?: string },
+      options: {
+        json?: boolean
+        start?: boolean
+        port?: string
+        path?: string
+      },
     ) => {
       try {
         let sourceName = source
@@ -123,6 +132,7 @@ branchCommand
           name: branchName,
           start: options.start !== false,
           port,
+          ...(options.path ? { path: options.path } : {}),
         })
 
         const methodNote = result.method === 'reflink' ? ' (copy-on-write)' : ''
