@@ -19,6 +19,7 @@ CI and test hardening only — no runtime changes.
 
 - **Dropped the `macos-15-intel` (darwin-x64) leg from the CockroachDB CI job.** It was the most expensive macOS-Intel engine run on GitHub's scarcest, queue-forming runner. CockroachDB stays covered on macOS ARM64, Linux, and Windows, and the darwin-x64 binary is still validated by the other Intel engine jobs.
 - **Corrected the rename/clone and clickhouse-rename CI matrix comments** to match the code: `clone` uses a full `fs.cp` copy (not copy-on-write), `rename` has no macOS-specific branch (only a Windows `EBUSY` retry plus an `EXDEV` cross-filesystem fallback), and ClickHouse `config.xml` path regeneration depends on Node `path.join` + literal forward slashes rather than being "platform-agnostic POSIX logic." The CoW/reflink path is covered separately by `zfs-reflink.yml`.
+- **Bumped `actions/checkout` and `actions/setup-node` from `v4` to `v6`** across all workflows, moving the GitHub Action runtime off the deprecated Node 20 onto Node 24 (matching layerbase-desktop). The `node-version` that actually runs spindb (`22`, plus `24` for the OIDC publish job) is unchanged.
 
 ### Removed
 
