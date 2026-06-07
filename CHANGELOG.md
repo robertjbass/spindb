@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.4] - 2026-06-07
+
+### Added
+
+- **TigerBeetle: opt-in grid-cache cap via `SPINDB_TIGERBEETLE_CACHE_GRID`.** TigerBeetle preallocates its grid cache; the default (even with `--development`) is ~1.5 GiB resident, which OOM-kills small or shared containers — e.g. Layerbase Cloud's 2 GiB per-user container, where TB coexists with other databases. When `SPINDB_TIGERBEETLE_CACHE_GRID` is set to a valid size (e.g. `512MiB`), it is passed through to `tigerbeetle start --cache-grid`. Unset → behavior is unchanged (no regression for desktop or existing callers); the value is format-validated (`/^\d+(KiB|MiB|GiB)$/`) so a bad env value can't break `tigerbeetle start`. A consolidated TigerBeetle alpha-workarounds audit note was added alongside the change. Tested locally: with the env set the running process gets `--cache-grid=256MiB` and RSS stays bounded; without it no flag is added (uncapped RSS climbs past 600 MB toward ~1.5 GiB).
+
 ## [0.55.3] - 2026-06-06
 
 ### Changed
