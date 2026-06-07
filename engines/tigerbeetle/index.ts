@@ -371,8 +371,38 @@ export class TigerBeetleEngine extends BaseEngine {
       'start',
       `--addresses=${container.bindAddress ?? '127.0.0.1'}:${port}`,
       '--development',
-      dataFile,
     ]
+
+    // ┌─────────────────────────── TIGERBEETLE AUDIT NOTE ───────────────────────────┐
+    // │ TigerBeetle is an ALPHA engine carrying several special-case workarounds that │
+    // │ should be re-audited together when TB graduates from alpha or on any TB       │
+    // │ major-version bump:                                                           │
+    // │   • this grid-cache cap (below);                                              │
+    // │   • client/server version lockstep — tigerbeetle-node in layerbase-cloud must │
+    // │     EXACTLY match the bundled server version or the first query panics;       │
+    // │   • io_uring requirement (custom seccomp profile in the cloud);               │
+    // │   • panic isolation — the cloud runs TB ops in a subprocess so a native       │
+    // │     abort() can't take down the API.                                          │
+    // └───────────────────────────────────────────────────────────────────────────────┘
+    //
+    // Grid cache: TB preallocates its grid cache. The default (even with
+    // --development) is ~1.5 GiB resident, which OOM-kills small / shared
+    // containers (e.g. Layerbase Cloud's 2 GiB per-user container, where TB
+    // shares the container with other databases). SPINDB_TIGERBEETLE_CACHE_GRID
+    // is an OPT-IN cap: unset → behavior is unchanged (no regression for desktop
+    // or existing callers); set (the cloud sets it, e.g. "512MiB") → the cache
+    // shrinks to fit. The value is format-validated so a bad env value can never
+    // break `tigerbeetle start`.
+    const cacheGrid = process.env.SPINDB_TIGERBEETLE_CACHE_GRID
+    if (cacheGrid && /^\d+(KiB|MiB|GiB)$/.test(cacheGrid)) {
+      args.push(`--cache-grid=${cacheGrid}`)
+    } else if (cacheGrid) {
+      logDebug(
+        `Ignoring invalid SPINDB_TIGERBEETLE_CACHE_GRID="${cacheGrid}" (expected e.g. 512MiB)`,
+      )
+    }
+
+    args.push(dataFile)
 
     // Redirect stdout/stderr to log file via file descriptor
     const logFd = openSync(logFile, 'a')
