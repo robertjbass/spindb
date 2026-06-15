@@ -272,6 +272,14 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 
 **Impact:** Eliminates `SETUP_FIRST_ENGINES` in Layerbase Cloud. Simplifies `setup-database.sh` to just `spindb create --username X --password Y --bind 127.0.0.1` + health check.
 
+### 3. (Deferred / FUTURE option) Native pgwire proxy for file-based engines - "Model B"
+
+**Current state:** File-based engines (SQLite, DuckDB) have no wire protocol. To serve them to remote clients, Layerbase Cloud runs external proxies in front of the file: pgsqlite (Rust) for SQLite and a duckgres fork (Go) for DuckDB. spindb has no proxy concept - its SQLite/DuckDB start/stop/status are no-ops on a bare file. A local spindb/desktop user just opens the file directly.
+
+**Target (not scheduled):** A native, pure-TS spindb pgwire proxy for file-based engines - `pg-gateway` plus Node's native SQLite/DuckDB bindings - that exposes a local file DB over the PostgreSQL wire protocol. This would let Layerbase Cloud drop both external binaries (including the maintained duckgres fork) and give desktop a "serve my local file DB over Postgres wire" feature.
+
+**Status:** Recorded as a deliberate FUTURE option from the 2026-06-15 C-033 spindb-convergence decision (`~/dev/layerbase-architecture/tracker.md`, `~/dev/layerbase-cloud/plans/active/spindb-convergence-c033.md`). The decision there was the opposite for now: the proxy/pooler lifecycle is **intentionally kept in Layerbase Cloud** (moving it would force spindb to bundle foreign Go/Rust binaries, violating "spindb ships only database binaries"), and the near-term fix for the fragile restore-restart dance is a cloud-internal supervisor module, not a spindb change. Revisit Model B only as a separate, larger product bet.
+
 ## Recent Fixes (0.47.3 → 0.47.13)
 
 Key fixes from the E2E stabilization session:
