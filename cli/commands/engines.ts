@@ -1857,7 +1857,7 @@ enginesCommand
               dataSubdir = defaults.dataSubdir
               auxPorts = defaults.auxPorts ?? []
             } catch {
-              // Engine not registered (e.g., status='planned') — leave version fields empty.
+              // Engine not registered (e.g., status='planned') - leave version fields empty.
             }
             return [
               name,

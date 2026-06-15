@@ -2,7 +2,7 @@
  * Conformance tests for the credential generator (core/credential-generator.ts).
  *
  * These assert the shared credential spec pinned in ADR-001
- * (layerbase-architecture/decisions/001-credential-generation.md). The same
+ * (layerbase-architecture/decisions/001-credential-charsets.md). The same
  * spec is implemented and tested in layerbase-cloud (src/lib/credentials.ts +
  * its credentials conformance test); keeping equivalent assertions in both
  * repos is what stops the two security-sensitive generators from re-drifting.
