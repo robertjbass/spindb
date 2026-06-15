@@ -532,6 +532,80 @@ describe('JSON Output Validation', () => {
       }
     })
 
+    it('engines supported --json should surface dataSubdir and auxPorts', () => {
+      // These engine-config facts are consumed downstream (Layerbase Cloud
+      // generates its data-dir + port-reservation tables from them). They must
+      // stay present and correct or that codegen drifts.
+      const result = runCommand('engines supported --json')
+      const parsed = JSON.parse(result.stdout.trim())
+      const engines = parsed.engines
+
+      // dataSubdir: a string on every integrated engine, with known values.
+      const expectedDataSubdir: Record<string, string> = {
+        postgresql: 'data',
+        sqlite: '',
+        mongodb: 'data',
+        questdb: 'db',
+        qdrant: 'storage',
+        ferretdb: 'pg_data',
+      }
+      for (const [name, expected] of Object.entries(expectedDataSubdir)) {
+        const engine = engines[name]
+        if (!engine) throw new Error(`Missing engine ${name}`)
+        if (typeof engine.dataSubdir !== 'string') {
+          throw new Error(`${name}.dataSubdir should be a string`)
+        }
+        if (engine.dataSubdir !== expected) {
+          throw new Error(
+            `${name}.dataSubdir should be "${expected}", got "${engine.dataSubdir}"`,
+          )
+        }
+      }
+
+      // auxPorts: an array on every integrated engine; specific static offsets
+      // for the engines that bind aux ports. These offsets are verified against
+      // each engine's start config; a change here is a breaking, reviewable event.
+      const expectedAuxPorts: Record<string, Record<string, number>> = {
+        cockroachdb: { httpUi: 1 },
+        qdrant: { grpc: 1 },
+        questdb: { http: 188, httpMin: 191, ilpTcp: 197 },
+        weaviate: {
+          grpc: 1,
+          gossip: 100,
+          clusterData: 101,
+          raft: 200,
+          raftInternalRpc: 201,
+        },
+      }
+      for (const engine of Object.values(engines)) {
+        if (!Array.isArray((engine as { auxPorts?: unknown }).auxPorts)) {
+          throw new Error('every engine must expose an auxPorts array')
+        }
+      }
+      for (const [name, expected] of Object.entries(expectedAuxPorts)) {
+        const actual = engines[name].auxPorts as {
+          name: string
+          offset: number
+        }[]
+        const actualMap = Object.fromEntries(
+          actual.map((p) => [p.name, p.offset]),
+        )
+        const actualStr = JSON.stringify(actualMap)
+        const expectedStr = JSON.stringify(expected)
+        if (actualStr !== expectedStr) {
+          throw new Error(
+            `${name}.auxPorts mismatch.\n  Expected: ${expectedStr}\n  Actual: ${actualStr}`,
+          )
+        }
+      }
+
+      // TypeDB's HTTP-API offset is runtime-configurable (SPINDB_TYPEDB_HTTP_OFFSET),
+      // so it is deliberately NOT a static auxPort.
+      if (engines.typedb.auxPorts.length !== 0) {
+        throw new Error('typedb.auxPorts should be empty (offset is env-driven)')
+      }
+    })
+
     it('doctor --json should have correct structure', () => {
       // doctor command can be slow on Windows CI due to system checks
       // (spawns binary detection for all 18 engines — dozens of process spawns)

@@ -20,6 +20,15 @@ const DEFAULT_CHARSET = LOWERCASE + UPPERCASE + DIGITS + SYMBOLS
 // Alphanumeric only (for systems that don't support special chars)
 const ALPHANUMERIC_CHARSET = LOWERCASE + UPPERCASE + DIGITS
 
+// Canonical length for a generated database credential.
+//
+// Shared credential spec (ADR-001,
+// layerbase-architecture/decisions/001-credential-charsets.md): the standard
+// generated DB password is 24 alphanumeric characters. The same spec is
+// implemented in layerbase-cloud's `src/lib/credentials.ts`; both repos run
+// conformance tests so the two cannot re-drift.
+export const DEFAULT_PASSWORD_LENGTH = 24
+
 export type PasswordOptions = {
   // Length of the password (default: 16)
   length?: number
@@ -40,15 +49,19 @@ export function generatePassword(options: PasswordOptions = {}): string {
   const chars =
     charset || (alphanumericOnly ? ALPHANUMERIC_CHARSET : DEFAULT_CHARSET)
 
-  // Generate random bytes
-  const bytes = randomBytes(length)
-
-  // Convert to password characters
+  // Rejection sampling: discard bytes >= maxValid to eliminate modulo bias.
+  // Without this, characters at indices 0..(256 % chars.length - 1) would
+  // appear slightly more often than the rest. Over-allocate each draw by 16
+  // bytes so a charset length that rejects many bytes still finishes quickly.
+  const maxValid = 256 - (256 % chars.length)
   let password = ''
-  for (let i = 0; i < length; i++) {
-    // Use modulo to map byte to character index
-    // This is slightly biased but acceptable for password generation
-    password += chars[bytes[i] % chars.length]
+  while (password.length < length) {
+    const bytes = randomBytes(length - password.length + 16)
+    for (let i = 0; i < bytes.length && password.length < length; i++) {
+      if (bytes[i] < maxValid) {
+        password += chars[bytes[i] % chars.length]
+      }
+    }
   }
 
   return password
@@ -88,6 +101,9 @@ export type Credentials = {
 export function generateCredentials(): Credentials {
   return {
     username: 'spindb',
-    password: generatePassword({ length: 20, alphanumericOnly: true }),
+    password: generatePassword({
+      length: DEFAULT_PASSWORD_LENGTH,
+      alphanumericOnly: true,
+    }),
   }
 }

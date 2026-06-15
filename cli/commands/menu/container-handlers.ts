@@ -68,7 +68,10 @@ import {
   stopPgwebProcess,
 } from './shell-handlers'
 import { getPgwebStatus } from '../../../core/pgweb-utils'
-import { generatePassword } from '../../../core/credential-generator'
+import {
+  generatePassword,
+  DEFAULT_PASSWORD_LENGTH,
+} from '../../../core/credential-generator'
 import {
   saveCredentials,
   credentialsExist,
@@ -3031,7 +3034,10 @@ async function handleCreateUser(
       }
     }
 
-    const password = generatePassword({ length: 20, alphanumericOnly: true })
+    const password = generatePassword({
+      length: DEFAULT_PASSWORD_LENGTH,
+      alphanumericOnly: true,
+    })
     const engine = getEngine(config.engine)
 
     const spinner = createSpinner(`Creating user "${username}"...`)
