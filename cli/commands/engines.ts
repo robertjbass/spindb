@@ -12,7 +12,7 @@ import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { paths } from '../../config/paths'
-import { getEngineDefaults } from '../../config/defaults'
+import { getEngineDefaults, type AuxPort } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { detectPackageManager, findBinary } from '../../core/dependency-manager'
 import {
@@ -1843,14 +1843,32 @@ enginesCommand
           Object.entries(enginesData.engines).map(([name, config]) => {
             let supportedVersions: string[] = []
             let defaultVersion: string | undefined
+            // Engine-config facts consumers (e.g. Layerbase Cloud) would
+            // otherwise have to hand-mirror: the data subdir and the static
+            // auxiliary-port offsets. Surfaced here so they have a single
+            // source of truth. Additive - existing fields are unchanged.
+            let dataSubdir: string | undefined
+            let auxPorts: AuxPort[] = []
             try {
               const engineInstance = getEngine(name)
               supportedVersions = [...engineInstance.supportedVersions]
-              defaultVersion = getEngineDefaults(name).defaultVersion
+              const defaults = getEngineDefaults(name)
+              defaultVersion = defaults.defaultVersion
+              dataSubdir = defaults.dataSubdir
+              auxPorts = defaults.auxPorts ?? []
             } catch {
               // Engine not registered (e.g., status='planned') — leave version fields empty.
             }
-            return [name, { ...config, supportedVersions, defaultVersion }]
+            return [
+              name,
+              {
+                ...config,
+                supportedVersions,
+                defaultVersion,
+                dataSubdir,
+                auxPorts,
+              },
+            ]
           }),
         )
         console.log(
