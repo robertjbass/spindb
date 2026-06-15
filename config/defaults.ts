@@ -4,6 +4,7 @@ import {
   isEngineSupported,
   getSupportedEngines,
   type EngineDefaults,
+  type AuxPort,
 } from './engine-defaults'
 import { Engine } from '../types'
 
@@ -14,6 +15,7 @@ export {
   isEngineSupported,
   getSupportedEngines,
   type EngineDefaults,
+  type AuxPort,
 }
 
 export type PlatformMappings = {

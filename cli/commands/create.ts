@@ -16,7 +16,10 @@ import { createSpinner } from '../ui/spinner'
 import { header, connectionBox } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { getMissingDependencies } from '../../core/dependency-manager'
+import {
+  getMissingDependencies,
+  clientToolCheckRequired,
+} from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
@@ -787,47 +790,51 @@ export const createCommand = new Command('create')
           }
         }
 
-        // Check dependencies (all engines need this)
-        // This runs AFTER binary download so client tools are available
-        const depsSpinner = options.json
-          ? null
-          : createSpinner('Checking required tools...')
-        depsSpinner?.start()
+        // Check client tools (psql, sqlite3, mongosh, ...) only when the
+        // container will actually be started. With --no-start we are just
+        // prebaking the data dir, so a missing client tool must not abort the
+        // create (C-009). See clientToolCheckRequired for the full rationale.
+        if (clientToolCheckRequired(options)) {
+          const depsSpinner = options.json
+            ? null
+            : createSpinner('Checking required tools...')
+          depsSpinner?.start()
 
-        let missingDeps = await getMissingDependencies(engine)
-        if (missingDeps.length > 0) {
-          // In JSON mode, error out instead of prompting
-          if (options.json) {
-            return exitWithError({
-              message: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-              json: true,
-            })
-          }
-
-          depsSpinner?.warn(
-            `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-          )
-
-          const installed = await promptInstallDependencies(
-            missingDeps[0].binary,
-            engine,
-          )
-
-          if (!installed) {
-            return exitWithError({ message: 'Required tools not installed' })
-          }
-
-          missingDeps = await getMissingDependencies(engine)
+          let missingDeps = await getMissingDependencies(engine)
           if (missingDeps.length > 0) {
-            return exitWithError({
-              message: `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
-            })
-          }
+            // In JSON mode, error out instead of prompting
+            if (options.json) {
+              return exitWithError({
+                message: `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+                json: true,
+              })
+            }
 
-          console.log(chalk.green('  ✓ All required tools are now available'))
-          console.log()
-        } else {
-          depsSpinner?.succeed('Required tools available')
+            depsSpinner?.warn(
+              `Missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+            )
+
+            const installed = await promptInstallDependencies(
+              missingDeps[0].binary,
+              engine,
+            )
+
+            if (!installed) {
+              return exitWithError({ message: 'Required tools not installed' })
+            }
+
+            missingDeps = await getMissingDependencies(engine)
+            if (missingDeps.length > 0) {
+              return exitWithError({
+                message: `Still missing tools: ${missingDeps.map((d) => d.name).join(', ')}`,
+              })
+            }
+
+            console.log(chalk.green('  ✓ All required tools are now available'))
+            console.log()
+          } else {
+            depsSpinner?.succeed('Required tools available')
+          }
         }
 
         if (await containerManager.exists(containerName)) {

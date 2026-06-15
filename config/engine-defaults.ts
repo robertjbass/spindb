@@ -20,6 +20,27 @@
 import { Engine, ALL_ENGINES } from '../types'
 import { listVersions as hostdbListVersions } from 'hostdb'
 
+/**
+ * An auxiliary network port an engine binds in addition to its primary
+ * database port, expressed as a fixed offset from that primary port. These are
+ * intrinsic to how spindb configures each engine (e.g. QuestDB's HTTP API
+ * always lands at the PG-wire port + 188). A consumer that publishes engine
+ * ports (e.g. a port-block allocator) must reserve these alongside the primary
+ * port so a neighbouring database is never handed one as its own base.
+ *
+ * Only engines whose aux ports are a STATIC offset appear here. TypeDB's
+ * HTTP-API offset is deliberately excluded: it is configurable at runtime via
+ * SPINDB_TYPEDB_HTTP_OFFSET (default 6271), so it is not a fixed fact. TypeDB
+ * 3.11+ also binds a loopback-only admin port at primary + 6372, which is not
+ * published and not relevant to port-block reservation.
+ */
+export type AuxPort = {
+  // Stable identifier for the port's role (e.g. 'http', 'grpc', 'raft').
+  name: string
+  // Offset added to the engine's primary database port.
+  offset: number
+}
+
 export type EngineDefaults = {
   // Default major-version line that spindb recommends. Shorthand like '18' or
   // '8.4'. Resolved to a full version (e.g. '8.4.9') via hostdb at create time.
@@ -42,6 +63,9 @@ export type EngineDefaults = {
   clientTools: string[]
   // Default max connections (higher than PostgreSQL default of 100 for parallel builds)
   maxConnections: number
+  // Auxiliary ports bound at fixed offsets from the primary port (omitted when
+  // the engine binds no static aux ports). See AuxPort.
+  auxPorts?: AuxPort[]
 }
 
 export const engineDefaults: Record<Engine, EngineDefaults> = {
@@ -164,6 +188,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     dataSubdir: 'storage',
     clientTools: [], // Qdrant uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for vector DB
+    auxPorts: [{ name: 'grpc', offset: 1 }], // gRPC at HTTP port + 1
   },
   [Engine.Meilisearch]: {
     defaultVersion: '1',
@@ -212,6 +237,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     dataSubdir: 'data',
     clientTools: ['cockroach'],
     maxConnections: 0, // Not applicable - managed internally
+    auxPorts: [{ name: 'httpUi', offset: 1 }], // HTTP admin UI at port + 1
   },
   [Engine.SurrealDB]: {
     defaultVersion: '2',
@@ -236,6 +262,13 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     dataSubdir: 'db',
     clientTools: ['questdb'],
     maxConnections: 0, // Not applicable - managed internally
+    // PG-wire is the primary port; HTTP API = +188, HTTP min/health = +191,
+    // ILP-over-TCP ingestion = +197 (see engines/questdb/index.ts).
+    auxPorts: [
+      { name: 'http', offset: 188 },
+      { name: 'httpMin', offset: 191 },
+      { name: 'ilpTcp', offset: 197 },
+    ],
   },
   [Engine.TypeDB]: {
     defaultVersion: '3',
@@ -272,6 +305,16 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     dataSubdir: 'data',
     clientTools: [], // Weaviate uses REST/GraphQL API, no separate CLI tools
     maxConnections: 0, // Not applicable for vector DB
+    // HTTP REST is the primary port; the cluster/consensus ports sit at fixed
+    // offsets (see engines/weaviate/index.ts): gRPC = +1, gossip = +100,
+    // cluster-data = +101, RAFT = +200, RAFT internal RPC = +201.
+    auxPorts: [
+      { name: 'grpc', offset: 1 },
+      { name: 'gossip', offset: 100 },
+      { name: 'clusterData', offset: 101 },
+      { name: 'raft', offset: 200 },
+      { name: 'raftInternalRpc', offset: 201 },
+    ],
   },
   [Engine.TigerBeetle]: {
     defaultVersion: '0.16',

@@ -3,7 +3,10 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { getEngine } from '../../engines'
-import { generatePassword } from '../../core/credential-generator'
+import {
+  generatePassword,
+  DEFAULT_PASSWORD_LENGTH,
+} from '../../core/credential-generator'
 import {
   saveCredentials,
   listCredentials,
@@ -89,7 +92,10 @@ usersCommand
         // Generate or use provided password
         const password =
           options.password ||
-          generatePassword({ length: 20, alphanumericOnly: true })
+          generatePassword({
+            length: DEFAULT_PASSWORD_LENGTH,
+            alphanumericOnly: true,
+          })
 
         const database = options.database || config.database
 
