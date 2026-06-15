@@ -221,6 +221,25 @@ export async function getMissingDependencies(
   return statuses.filter((s) => !s.installed).map((s) => s.dependency)
 }
 
+/**
+ * Whether `spindb create` should verify the engine's client tools (psql,
+ * sqlite3, mongosh, ...) are present.
+ *
+ * Client tools are only needed to START a database and connect to it, NOT to
+ * prebake its on-disk data dir (that needs the SERVER binary, which
+ * `ensureBinaries` downloads regardless). So `create --no-start` must skip the
+ * check (C-009): e.g. a Docker image can prebake the data dir for a file-based
+ * engine before the client tool has been fetched, without the check aborting
+ * the build. `commander` sets `options.start === false` for `--no-start`,
+ * `true` for `--start`, and `undefined` when neither is passed (check still
+ * runs, since the container will be started).
+ */
+export function clientToolCheckRequired(options: {
+  start?: boolean
+}): boolean {
+  return options.start !== false
+}
+
 export async function getAllMissingDependencies(): Promise<Dependency[]> {
   const statuses = await checkAllDependencies()
   return statuses.filter((s) => !s.installed).map((s) => s.dependency)

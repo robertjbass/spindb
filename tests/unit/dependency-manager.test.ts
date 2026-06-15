@@ -6,6 +6,7 @@ import {
   checkDependency,
   buildInstallCommand,
   getManualInstallInstructions,
+  clientToolCheckRequired,
   type DetectedPackageManager,
 } from '../../core/dependency-manager'
 import { assert, assertEqual } from '../utils/assertions'
@@ -466,6 +467,37 @@ describe('Error Messages', () => {
     assert(
       caughtError!.message.includes(mockPm.name),
       'Error should include package manager name',
+    )
+  })
+})
+
+describe('clientToolCheckRequired (C-009)', () => {
+  it('skips the client-tool check for --no-start (start === false)', () => {
+    // The C-009 fix: `create --no-start` only prebakes the data dir, so a
+    // missing client tool (e.g. sqlite3 not yet fetched into a Docker image)
+    // must not abort the create.
+    assertEqual(
+      clientToolCheckRequired({ start: false }),
+      false,
+      '--no-start must skip the client-tool check',
+    )
+  })
+
+  it('requires the client-tool check for --start (start === true)', () => {
+    assertEqual(
+      clientToolCheckRequired({ start: true }),
+      true,
+      '--start must require the client-tool check',
+    )
+  })
+
+  it('requires the client-tool check when neither flag is given (start === undefined)', () => {
+    // Default: the container will be started, so client tools are needed.
+    // Only an explicit --no-start opts out.
+    assertEqual(
+      clientToolCheckRequired({}),
+      true,
+      'default (no flag) must require the client-tool check',
     )
   })
 })
