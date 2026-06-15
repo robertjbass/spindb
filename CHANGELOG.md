@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-06-15
+
+### Added
+
+- **`engines supported --json` now surfaces `dataSubdir` and `auxPorts`.** These engine-config facts (the per-engine data subdirectory, and each engine's static auxiliary-port offsets) were previously hand-mirrored by downstream consumers and could drift. They are now exposed from spindb as the single source of truth: `dataSubdir` was already in `engine-defaults`, and `auxPorts` is a new `EngineDefaults` field listing fixed offsets from the primary port (cockroachdb HTTP UI +1; qdrant gRPC +1; questdb HTTP/HTTP-min/ILP-TCP +188/+191/+197; weaviate gRPC/gossip/cluster-data/RAFT/RAFT-internal-RPC +1/+100/+101/+200/+201). Offsets are verified against each engine's start config. TypeDB is intentionally excluded because its HTTP-API offset is runtime-configurable via `SPINDB_TYPEDB_HTTP_OFFSET`. Additive only - no existing JSON field changed - so existing consumers (the desktop app, Layerbase Cloud) keep working.
+- **Credential-generator conformance tests.** `core/credential-generator.ts` previously had no tests. Added a conformance suite asserting the shared credential spec (alphanumeric, fixed length, no shell/SQL/URL-dangerous characters) plus generator mechanics (length, charset, uniqueness), mirroring the equivalent suite in Layerbase Cloud so the two security-sensitive generators cannot re-drift.
+
+### Fixed
+
+- **`create --no-start` no longer aborts when an engine's client tool is missing (C-009).** Client tools (psql, sqlite3, mongosh, ...) are only needed to start and connect to a database, not to prebake its on-disk data dir, so `--no-start` now skips the client-tool check. The server-binary download (`ensureBinaries`) still runs, so data-dir init is unaffected. This lets a Docker image prebake a file-based engine before its client tool is fetched. Verified end-to-end: `create --engine sqlite --no-start --json` succeeds with sqlite3 absent from PATH.
+
+### Changed
+
+- **Standard generated credential length 20 -> 24, plus rejection sampling.** `generateCredentials` now produces a 24-character password (via a new `DEFAULT_PASSWORD_LENGTH` constant the other DB-password call sites also use), matching Layerbase Cloud and ADR-001. `generatePassword` now uses rejection sampling to eliminate the small modulo bias the previous implementation documented as "acceptable." Existing stored credentials are unaffected; only newly generated passwords change.
+
 ## [0.55.4] - 2026-06-07
 
 ### Added
