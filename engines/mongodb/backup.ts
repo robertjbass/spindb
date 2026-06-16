@@ -106,9 +106,15 @@ export async function createBackup(
 
   // Determine output format (default to 'archive' as per backup-formats.ts)
   const format = options.format ?? 'archive'
+  const isSingleFileArchive = format === 'archive' || format === 'archive-plain'
   if (format === 'archive') {
     // Archive format: single compressed file
     args.push('--archive=' + outputPath, '--gzip')
+  } else if (format === 'archive-plain') {
+    // Uncompressed single-file archive (no --gzip), for consumers whose restore
+    // path does not pass --gzip (e.g. a plain `mongorestore --archive`). The
+    // restore side auto-detects gzip vs plain (detectBackupFormat).
+    args.push('--archive=' + outputPath)
   } else {
     // Directory format (bson): output to directory
     args.push('--out', outputPath)
@@ -141,8 +147,8 @@ export async function createBackup(
         // Get backup size
         let size = 0
         try {
-          if (options.format === 'archive') {
-            // Archive file
+          if (isSingleFileArchive) {
+            // Archive file (compressed or plain)
             const stats = await stat(outputPath)
             size = stats.size
           } else {
@@ -158,7 +164,7 @@ export async function createBackup(
 
         resolve({
           path: outputPath,
-          format: options.format === 'archive' ? 'archive' : 'directory',
+          format: isSingleFileArchive ? 'archive' : 'directory',
           size,
         })
       } else {
