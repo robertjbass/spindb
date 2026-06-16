@@ -202,7 +202,12 @@ spindb backups --all                    # Include ~/.spindb/backups
 spindb backups ./data --limit 50        # List backups in specific directory
 
 spindb restore mydb ./backup.sql        # Restore from file
-spindb restore mydb ./backup.dump -f    # Force overwrite
+spindb restore mydb ./backup.dump -f    # Force overwrite (drop + recreate the DB)
+spindb restore mydb ./backup.dump --into-existing  # In-place: restore INTO the existing DB
+                                        # (no DROP DATABASE; safe with live connections / a pooler).
+                                        # Replaces the backed-up objects; objects added after the
+                                        # backup survive. Wire engines only (pg/mysql/mariadb/mongo/
+                                        # ferret/cockroach/clickhouse/questdb).
 
 # Restore from remote database (all engines supported)
 spindb restore mydb --from-url "postgresql://user:pass@host:5432/db"
