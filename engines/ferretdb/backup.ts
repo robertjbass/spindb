@@ -92,10 +92,13 @@ export async function createBackup(
 
   // FerretDB now uses Mongo-compatible backup formats under the hood:
   // - archive: single compressed file
+  // - archive-plain: single uncompressed file (no --gzip)
   // - bson: directory dump
   const format = options.format ?? 'archive'
   if (format === 'archive') {
     args.push('--archive=' + outputPath, '--gzip')
+  } else if (format === 'archive-plain') {
+    args.push('--archive=' + outputPath)
   } else {
     args.push('--out', outputPath)
   }
