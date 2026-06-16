@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.58.0] - 2026-06-16
+## [0.58.1] - 2026-06-16
+
+### Fixed
+
+- **CouchDB: stale admin-credential health probe could brute-force-lock the account, breaking restore.** On start, `waitForAdminReady` polled `GET /_all_dbs` with spindb's saved admin credentials every 500ms for up to 30s. When a deployment patches CouchDB's `[admins]` in `local.ini` out-of-band and restarts (as Layerbase Cloud does for per-database credentials), spindb's saved creds no longer match, so each poll is a 401 - ~60 failed authentications in 30s, which trips CouchDB's brute-force protection and "temporarily locks" the admin account. The CORRECT credentials then also get 401/403 for the lockout window, so a subsequent backup/restore fails. The probe now treats a 401 as a definitive "node is up, credentials managed elsewhere" answer and stops immediately (anonymous `/_up` already confirmed readiness) instead of hammering until lockout. Found by the Layerbase Cloud restore-drill.
 
 ### Added
 
