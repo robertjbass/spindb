@@ -585,6 +585,12 @@ jobs:
         run: pnpm test:engine ferretdb
         timeout-minutes: 20
 
+      # MongoDB <-> FerretDB backup/restore interoperability. Runs here because
+      # this job already has BOTH the ferretdb and mongodb binaries downloaded.
+      - name: Run MongoDB<->FerretDB interop tests
+        run: pnpm test:engine mongo-ferret-interop
+        timeout-minutes: 15
+
       - name: Show FerretDB logs on failure (Unix)
         if: failure() && runner.os != 'Windows'
         run: |
