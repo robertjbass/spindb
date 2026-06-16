@@ -130,6 +130,11 @@ export const restoreCommand = new Command('restore')
           'postgresql',
           'mysql',
           'mariadb',
+          'mongodb',
+          'ferretdb',
+          'cockroachdb',
+          'clickhouse',
+          'questdb',
         ])
         if (options.intoExisting && !INTO_EXISTING_ENGINES.has(engineName)) {
           const msg = `--into-existing is not yet supported for ${engineName}. Restore without it (drop + recreate the database) instead.`

@@ -245,6 +245,113 @@ describe('QuestDB Integration Tests', () => {
     console.log(`   Verified ${rowCount} rows in restored container`)
   })
 
+  it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+    console.log(
+      `\n Testing clean restore REPLACE semantics on live container "${containerName}"...`,
+    )
+
+    const engine = getEngine(ENGINE)
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `questdb-clean-restore-backup-${Date.now()}.sql`,
+    )
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Source container config should exist')
+
+    // 1. Capture the current row count of the live DB (QuestDB is
+    //    eventually-consistent on ingestion, so settle on a stable value).
+    let before = 0
+    {
+      const maxWaitMs = 15000
+      const startTime = Date.now()
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+        if (before >= EXPECTED_ROW_COUNT) break
+      }
+    }
+    assert(before >= EXPECTED_ROW_COUNT, 'Should have a stable baseline count')
+    console.log(`   Baseline row count: ${before}`)
+
+    try {
+      // 2. Back up the current state.
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+
+      // 3. Insert ONE extra row that is NOT in the backup.
+      await runScriptSQL(
+        containerName,
+        "INSERT INTO test_user (id, name, email, created_at) VALUES (9001, 'Clean Restore Extra', 'clean-restore-extra@example.com', now());",
+        DATABASE,
+      )
+
+      // 4. Wait until the count reflects before+1 (WAL flush is async).
+      let afterInsert = before
+      {
+        const maxWaitMs = 15000
+        const startTime = Date.now()
+        while (Date.now() - startTime < maxWaitMs) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          afterInsert = await getRowCount(
+            ENGINE,
+            testPorts[0],
+            DATABASE,
+            'test_user',
+          )
+          if (afterInsert >= before + 1) break
+        }
+      }
+      assertEqual(
+        afterInsert,
+        before + 1,
+        'Extra row should be visible before clean restore',
+      )
+      console.log(`   After extra insert: ${afterInsert} rows`)
+
+      // 5. Clean restore into the EXISTING database (--into-existing semantics):
+      //    clean:true drops each backed-up table, then psql reloads it, so the
+      //    extra row is REPLACED away (not merged).
+      await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+
+      // 6. Wait until the count is back to the baseline (replaced, not merged).
+      let afterRestore = afterInsert
+      {
+        const maxWaitMs = 15000
+        const startTime = Date.now()
+        while (Date.now() - startTime < maxWaitMs) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          afterRestore = await getRowCount(
+            ENGINE,
+            testPorts[0],
+            DATABASE,
+            'test_user',
+          )
+          if (afterRestore <= before) break
+        }
+      }
+      assertEqual(
+        afterRestore,
+        before,
+        'Clean restore should REPLACE contents (extra row gone), not merge',
+      )
+
+      console.log(
+        `   Clean restore replaced contents: back to ${afterRestore} rows (extra row dropped)`,
+      )
+    } finally {
+      await rm(backupPath, { force: true }).catch(() => {})
+    }
+  })
+
   it('should prefer saved admin credentials over legacy generic credentials', async () => {
     console.log('\n Testing saved QuestDB auth-backed backup/restore...')
 

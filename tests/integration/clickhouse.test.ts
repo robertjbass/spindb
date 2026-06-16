@@ -403,6 +403,100 @@ describe(
       console.log('   Container cloned via backup/restore')
     })
 
+    it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+      console.log(
+        `\n Verifying clean restore replaces (not merges) into the live source DB...`,
+      )
+
+      const config = await containerManager.getConfig(containerName)
+      assert(config !== null, 'Source container config should exist')
+
+      const engine = getEngine(ENGINE)
+      const { tmpdir } = await import('os')
+      const { rm } = await import('fs/promises')
+      const backupPath = join(
+        tmpdir(),
+        `clickhouse-clean-restore-${Date.now()}.sql`,
+      )
+
+      try {
+        // 1. Capture the current row count of the live source DB
+        const before = await getRowCount(
+          ENGINE,
+          testPorts[0],
+          DATABASE,
+          'test_user',
+        )
+
+        // 2. Back up the current state (this becomes the "source of truth")
+        await engine.backup(config!, backupPath, {
+          database: DATABASE,
+          format: 'sql',
+        })
+
+        // 3. Insert ONE extra row that is NOT in the backup.
+        //    Plain MergeTree INSERTs are synchronously visible (unlike async
+        //    ALTER ... DELETE mutations), so no system.mutations wait is needed.
+        await runScriptSQL(
+          containerName,
+          "INSERT INTO test_user (id, name, email) VALUES (9001, 'Ghost Row', 'ghost@example.com')",
+          DATABASE,
+        )
+
+        // 4. Assert the extra row is present: count is now before + 1
+        const afterInsert = await getRowCount(
+          ENGINE,
+          testPorts[0],
+          DATABASE,
+          'test_user',
+        )
+        assertEqual(
+          afterInsert,
+          before + 1,
+          'Extra row should be visible before restore',
+        )
+
+        // 5. Clean restore into the EXISTING database: clean:true drops + reloads
+        //    each table from the backup (DROP TABLE IF EXISTS per table), so the
+        //    extra row disappears. The database itself is never dropped.
+        await engine.restore(config!, backupPath, {
+          database: DATABASE,
+          clean: true,
+        })
+
+        // 6. Assert contents were REPLACED (not merged): count is back to `before`,
+        //    the ghost row is gone, and the table is still queryable.
+        const afterRestore = await getRowCount(
+          ENGINE,
+          testPorts[0],
+          DATABASE,
+          'test_user',
+        )
+        assertEqual(
+          afterRestore,
+          before,
+          'Clean restore should REPLACE contents (extra row removed), not merge',
+        )
+
+        const ghostCheck = await executeQuery(
+          containerName,
+          'SELECT count() AS count FROM test_user WHERE id = 9001',
+          DATABASE,
+        )
+        assertEqual(
+          Number(ghostCheck.rows[0].count),
+          0,
+          'Extra (non-backup) row should be gone after clean restore',
+        )
+
+        console.log(
+          `   Clean restore replaced contents: ${before} -> ${afterInsert} -> ${afterRestore} rows`,
+        )
+      } finally {
+        await rm(backupPath, { force: true }).catch(() => {})
+      }
+    })
+
     it('should verify restored data matches source', async () => {
       console.log(`\n Verifying restored data...`)
 

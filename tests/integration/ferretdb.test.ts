@@ -294,6 +294,89 @@ describe('FerretDB Integration Tests', () => {
     console.log('   ✓ Container cloned via backup/restore')
   })
 
+  it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+    console.log(
+      `\n♻️  Testing clean restore replaces (not merges) into the existing live DB...`,
+    )
+
+    // 1. Capture current document count of the seeded collection
+    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    assertEqual(
+      before,
+      EXPECTED_ROW_COUNT,
+      'Live DB should hold the seeded documents before backup',
+    )
+
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `ferretdb-clean-restore-${Date.now()}.archive`,
+    )
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    try {
+      // 2. Back up the current (in-backup) state.
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'archive',
+      })
+
+      // 3. Insert ONE extra document NOT present in the backup, using the same
+      //    inline-JS idiom as the existing delete test (runScriptJS over db.test_user).
+      await runScriptJS(
+        containerName,
+        "db.test_user.insertOne({id: 9001, name: 'Not In Backup', email: 'extra@example.com'})",
+        DATABASE,
+      )
+
+      // 4. Assert the extra document is now live (before + 1).
+      const afterInsert = await getRowCount(
+        ENGINE,
+        testPorts[0],
+        DATABASE,
+        'test_user',
+      )
+      assertEqual(
+        afterInsert,
+        before + 1,
+        'Extra not-in-backup document should be present before restore',
+      )
+
+      // 5. Restore into the EXISTING database. FerretDB defaults to
+      //    mongorestore --drop, dropping each collection before reload, so the
+      //    extra doc disappears. createDatabase:false signals into-existing.
+      await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+    } finally {
+      await rm(backupPath, { force: true })
+    }
+
+    // 6. Count is back to `before` (REPLACED, not merged) and still queryable.
+    const afterRestore = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      afterRestore,
+      before,
+      'Restore should REPLACE contents (extra doc dropped), not merge',
+    )
+
+    console.log(
+      `   ✓ Clean restore replaced contents: back to ${afterRestore} of ${before} rows, live DB never dropped`,
+    )
+  })
+
   it('should verify restored data matches source', async () => {
     console.log(`\n🔍 Verifying restored data...`)
     const rowCount = await getRowCount(
