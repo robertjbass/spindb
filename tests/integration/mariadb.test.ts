@@ -364,66 +364,68 @@ describe('MariaDB Integration Tests', () => {
     const beforeCount = Number(before.rows[0].n)
 
     const { tmpdir } = await import('os')
-    const backupPath = join(tmpdir(), `mariadb-into-existing-${Date.now()}.sql`)
-    await engine.backup(config!, backupPath, {
-      database: DATABASE,
-      format: 'sql',
-    })
-
-    // The self-clean mechanism that makes an in-place replay a faithful replace.
     const { readFile, rm } = await import('fs/promises')
-    const dumpText = await readFile(backupPath, 'utf-8')
-    assert(
-      dumpText.includes('DROP TABLE IF EXISTS'),
-      'mariadb-dump should emit DROP TABLE IF EXISTS (self-clean on replay)',
-    )
+    const backupPath = join(tmpdir(), `mariadb-into-existing-${Date.now()}.sql`)
+    try {
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
 
-    // Diverge the LIVE database: add a row NOT in the backup.
-    await executeQuery(
-      containerName,
-      "INSERT INTO test_user (name, email) VALUES ('Zed Extra', 'zed@example.com')",
-      DATABASE,
-    )
-    const diverged = await executeQuery(
-      containerName,
-      'SELECT COUNT(*) AS n FROM test_user',
-      DATABASE,
-    )
-    assertEqual(
-      Number(diverged.rows[0].n),
-      beforeCount + 1,
-      'live DB should have diverged from the backup',
-    )
+      // The self-clean mechanism that makes an in-place replay a faithful replace.
+      const dumpText = await readFile(backupPath, 'utf-8')
+      assert(
+        dumpText.includes('DROP TABLE IF EXISTS'),
+        'mariadb-dump should emit DROP TABLE IF EXISTS (self-clean on replay)',
+      )
 
-    // Restore INTO the existing database (createDatabase:false -> no DROP
-    // DATABASE). The dump's own DROP TABLE IF EXISTS replaces the table in place.
-    const result = await engine.restore(config!, backupPath, {
-      database: DATABASE,
-      createDatabase: false,
-      clean: true,
-    })
-    assert(
-      result.code === 0 || !result.stderr?.includes('FATAL'),
-      'restore should not fatally fail',
-    )
+      // Diverge the LIVE database: add a row NOT in the backup.
+      await executeQuery(
+        containerName,
+        "INSERT INTO test_user (name, email) VALUES ('Zed Extra', 'zed@example.com')",
+        DATABASE,
+      )
+      const diverged = await executeQuery(
+        containerName,
+        'SELECT COUNT(*) AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        Number(diverged.rows[0].n),
+        beforeCount + 1,
+        'live DB should have diverged from the backup',
+      )
 
-    // Extra row gone -> contents REPLACED, not merged.
-    const after = await executeQuery(
-      containerName,
-      'SELECT COUNT(*) AS n FROM test_user',
-      DATABASE,
-    )
-    assertEqual(
-      Number(after.rows[0].n),
-      beforeCount,
-      'in-place restore should replace contents (extra row gone), not merge',
-    )
+      // Restore INTO the existing database (createDatabase:false -> no DROP
+      // DATABASE). The dump's own DROP TABLE IF EXISTS replaces the table in place.
+      const result = await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+      assert(
+        result.code === 0 && !result.stderr?.includes('FATAL'),
+        'restore should exit 0 with no fatal error',
+      )
 
-    await rm(backupPath, { force: true })
+      // Extra row gone -> contents REPLACED, not merged.
+      const after = await executeQuery(
+        containerName,
+        'SELECT COUNT(*) AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        Number(after.rows[0].n),
+        beforeCount,
+        'in-place restore should replace contents (extra row gone), not merge',
+      )
 
-    console.log(
-      `   ✓ In-place restore replaced contents (${beforeCount} rows) without dropping the database`,
-    )
+      console.log(
+        `   ✓ In-place restore replaced contents (${beforeCount} rows) without dropping the database`,
+      )
+    } finally {
+      await rm(backupPath, { force: true })
+    }
   })
 
   it('should backup to compressed format (.sql.gz)', async () => {
