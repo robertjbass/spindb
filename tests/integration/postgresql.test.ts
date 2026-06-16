@@ -470,61 +470,67 @@ describe('PostgreSQL Integration Tests', () => {
     const beforeCount = before.rows[0].n as number
 
     const { tmpdir } = await import('os')
-    const backupPath = join(tmpdir(), `pg-into-existing-${Date.now()}.dump`)
-    await engine.backup(config!, backupPath, {
-      database: DATABASE,
-      format: 'custom',
-    })
-
-    // Diverge the LIVE database: add a row that is NOT in the backup.
-    await executeQuery(
-      containerName,
-      "INSERT INTO test_user (name, email) VALUES ('Zed Extra', 'zed@example.com')",
-      DATABASE,
-    )
-    const diverged = await executeQuery(
-      containerName,
-      'SELECT count(*)::int AS n FROM test_user',
-      DATABASE,
-    )
-    assertEqual(
-      diverged.rows[0].n,
-      beforeCount + 1,
-      'live DB should have diverged from the backup',
-    )
-
-    // Restore INTO the existing database with object-level clean. This is the
-    // engine half of `restore --into-existing`: it must drop+recreate each
-    // object (a faithful REPLACE, not a merge) while NEVER dropping the database
-    // itself - so a live connection / pooler is undisturbed.
-    const result = await engine.restore(config!, backupPath, {
-      database: DATABASE,
-      createDatabase: false,
-      clean: true,
-    })
-    assert(
-      result.code === 0 || !result.stderr?.includes('FATAL'),
-      'restore should not fatally fail',
-    )
-
-    // The extra row is gone -> contents were REPLACED, not merged.
-    const after = await executeQuery(
-      containerName,
-      'SELECT count(*)::int AS n FROM test_user',
-      DATABASE,
-    )
-    assertEqual(
-      after.rows[0].n,
-      beforeCount,
-      'clean restore should replace contents (extra row gone), not merge or error',
-    )
-
     const { rm } = await import('fs/promises')
-    await rm(backupPath, { force: true })
+    const backupPath = join(tmpdir(), `pg-into-existing-${Date.now()}.dump`)
+    try {
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'custom',
+      })
 
-    console.log(
-      `   ✓ In-place clean restore replaced contents (${beforeCount} rows) without dropping the database`,
-    )
+      // Diverge the LIVE database: add a row that is NOT in the backup.
+      await executeQuery(
+        containerName,
+        "INSERT INTO test_user (name, email) VALUES ('Zed Extra', 'zed@example.com')",
+        DATABASE,
+      )
+      const diverged = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        diverged.rows[0].n,
+        beforeCount + 1,
+        'live DB should have diverged from the backup',
+      )
+
+      // Restore INTO the existing database with object-level clean. This is the
+      // engine half of `restore --into-existing`: it must drop+recreate each
+      // object (a faithful REPLACE, not a merge) while NEVER dropping the
+      // database itself - so a live connection / pooler is undisturbed.
+      const result = await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+      // pg_restore legitimately exits non-zero on warnings (e.g. "table does not
+      // exist, skipping" during --clean --if-exists), which spindb surfaces as a
+      // non-zero code - so assert only that it did NOT fatally fail; the
+      // row-count below is the real success gate.
+      assert(
+        !result.stderr?.includes('FATAL'),
+        'restore should not fatally fail',
+      )
+
+      // The extra row is gone -> contents were REPLACED, not merged.
+      const after = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        after.rows[0].n,
+        beforeCount,
+        'clean restore should replace contents (extra row gone), not merge or error',
+      )
+
+      console.log(
+        `   ✓ In-place clean restore replaced contents (${beforeCount} rows) without dropping the database`,
+      )
+    } finally {
+      await rm(backupPath, { force: true })
+    }
   })
 
   it('should restore from SQL format and verify data', async () => {
