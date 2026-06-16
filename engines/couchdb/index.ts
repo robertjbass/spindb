@@ -993,6 +993,21 @@ export class CouchDBEngine extends BaseEngine {
           logDebug(`CouchDB admin auth ready on port ${port}`)
           return true
         }
+        // A 401 is a DEFINITIVE answer, not "not ready yet": the node is up and
+        // validating credentials, but spindb's saved admin creds don't match what
+        // CouchDB now has (e.g. a deployment that patches [admins] in local.ini
+        // out-of-band, then restarts). Retrying just sends the wrong password ~60
+        // times in 30s, which trips CouchDB's brute-force protection and
+        // "temporarily locks" the account - so even the CORRECT credentials then
+        // get 401/403 for the lockout window. Stop immediately and treat the node
+        // as ready: anonymous /_up already confirmed it's up, and admin-auth
+        // verification with stale creds is not worth locking the account over.
+        if (response.status === 401) {
+          logDebug(
+            `CouchDB up on port ${port} but admin probe returned 401 (credentials managed out-of-band?); treating as ready without retrying to avoid the brute-force lockout`,
+          )
+          return true
+        }
       } catch {
         // Admin auth not ready yet, wait and retry
       }
