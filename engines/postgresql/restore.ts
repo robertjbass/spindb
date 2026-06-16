@@ -130,6 +130,35 @@ export type RestoreOptions = {
   format?: string
   pgRestorePath?: string
   containerVersion?: string
+  /**
+   * Restore INTO an existing database without dropping it first (the caller
+   * already guarantees the database exists). When set, `pg_restore` is given
+   * `--clean --if-exists` so each object is dropped and recreated, replacing the
+   * database's contents while leaving the database itself (and any live
+   * connections to it) untouched. Used by the non-destructive `restore
+   * --into-existing` path. Only affects the custom/tar (`pg_restore`) format;
+   * plain-SQL dumps carry their own DROP statements (or not) and are replayed
+   * as-is.
+   */
+  clean?: boolean
+}
+
+/**
+ * Build the `pg_restore` command for a custom/tar dump. Pure (no I/O) so the
+ * argument construction - especially the `--clean --if-exists` that makes
+ * `--into-existing` a faithful replace - is unit-testable.
+ */
+export function buildPgRestoreCommand(args: {
+  restorePath: string
+  port: number
+  user: string
+  database: string
+  formatFlag: string
+  backupPath: string
+  clean?: boolean
+}): string {
+  const cleanFlags = args.clean ? ' --clean --if-exists' : ''
+  return `"${args.restorePath}" -h 127.0.0.1 -p ${args.port} -U ${args.user} -d ${args.database} --no-owner --no-privileges${cleanFlags} ${args.formatFlag} "${args.backupPath}"`
 }
 
 /**
@@ -274,6 +303,7 @@ export async function restoreBackup(
     format,
     pgRestorePath,
     containerVersion,
+    clean,
   } = options
   const execOptions = {
     maxBuffer: 50 * 1024 * 1024,
@@ -324,7 +354,15 @@ export async function restoreBackup(
             ? '-Ft'
             : ''
       const result = await execAsync(
-        `"${restorePath}" -h 127.0.0.1 -p ${port} -U ${user} -d ${database} --no-owner --no-privileges ${formatFlag} "${backupPath}"`,
+        buildPgRestoreCommand({
+          restorePath,
+          port,
+          user,
+          database,
+          formatFlag,
+          backupPath,
+          clean,
+        }),
         execOptions,
       )
 
