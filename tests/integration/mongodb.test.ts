@@ -385,6 +385,87 @@ describe('MongoDB Integration Tests', () => {
     console.log(`   ✓ Archive backup created with ${result.size} bytes`)
   })
 
+  it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+    console.log(
+      `\n♻️  Verifying clean restore REPLACES (not merges) into the existing database...`,
+    )
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    // 1. Capture the current document count of the seeded collection
+    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+
+    // 2. Back up the live database (archive format, same as the backup tests above)
+    const { tmpdir } = await import('os')
+    const backupPath = join(
+      tmpdir(),
+      `mongodb-clean-restore-${Date.now()}.archive`,
+    )
+    const backupResult = await engine.backup(config!, backupPath, {
+      database: DATABASE,
+      format: 'archive',
+    })
+    assertEqual(
+      backupResult.format,
+      'archive',
+      'Backup should use archive format',
+    )
+
+    try {
+      // 3. Insert ONE extra document that is NOT in the backup
+      await runScriptSQL(
+        containerName,
+        "db.test_user.insertOne({id: 9001, name: 'Ghost Record', email: 'ghost@example.com'})",
+        DATABASE,
+      )
+
+      // 4. Assert the live count is now before + 1
+      const afterInsert = await getRowCount(
+        ENGINE,
+        testPorts[0],
+        DATABASE,
+        'test_user',
+      )
+      assertEqual(
+        afterInsert,
+        before + 1,
+        'Extra document should be present before restore',
+      )
+
+      // 5. Restore the backup into the EXISTING database (clean: true).
+      // MongoDB restore passes `mongorestore --drop` by default, which drops
+      // each collection present in the archive before reloading it - so the
+      // extra document is REPLACED away, not merged.
+      await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+
+      // 6. Assert the count is back to `before` (replaced, not merged)
+      const afterRestore = await getRowCount(
+        ENGINE,
+        testPorts[0],
+        DATABASE,
+        'test_user',
+      )
+      assertEqual(
+        afterRestore,
+        before,
+        'Clean restore should REPLACE contents (extra document gone), not merge',
+      )
+
+      console.log(
+        `   ✓ Clean restore replaced contents: ${afterInsert} → ${afterRestore} documents (extra doc dropped)`,
+      )
+    } finally {
+      const { rm } = await import('fs/promises')
+      await rm(backupPath, { force: true }).catch(() => {})
+    }
+  })
+
   it('should restore from directory format and verify data', async () => {
     console.log(`\n📥 Testing directory format restore...`)
 
