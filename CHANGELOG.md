@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CouchDB admin readiness probe also treats 403 as terminal** (follow-up to 0.58.1). The brute-force-lockout fix stopped retrying on 401; 403 is the status CouchDB returns once the account is ALREADY locked (e.g. locked by a prior run before the probe starts), so it must end the retry loop too - otherwise the probe keeps hammering the locked account and extends the lockout. The probe now returns "ready" on 401 or 403.
+
 ## [0.58.1] - 2026-06-16
 
 ### Fixed

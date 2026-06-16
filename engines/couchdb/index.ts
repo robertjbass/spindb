@@ -1002,9 +1002,9 @@ export class CouchDBEngine extends BaseEngine {
         // get 401/403 for the lockout window. Stop immediately and treat the node
         // as ready: anonymous /_up already confirmed it's up, and admin-auth
         // verification with stale creds is not worth locking the account over.
-        if (response.status === 401) {
+        if (response.status === 401 || response.status === 403) {
           logDebug(
-            `CouchDB up on port ${port} but admin probe returned 401 (credentials managed out-of-band?); treating as ready without retrying to avoid the brute-force lockout`,
+            `CouchDB up on port ${port} but admin probe returned ${response.status} (credentials managed out-of-band, or account already locked?); treating as ready without retrying to avoid the brute-force lockout`,
           )
           return true
         }
