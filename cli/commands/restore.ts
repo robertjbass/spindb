@@ -126,7 +126,11 @@ export const restoreCommand = new Command('restore')
         // replaced, not merged into). This allowlist grows one engine at a time
         // as each gets clean-restore support plus an integration round-trip test
         // - never silently merge on an engine that can't replace.
-        const INTO_EXISTING_ENGINES = new Set(['postgresql'])
+        const INTO_EXISTING_ENGINES = new Set([
+          'postgresql',
+          'mysql',
+          'mariadb',
+        ])
         if (options.intoExisting && !INTO_EXISTING_ENGINES.has(engineName)) {
           const msg = `--into-existing is not yet supported for ${engineName}. Restore without it (drop + recreate the database) instead.`
           if (options.json) {
