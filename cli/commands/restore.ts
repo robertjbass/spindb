@@ -35,6 +35,10 @@ export const restoreCommand = new Command('restore')
     'Pull data from a remote database connection string',
   )
   .option('-f, --force', 'Overwrite existing database without confirmation')
+  .option(
+    '--into-existing',
+    'Restore INTO an existing database without dropping/recreating it (non-destructive to the database object; replaces its contents). The database must already exist. Safe to run against a live database with open connections (e.g. behind a connection pooler).',
+  )
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
@@ -44,6 +48,7 @@ export const restoreCommand = new Command('restore')
         database?: string
         fromUrl?: string
         force?: boolean
+        intoExisting?: boolean
         json?: boolean
       },
     ) => {
@@ -115,6 +120,22 @@ export const restoreCommand = new Command('restore')
 
         const { engine: engineName } = config
         const engine = getEngine(engineName)
+
+        // --into-existing does a faithful in-place REPLACE only for engines
+        // whose restore drops + recreates each object (so the contents are
+        // replaced, not merged into). This allowlist grows one engine at a time
+        // as each gets clean-restore support plus an integration round-trip test
+        // - never silently merge on an engine that can't replace.
+        const INTO_EXISTING_ENGINES = new Set(['postgresql'])
+        if (options.intoExisting && !INTO_EXISTING_ENGINES.has(engineName)) {
+          const msg = `--into-existing is not yet supported for ${engineName}. Restore without it (drop + recreate the database) instead.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: msg }))
+          } else {
+            console.log(chalk.red(`\n  ${msg}\n`))
+          }
+          process.exit(1)
+        }
 
         // Check if container needs to be running for restore
         // - File-based engines (SQLite, DuckDB) don't need to be running
@@ -355,7 +376,22 @@ export const restoreCommand = new Command('restore')
         const databaseExists =
           config.databases && config.databases.includes(databaseName)
 
-        if (databaseExists) {
+        // --into-existing requires the database to already exist - it never
+        // creates one (that is the destructive path's job) and it never drops
+        // it. Fail clearly rather than silently doing nothing.
+        if (options.intoExisting && !databaseExists) {
+          const msg = `Database "${databaseName}" does not exist. Restore without --into-existing to create it.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: msg }))
+          } else {
+            console.log(chalk.red(`\n  ${msg}\n`))
+          }
+          process.exit(1)
+        }
+
+        // The drop+recreate path is destructive; --into-existing skips it
+        // entirely and restores into the live database in place.
+        if (databaseExists && !options.intoExisting) {
           if (!options.force) {
             // In JSON mode, just error out - no interactive prompts
             if (options.json) {
@@ -414,54 +450,68 @@ export const restoreCommand = new Command('restore')
         let databaseCreated = false
 
         const dbSpinner = createSpinner(
-          `Creating database "${databaseName}"...`,
+          options.intoExisting
+            ? `Preparing existing database "${databaseName}"...`
+            : `Creating database "${databaseName}"...`,
         )
         dbSpinner.start()
 
         try {
-          await engine.createDatabase(config, databaseName)
-          databaseCreated = true
-          dbSpinner.succeed(`Database "${databaseName}" ready`)
+          if (!options.intoExisting) {
+            await engine.createDatabase(config, databaseName)
+            databaseCreated = true
+            dbSpinner.succeed(`Database "${databaseName}" ready`)
 
-          // File-based engines (SQLite, DuckDB) don't need database tracking
-          // They use a registry and the file IS the database
-          if (!isFileBasedEngine(engineName)) {
-            // Register rollback to drop database if restore fails
-            tx.addRollback({
-              description: `Drop database "${databaseName}"`,
-              execute: async () => {
-                try {
-                  await engine.dropDatabase(config, databaseName)
-                  logDebug(`Rolled back: dropped database "${databaseName}"`)
-                } catch (dropErr) {
-                  logDebug(
-                    `Failed to drop database during rollback: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
-                  )
-                }
-              },
-            })
+            // File-based engines (SQLite, DuckDB) don't need database tracking
+            // They use a registry and the file IS the database
+            if (!isFileBasedEngine(engineName)) {
+              // Register rollback to drop database if restore fails
+              tx.addRollback({
+                description: `Drop database "${databaseName}"`,
+                execute: async () => {
+                  try {
+                    await engine.dropDatabase(config, databaseName)
+                    logDebug(`Rolled back: dropped database "${databaseName}"`)
+                  } catch (dropErr) {
+                    logDebug(
+                      `Failed to drop database during rollback: ${dropErr instanceof Error ? dropErr.message : String(dropErr)}`,
+                    )
+                  }
+                },
+              })
 
-            await containerManager.addDatabase(containerName, databaseName)
+              await containerManager.addDatabase(containerName, databaseName)
 
-            // Register rollback to remove database from container tracking
-            tx.addRollback({
-              description: `Remove "${databaseName}" from container tracking`,
-              execute: async () => {
-                try {
-                  await containerManager.removeDatabase(
-                    containerName,
-                    databaseName,
-                  )
-                  logDebug(
-                    `Rolled back: removed "${databaseName}" from container tracking`,
-                  )
-                } catch (removeErr) {
-                  logDebug(
-                    `Failed to remove database from tracking during rollback: ${removeErr instanceof Error ? removeErr.message : String(removeErr)}`,
-                  )
-                }
-              },
-            })
+              // Register rollback to remove database from container tracking
+              tx.addRollback({
+                description: `Remove "${databaseName}" from container tracking`,
+                execute: async () => {
+                  try {
+                    await containerManager.removeDatabase(
+                      containerName,
+                      databaseName,
+                    )
+                    logDebug(
+                      `Rolled back: removed "${databaseName}" from container tracking`,
+                    )
+                  } catch (removeErr) {
+                    logDebug(
+                      `Failed to remove database from tracking during rollback: ${removeErr instanceof Error ? removeErr.message : String(removeErr)}`,
+                    )
+                  }
+                },
+              })
+            }
+          } else {
+            // --into-existing: the database already exists and is deliberately
+            // NEITHER dropped NOR recreated, and NO drop-on-failure rollback is
+            // registered - we must never drop the caller's existing data. The
+            // engine restore replaces the contents in place (e.g. pg_restore
+            // --clean --if-exists drops + recreates each object), which is safe
+            // while live connections (a pooler, a health monitor) stay open.
+            dbSpinner.succeed(
+              `Restoring into existing database "${databaseName}"`,
+            )
           }
 
           const restoreSpinner = createSpinner('Restoring backup...')
@@ -470,6 +520,9 @@ export const restoreCommand = new Command('restore')
           const result = await engine.restore(config, backupPath, {
             database: databaseName,
             createDatabase: false,
+            // Object-level clean so an in-place restore is a faithful REPLACE
+            // (not a merge into the existing contents).
+            ...(options.intoExisting ? { clean: true } : {}),
           })
 
           // Check if restore completely failed (non-zero code with no data restored)
