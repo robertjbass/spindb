@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-06-16
+
+### Added
+
+- **`restore --into-existing`: non-destructive, in-place restore.** Restores a backup INTO an existing database without dropping/recreating it, so it is safe to run against a live database with open connections (a connection pooler, a health monitor). The destructive `DROP DATABASE` + recreate lives in the restore CLI, not the per-engine restore; `--into-existing` skips the drop, the recreate, AND the drop-on-failure rollback (a failed in-place restore must never drop the caller's data), and passes object-level clean so the result REPLACES the contents rather than merging into them. Gated to an engine allowlist that only includes engines proven to replace-in-place (never a silent merge): **postgresql, mysql, mariadb, mongodb, ferretdb, cockroachdb, clickhouse, questdb** (the wire/HTTP engines). PostgreSQL gained `pg_restore --clean --if-exists` support (via a pure, unit-tested `buildPgRestoreCommand`); mysql/mariadb self-clean via the dump's `DROP TABLE IF EXISTS`; cockroachdb/clickhouse/questdb use their existing per-table `clean`; mongodb/ferretdb use the default `mongorestore --drop`. Each engine has a real-engine integration round-trip test (back up, insert a row/doc not in the backup, restore into the existing DB, assert the extra is gone and the database was never dropped). Additive: the existing drop-and-recreate restore is unchanged when the flag is absent. The file-swap engines (redis/sqlite/duckdb/qdrant/meilisearch/weaviate/tigerbeetle/libsql) and the additive REST engines (surrealdb/typedb/influxdb/couchdb) are intentionally NOT yet in the allowlist - they need a different restore path and are tracked as follow-ups.
+
+### Fixed
+
+- **MongoDB could not restore an uncompressed (`archive-plain`) backup - including its own.** `mongorestore`'s restore detected the uncompressed mongodump archive magic (`0x8199e26d` -> `6d e2 99 81` on disk) as an `'unknown'` format and defaulted to `--archive --gzip`, failing with `gzip: invalid header` on the non-gzipped file. Restore now recognizes the archive magic as an uncompressed archive (no `--gzip`), and the `'unknown'` fallback no longer adds `--gzip` (a gzipped archive is reliably caught by its `1f 8b` magic). FerretDB's restore was already correct here; it gained the same explicit magic check for symmetry. **This makes MongoDB and FerretDB backups fully interchangeable** (a backup from either restores into the other), proven by a new real-engine `mongo-ferret-interop` integration test that round-trips `archive-plain` in BOTH directions, plus a unit regression test for the format detection. Found while adding that interoperability test.
+
 ## [0.57.0] - 2026-06-15
 
 ### Added

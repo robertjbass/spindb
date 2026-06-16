@@ -168,6 +168,7 @@ spindb start mydb
 spindb connect mydb
 spindb backup mydb
 spindb restore mydb backup.dump
+spindb restore mydb backup.dump --into-existing  # In-place restore (no DROP DATABASE)
 spindb clone mydb mydb-copy
 spindb delete mydb -f
 

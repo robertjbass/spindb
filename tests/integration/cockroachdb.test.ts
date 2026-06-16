@@ -249,6 +249,80 @@ describe('CockroachDB Integration Tests', () => {
     console.log('   Container cloned via backup/restore')
   })
 
+  it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+    console.log(`\n Testing clean restore replaces (not merges) into live DB...`)
+
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Source container config should exist')
+
+    const engine = getEngine(ENGINE)
+
+    // 1. Capture current row count of the live, running source DB
+    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+
+    // 2. Back up the current state (this snapshot does NOT contain the extra row)
+    const { tmpdir } = await import('os')
+    const { rm } = await import('fs/promises')
+    const backupPath = join(
+      tmpdir(),
+      `cockroachdb-clean-restore-backup-${Date.now()}.sql`,
+    )
+
+    try {
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+
+      // 3. Insert ONE extra row that is NOT in the backup
+      await runScriptSQL(
+        containerName,
+        "INSERT INTO test_user (id, name, email) VALUES (9999, 'Extra', 'extra@example.com');",
+        DATABASE,
+      )
+
+      // 4. Confirm the extra row is present
+      const afterInsert = await getRowCount(
+        ENGINE,
+        testPorts[0],
+        DATABASE,
+        'test_user',
+      )
+      assertEqual(
+        afterInsert,
+        before + 1,
+        'Extra row should be present before restore',
+      )
+
+      // 5. Clean restore into the EXISTING, live database (--into-existing semantics):
+      //    clean: true drops each table before reloading, so the extra row disappears.
+      await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+    } finally {
+      await rm(backupPath, { force: true })
+    }
+
+    // 6. Count is back to `before` (REPLACED, not merged) and still queryable
+    const afterRestore = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
+    assertEqual(
+      afterRestore,
+      before,
+      'Clean restore should REPLACE contents (extra row gone), not merge',
+    )
+
+    console.log(
+      `   Clean restore replaced contents: back to ${afterRestore} rows (net-neutral)`,
+    )
+  })
+
   it('should verify restored data matches source', async () => {
     console.log(`\n Verifying restored data...`)
 

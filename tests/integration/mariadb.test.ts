@@ -346,6 +346,88 @@ describe('MariaDB Integration Tests', () => {
     console.log(`   ✓ SQL backup created with ${result.size} bytes`)
   })
 
+  it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
+    console.log(`\n♻️  Testing in-place restore (replace, not merge)...`)
+
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    // Capture current state and back it up (SQL - the format the cloud pins for
+    // MariaDB). The dump carries DROP TABLE IF EXISTS (mariadb-dump default), so
+    // replaying it REPLACES each table in place - no engine `clean` flag needed.
+    const before = await executeQuery(
+      containerName,
+      'SELECT COUNT(*) AS n FROM test_user',
+      DATABASE,
+    )
+    const beforeCount = Number(before.rows[0].n)
+
+    const { tmpdir } = await import('os')
+    const { readFile, rm } = await import('fs/promises')
+    const backupPath = join(tmpdir(), `mariadb-into-existing-${Date.now()}.sql`)
+    try {
+      await engine.backup(config!, backupPath, {
+        database: DATABASE,
+        format: 'sql',
+      })
+
+      // The self-clean mechanism that makes an in-place replay a faithful replace.
+      const dumpText = await readFile(backupPath, 'utf-8')
+      assert(
+        dumpText.includes('DROP TABLE IF EXISTS'),
+        'mariadb-dump should emit DROP TABLE IF EXISTS (self-clean on replay)',
+      )
+
+      // Diverge the LIVE database: add a row NOT in the backup.
+      await executeQuery(
+        containerName,
+        "INSERT INTO test_user (name, email) VALUES ('Zed Extra', 'zed@example.com')",
+        DATABASE,
+      )
+      const diverged = await executeQuery(
+        containerName,
+        'SELECT COUNT(*) AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        Number(diverged.rows[0].n),
+        beforeCount + 1,
+        'live DB should have diverged from the backup',
+      )
+
+      // Restore INTO the existing database (createDatabase:false -> no DROP
+      // DATABASE). The dump's own DROP TABLE IF EXISTS replaces the table in place.
+      const result = await engine.restore(config!, backupPath, {
+        database: DATABASE,
+        createDatabase: false,
+        clean: true,
+      })
+      assert(
+        result.code === 0 && !result.stderr?.includes('FATAL'),
+        'restore should exit 0 with no fatal error',
+      )
+
+      // Extra row gone -> contents REPLACED, not merged.
+      const after = await executeQuery(
+        containerName,
+        'SELECT COUNT(*) AS n FROM test_user',
+        DATABASE,
+      )
+      assertEqual(
+        Number(after.rows[0].n),
+        beforeCount,
+        'in-place restore should replace contents (extra row gone), not merge',
+      )
+
+      console.log(
+        `   ✓ In-place restore replaced contents (${beforeCount} rows) without dropping the database`,
+      )
+    } finally {
+      await rm(backupPath, { force: true })
+    }
+  })
+
   it('should backup to compressed format (.sql.gz)', async () => {
     console.log(`\n📦 Testing compressed format backup (.sql.gz)...`)
 
