@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-06-15
+
+### Added
+
+- **`archive-plain` backup format for MongoDB and FerretDB (uncompressed single-file archive).** `mongodump --archive=<file>` WITHOUT `--gzip`. The existing `archive` format (gzipped) stays the default, so nothing changes for current callers. The new format exists for consumers whose restore path runs a plain `mongorestore --archive` (no `--gzip`) and therefore cannot read a gzipped archive - notably Layerbase Cloud, whose legacy restore command and existing stored backups are uncompressed. Restore is unaffected: `detectBackupFormat` already sniffs the gzip magic bytes and restores compressed or plain archives transparently. Verified end-to-end: `--format archive` produces a gzipped file (magic `1f8b`), `--format archive-plain` produces an uncompressed mongodump archive.
+
 ## [0.56.0] - 2026-06-15
 
 ### Added
