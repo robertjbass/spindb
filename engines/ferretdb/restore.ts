@@ -216,6 +216,23 @@ export async function detectBackupFormat(
       }
     }
 
+    // mongodump archive magic 0x8199e26d (little-endian -> 6d e2 99 81): an
+    // uncompressed `--archive` (no gzip). Classify it explicitly as 'archive' so
+    // it never falls through to the gzip-less 'unknown' fallback by luck. This is
+    // the format an `archive-plain` backup produces (mongo or ferret).
+    if (
+      buffer[0] === 0x6d &&
+      buffer[1] === 0xe2 &&
+      buffer[2] === 0x99 &&
+      buffer[3] === 0x81
+    ) {
+      return {
+        format: 'archive',
+        description: 'MongoDB archive (uncompressed)',
+        restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath}`,
+      }
+    }
+
     const mongoHeader = buffer.toString('utf8', 0, 16)
     if (mongoHeader.startsWith('mtools') || mongoHeader.includes('mongo')) {
       return {

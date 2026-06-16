@@ -54,6 +54,25 @@ export async function detectBackupFormat(
       }
     }
 
+    // Check for the mongodump archive magic (uncompressed `--archive`, no gzip).
+    // mongodump writes a 4-byte magic 0x8199e26d, little-endian on disk as
+    // `6d e2 99 81`. This is what an `archive-plain` backup produces; without
+    // this check it falls through to 'unknown' and is wrongly restored with
+    // --gzip ("gzip: invalid header"). FerretDB produces the same magic, so this
+    // is also what makes a ferret backup restorable into mongo.
+    if (
+      buffer[0] === 0x6d &&
+      buffer[1] === 0xe2 &&
+      buffer[2] === 0x99 &&
+      buffer[3] === 0x81
+    ) {
+      return {
+        format: 'archive',
+        description: 'MongoDB archive (uncompressed)',
+        restoreCommand: `mongorestore --host 127.0.0.1 --port PORT --db DATABASE --archive=${filePath}`,
+      }
+    }
+
     // Check for uncompressed archive (starts with "mtools")
     if (header === 'mtools' || header.includes('mongo')) {
       return {
@@ -234,8 +253,11 @@ export async function restoreBackup(
     // BSON files are passed directly without --archive flag
     args.push(backupPath)
   } else {
-    // Default to archive for unknown formats
-    args.push('--archive=' + backupPath, '--gzip')
+    // Unknown format: a gzipped archive would already have been detected by its
+    // 1f8b magic, so default to an UNCOMPRESSED archive (no --gzip). Defaulting
+    // to --gzip here made mongorestore fail with "gzip: invalid header" on any
+    // plain archive it didn't explicitly recognize.
+    args.push('--archive=' + backupPath)
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
