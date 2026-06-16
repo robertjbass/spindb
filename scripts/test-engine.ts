@@ -37,6 +37,9 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   weaviate: 'weaviate.test.ts',
   tigerbeetle: 'tigerbeetle.test.ts',
   libsql: 'libsql.test.ts',
+  // Cross-engine: MongoDB <-> FerretDB backup/restore interoperability. Needs
+  // BOTH engines' binaries (run from the FerretDB CI job, which downloads both).
+  'mongo-ferret-interop': 'mongo-ferret-interop.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)
