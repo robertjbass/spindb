@@ -133,7 +133,7 @@ export async function createBackup(
           '--db',
           db,
         ]
-      : ['--host', '127.0.0.1', '--port', String(port), '--db', db]
+      : ['--host', host, '--port', String(port), '--db', db]
     return [...connection, ...formatArgs]
   }
 

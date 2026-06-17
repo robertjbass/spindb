@@ -203,7 +203,7 @@ export async function restoreBackup(
             host,
           ),
         ]
-      : ['--host', '127.0.0.1', '--port', String(port)]
+      : ['--host', host, '--port', String(port)]
 
   const authSources: (string | null)[] = savedCreds
     ? resolveMongoAuthSources({
