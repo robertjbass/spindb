@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.4] - 2026-06-16
+
+### Fixed
+
+- **CouchDB: the start-time admin-auth probe tripped CouchDB's brute-force lockout when credentials are managed out-of-band - removed it.** `start` gated readiness on BOTH the anonymous `waitForReady` (`/_up` + a read probe + a write probe) AND an authenticated `waitForAdminReady` (`GET /_all_dbs` with the saved admin creds). When a deployment patches `[admins]` out-of-band (Layerbase Cloud writes the saved credential file and then patches `local.ini` to the per-database password in a different step), the admin probe races that write: on at least one of the several starts during provisioning it authenticates with a password that does not yet match `local.ini` and gets a 401. Across the create + bind-restart + post-patch restart (and again on container recreation), those failures accumulate and trip CouchDB's brute-force protection, which then returns `403 "Account is temporarily locked due to multiple authentication failures"` for the lockout window - long enough to break a backup/restore that runs right after create. The 0.58.1/0.58.2 "stop retrying on 401/403" mitigations reduced but could not eliminate this (one failed auth per start still accumulates). Readiness now uses the anonymous `waitForReady` ONLY - CouchDB is configured with `require_valid_user = false`, so the anonymous read+write probes fully confirm the node is serving, and the admin password (managed by the deployment) is never probed at start. This removes every spindb-originated failed auth, so the account is never locked. Found by the Layerbase Cloud restore-drill.
+
 ## [0.58.3] - 2026-06-16
 
 ### Fixed
