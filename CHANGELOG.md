@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.5] - 2026-06-17
+
+### Fixed
+
+- **CouchDB: the readiness WRITE probe authenticated with the `admin:admin` DEFAULT and retried ~60x, tripping the brute-force lockout. This was the ACTUAL root cause of the `403 "Account is temporarily locked"` (0.58.1-0.58.4 each fixed a contributing factor but not this).** `waitForReady`'s write probe (`PUT /spindb_writeprobe`, plus its DELETE) called `couchdbApiRequest` WITHOUT an auth argument - which defaults to `{username: 'admin', password: 'admin'}`. CouchDB is initially created with the `admin:admin` default, so the FIRST start's probe succeeds; but once a deployment rotates `[admins]` to a real password (Layerbase Cloud patches it out-of-band, then restarts), the probe's `admin:admin` PUT is a FAILED auth for `admin`. The probe retries every 500ms for up to 30s, so ~60 failed auths pile up on the restart and trip CouchDB's brute-force protection - which then rejects even the CORRECT credentials for the lockout window, breaking a backup/restore that runs right after create. The probes now use the database's SAVED admin credentials (which are written together with the `[admins]` password, so they match), and `waitForReady` treats a 401/403 on the write probe as "node is up and auth-gating" (ready) instead of retrying. Net effect: zero failed `admin` auths during startup, so the account is never locked. Confirmed by a real-engine local reproduction: rotating a running couchdb's `[admins]` password and then issuing ~60 `admin:admin` PUTs (what the old probe did) produces the exact `403 "Account is temporarily locked"`, while the rotated credentials authenticate cleanly across a stop/start with the fix. Found by the Layerbase Cloud restore-drill.
+
 ## [0.58.4] - 2026-06-16
 
 ### Fixed
