@@ -7,7 +7,10 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -109,7 +112,7 @@ ${adminUsername} = ${adminPassword}
 `
 }
 
-function patchCouchDBConfig(
+export function patchCouchDBConfig(
   existingConfig: string,
   options: {
     port: number
@@ -128,23 +131,33 @@ function patchCouchDBConfig(
   }
   if (options.adminUsername && options.adminPassword) {
     const managedAdminLine = `${options.adminUsername} = ${options.adminPassword}`
-    const adminsSection = `[admins]\n${managedAdminLine}`
-    const adminsSectionPattern = /\[admins\][\s\S]*?(?=\n\[|$)/m
     const escapedUsername = options.adminUsername.replace(
       /[.*+?^${}()|[\]\\]/g,
       '\\$&',
     )
-    const managedAdminPattern = new RegExp(`^${escapedUsername}\\s*=.*$`, 'm')
+    const managedAdminPattern = new RegExp(`^${escapedUsername}\\s*=`, 'm')
 
-    if (adminsSectionPattern.test(config)) {
-      config = config.replace(adminsSectionPattern, (section) => {
-        if (managedAdminPattern.test(section)) {
-          return section.replace(managedAdminPattern, managedAdminLine)
-        }
-        return `${section.trimEnd()}\n${managedAdminLine}`
-      })
-    } else {
-      config = `${config.trimEnd()}\n\n${adminsSection}\n`
+    // An EXISTING admin entry is the source of truth and is PRESERVED. A
+    // deployment (e.g. Layerbase Cloud) rotates the [admins] password
+    // out-of-band, then restarts; re-asserting spindb's saved/default password
+    // on every start would fight that. Worse, the previous section-matching
+    // regex (`/\[admins\][\s\S]*?(?=\n\[|$)/m`) mis-parsed a trailing [admins]
+    // section: with the `m` flag `$` matches end-of-LINE, so it captured only
+    // the `[admins]` header and then APPENDED a second `admin =` line. CouchDB
+    // then holds two conflicting admin passwords and, after a few failed logins
+    // with the "wrong" one, returns 403 "Account is temporarily locked due to
+    // multiple authentication failures". The admin is written once when the
+    // config is first generated (generateCouchDBConfig); later starts must not
+    // touch an entry that already exists - only add one if it is missing.
+    if (!managedAdminPattern.test(config)) {
+      if (/^\[admins\]/m.test(config)) {
+        config = config.replace(
+          /^\[admins\][^\n]*\n?/m,
+          (header) => `${header}${managedAdminLine}\n`,
+        )
+      } else {
+        config = `${config.trimEnd()}\n\n[admins]\n${managedAdminLine}\n`
+      }
     }
   }
   return config
@@ -544,7 +557,7 @@ export class CouchDBEngine extends BaseEngine {
       timeoutMs,
       auth === null
         ? null
-        : auth ?? (await this.getRuntimeAdminAuth(container.name)),
+        : (auth ?? (await this.getRuntimeAdminAuth(container.name))),
     )
   }
 
@@ -920,10 +933,7 @@ export class CouchDBEngine extends BaseEngine {
             undefined,
             null,
           )
-          if (
-            readProbe.status !== 404 &&
-            readProbe.status !== 401
-          ) {
+          if (readProbe.status !== 404 && readProbe.status !== 401) {
             logDebug(
               `CouchDB _up ok but read probe returned ${readProbe.status} ` +
                 `on port ${port}, waiting...`,
@@ -936,11 +946,7 @@ export class CouchDBEngine extends BaseEngine {
           // Underscore-prefixed names are reserved for system DBs and will
           // be rejected on PUT, so use a plain name.
           const probeDbPath = '/spindb_writeprobe'
-          const putResponse = await couchdbApiRequest(
-            port,
-            'PUT',
-            probeDbPath,
-          )
+          const putResponse = await couchdbApiRequest(port, 'PUT', probeDbPath)
           if (
             putResponse.status === 201 ||
             putResponse.status === 412 ||

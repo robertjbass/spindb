@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.3] - 2026-06-16
+
+### Fixed
+
+- **CouchDB: `spindb start` appended a duplicate `[admins]` entry, tripping CouchDB's brute-force lockout.** `patchCouchDBConfig` re-asserts the admin on every start by regenerating local.ini. Its section-matching regex (`/\[admins\][\s\S]*?(?=\n\[|$)/m`) used the `m` flag, so `$` matched end-of-LINE and the pattern captured only the `[admins]` HEADER, not the section body. It then appended a fresh `admin =` line instead of replacing the existing one - leaving TWO conflicting admin passwords. A deployment that manages the admin password out-of-band (Layerbase Cloud rotates it to a per-database password) ends up with spindb's password AND the cloud's; CouchDB authenticates against the wrong one, and after a few failed logins returns `403 "Account is temporarily locked due to multiple authentication failures"`, breaking backup/restore. `patchCouchDBConfig` now PRESERVES an existing admin entry (it is the source of truth) and only writes the managed admin when none exists - the admin is set once at create (`generateCouchDBConfig`) and never re-asserted on later starts. Found by the Layerbase Cloud restore-drill; covered by a new `couchdb-config-patch` unit test.
+
 ## [0.58.2] - 2026-06-16
 
 ### Fixed
