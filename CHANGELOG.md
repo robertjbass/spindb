@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.2] - 2026-06-16
+
 ### Fixed
+
+- **TypeDB restore failed with `[DBC6] Database '...' already exists` because the restore CLI pre-created the database before TypeDB's `database import` (which creates it itself).** Unlike every other engine, TypeDB's restore command (`typedb console ... database import <db> <schema> <data>`) creates the target database as part of the import, so the CLI's own `createDatabase` step left a database for `import` to collide with. Added a `restoreCreatesDatabase(engine)` capability (`RESTORE_CREATES_DATABASE_ENGINES`, currently just TypeDB); the restore CLI now skips its `createDatabase` call for those engines. The destructive `DROP DATABASE` still runs first (so a re-restore starts clean) and the drop-on-failure rollback still applies (a failed import rolls back the partially-imported database), so this is a targeted skip of the redundant pre-create, not a change to restore safety. Found by the Layerbase Cloud restore-drill.
 
 - **CouchDB admin readiness probe also treats 403 as terminal** (follow-up to 0.58.1). The brute-force-lockout fix stopped retrying on 401; 403 is the status CouchDB returns once the account is ALREADY locked (e.g. locked by a prior run before the probe starts), so it must end the retry loop too - otherwise the probe keeps hammering the locked account and extends the lockout. The probe now returns "ready" on 401 or 403.
 
