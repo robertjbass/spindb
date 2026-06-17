@@ -13,7 +13,10 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -31,7 +34,11 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import { buildMongoUri, normalizeMongoHost, type MongoWireAuth } from '../mongo-uri'
+import {
+  buildMongoUri,
+  normalizeMongoHost,
+  type MongoWireAuth,
+} from '../mongo-uri'
 import {
   Engine,
   Platform,
@@ -463,7 +470,9 @@ export class MongoDBEngine extends BaseEngine {
     return {
       username: savedCreds.username,
       password: savedCreds.password,
-      authDatabase: savedCreds.database || 'admin',
+      // Explicit authSource (e.g. a cloud root user provisioned in `admin`) wins;
+      // otherwise spindb's own createUser puts the user in <database>.
+      authDatabase: savedCreds.authSource || savedCreds.database || 'admin',
     }
   }
 
@@ -475,14 +484,7 @@ export class MongoDBEngine extends BaseEngine {
     const savedCreds = await this.getLocalAuth(container.name)
     const host = normalizeMongoHost(container.bindAddress)
     const args = savedCreds
-      ? [
-          buildMongoUri(
-            container.port,
-            database,
-            savedCreds,
-            host,
-          ),
-        ]
+      ? [buildMongoUri(container.port, database, savedCreds, host)]
       : ['--host', host, '--port', String(container.port), database]
 
     if (options?.quiet) {
@@ -495,7 +497,12 @@ export class MongoDBEngine extends BaseEngine {
   private async runLocalMongosh(
     container: ContainerConfig,
     database: string,
-    options: { eval?: string; file?: string; quiet?: boolean; timeoutMs?: number },
+    options: {
+      eval?: string
+      file?: string
+      quiet?: boolean
+      timeoutMs?: number
+    },
   ): Promise<{ stdout: string; stderr: string }> {
     const mongosh = await this.getMongoshPath()
     const args = await this.buildLocalMongoshArgs(container, database, {
@@ -1027,22 +1034,22 @@ export class MongoDBEngine extends BaseEngine {
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else if (options?.password) {
       // Local with auth: build URI with credentials
-      const uri = buildMongoUri(port, db, {
-        username: options.username || 'admin',
-        password: options.password,
-        authDatabase: 'admin',
-      }, normalizedHost)
+      const uri = buildMongoUri(
+        port,
+        db,
+        {
+          username: options.username || 'admin',
+          password: options.password,
+          authDatabase: 'admin',
+        },
+        normalizedHost,
+      )
       args = [uri, '--quiet', '--eval', wrappedScript]
     } else {
       const savedCreds = await this.getLocalAuth(container.name)
       args = savedCreds
         ? [
-            buildMongoUri(
-              port,
-              db,
-              savedCreds,
-              normalizedHost,
-            ),
+            buildMongoUri(port, db, savedCreds, normalizedHost),
             '--quiet',
             '--eval',
             wrappedScript,

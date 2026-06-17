@@ -317,6 +317,12 @@ export type UserCredentials = {
   engine: Engine
   container: string
   database?: string
+  // Explicit auth database for engines where the auth user does not live in the
+  // target database (MongoDB). When a caller provisions the user elsewhere - e.g.
+  // a cloud that creates the root user in `admin` (MONGO_INITDB_ROOT) - it sets
+  // this to tell backup/restore which database to authenticate against. When
+  // unset, mongo backup/restore fall back to <database> then `admin`.
+  authSource?: string
   apiKey?: string // Meilisearch, Qdrant, LibSQL (JWT token)
 }
 
