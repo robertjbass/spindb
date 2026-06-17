@@ -9,10 +9,22 @@ import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from './cli-utils'
-import { buildMongoUri } from '../mongo-uri'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  buildMongoUri,
+  resolveMongoAuthSources,
+  isMongoAuthError,
+} from '../mongo-uri'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 function redactMongoUri(uri: string): string {
   try {
@@ -84,94 +96,130 @@ export async function createBackup(
     getDefaultUsername(Engine.MongoDB),
   )
 
-  const args: string[] = savedCreds
-    ? [
-        '--uri',
-        buildMongoUri(port, db, {
-          username: savedCreds.username,
-          password: savedCreds.password,
-          authDatabase: savedCreds.database || 'admin',
-        }, container.bindAddress ?? '127.0.0.1'),
-        '--db',
-        db,
-      ]
-    : [
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--db',
-        db,
-      ]
-
   // Determine output format (default to 'archive' as per backup-formats.ts)
   const format = options.format ?? 'archive'
   const isSingleFileArchive = format === 'archive' || format === 'archive-plain'
-  if (format === 'archive') {
-    // Archive format: single compressed file
-    args.push('--archive=' + outputPath, '--gzip')
-  } else if (format === 'archive-plain') {
-    // Uncompressed single-file archive (no --gzip), for consumers whose restore
-    // path does not pass --gzip (e.g. a plain `mongorestore --archive`). The
-    // restore side auto-detects gzip vs plain (detectBackupFormat).
-    args.push('--archive=' + outputPath)
-  } else {
-    // Directory format (bson): output to directory
-    args.push('--out', outputPath)
+  const formatArgs: string[] =
+    format === 'archive'
+      ? // Archive format: single compressed file
+        ['--archive=' + outputPath, '--gzip']
+      : format === 'archive-plain'
+        ? // Uncompressed single-file archive (no --gzip), for consumers whose
+          // restore path does not pass --gzip (e.g. a plain `mongorestore
+          // --archive`). The restore side auto-detects gzip vs plain.
+          ['--archive=' + outputPath]
+        : // Directory format (bson): output to directory
+          ['--out', outputPath]
+
+  // Build mongodump args for a given authSource. With saved credentials the auth
+  // user may live in <database> (spindb's own createUser) OR in `admin` (an
+  // external provisioner's root user, e.g. the cloud's MONGO_INITDB_ROOT) - so we
+  // try the candidate authSources in order and retry on an authentication failure.
+  const host = container.bindAddress ?? '127.0.0.1'
+  const argsForAuthSource = (authDatabase: string | null): string[] => {
+    const connection = authDatabase
+      ? [
+          '--uri',
+          buildMongoUri(
+            port,
+            db,
+            {
+              username: savedCreds!.username,
+              password: savedCreds!.password,
+              authDatabase,
+            },
+            host,
+          ),
+          '--db',
+          db,
+        ]
+      : ['--host', host, '--port', String(port), '--db', db]
+    return [...connection, ...formatArgs]
   }
 
-  logDebug(`Running mongodump with args: ${sanitizeMongoArgs(args).join(' ')}`)
+  const authSources: (string | null)[] = savedCreds
+    ? resolveMongoAuthSources({
+        authSource: savedCreds.authSource,
+        database: savedCreds.database,
+      })
+    : [null]
 
-  // Note: Don't use shell mode - spawn handles paths with spaces correctly
-  // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
-  const spawnOptions: SpawnOptions = {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  }
+  const runMongodump = (args: string[]): Promise<BackupResult> => {
+    logDebug(
+      `Running mongodump with args: ${sanitizeMongoArgs(args).join(' ')}`,
+    )
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn(mongodump, args, spawnOptions)
+    // Note: Don't use shell mode - spawn handles paths with spaces correctly
+    // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
+    const spawnOptions: SpawnOptions = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }
 
-    let stderr = ''
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mongodump, args, spawnOptions)
 
-    proc.stdout?.on('data', () => {
-      // mongodump outputs progress to stderr, stdout is typically empty
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
+      let stderr = ''
 
-    proc.on('error', reject)
+      proc.stdout?.on('data', () => {
+        // mongodump outputs progress to stderr, stdout is typically empty
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
 
-    proc.on('close', async (code) => {
-      if (code === 0) {
-        // Get backup size
-        let size = 0
-        try {
-          if (isSingleFileArchive) {
-            // Archive file (compressed or plain)
-            const stats = await stat(outputPath)
-            size = stats.size
-          } else {
-            // Directory - sum up all dumped files
-            const dbDir = join(outputPath, db)
-            if (existsSync(dbDir)) {
-              size = await getDirectorySize(dbDir)
+      proc.on('error', reject)
+
+      proc.on('close', async (code) => {
+        if (code === 0) {
+          // Get backup size
+          let size = 0
+          try {
+            if (isSingleFileArchive) {
+              // Archive file (compressed or plain)
+              const stats = await stat(outputPath)
+              size = stats.size
+            } else {
+              // Directory - sum up all dumped files
+              const dbDir = join(outputPath, db)
+              if (existsSync(dbDir)) {
+                size = await getDirectorySize(dbDir)
+              }
             }
+          } catch {
+            // Size calculation failed, use 0
           }
-        } catch {
-          // Size calculation failed, use 0
-        }
 
-        resolve({
-          path: outputPath,
-          format: isSingleFileArchive ? 'archive' : 'directory',
-          size,
-        })
-      } else {
-        reject(new Error(stderr || `mongodump exited with code ${code}`))
-      }
+          resolve({
+            path: outputPath,
+            format: isSingleFileArchive ? 'archive' : 'directory',
+            size,
+          })
+        } else {
+          reject(new Error(stderr || `mongodump exited with code ${code}`))
+        }
+      })
     })
-  })
+  }
+
+  // Try each candidate authSource, retrying ONLY on authentication failures.
+  let lastError: Error | undefined
+  for (let i = 0; i < authSources.length; i++) {
+    try {
+      return await runMongodump(argsForAuthSource(authSources[i]))
+    } catch (error) {
+      lastError = error as Error
+      const isLastAttempt = i === authSources.length - 1
+      if (!isLastAttempt && isMongoAuthError(lastError.message)) {
+        logDebug(
+          `mongodump auth failed against authSource=${authSources[i]}; retrying with next candidate`,
+        )
+        continue
+      }
+      throw lastError
+    }
+  }
+  // Unreachable (the loop returns or throws); satisfies the type checker.
+  throw lastError ?? new Error('mongodump failed')
 }
 
 /**

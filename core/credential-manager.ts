@@ -129,6 +129,12 @@ function formatCredentials(credentials: UserCredentials): string {
     if (credentials.database) {
       lines.push(`DB_NAME=${encodeEnvValue(credentials.database)}`)
     }
+    // Explicit auth database (MongoDB): when the auth user is not in <database>
+    // (e.g. a cloud root user in `admin`), the caller persists it so backup/
+    // restore authenticate against the right database without guessing.
+    if (credentials.authSource) {
+      lines.push(`DB_AUTH_SOURCE=${encodeEnvValue(credentials.authSource)}`)
+    }
     lines.push(`DB_URL=${encodeEnvValue(credentials.connectionString)}`)
   }
 
@@ -185,6 +191,7 @@ function parseCredentialFile(
     engine,
     container: containerName,
     database: vars.DB_NAME,
+    authSource: vars.DB_AUTH_SOURCE,
   }
 }
 

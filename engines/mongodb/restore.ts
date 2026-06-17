@@ -8,10 +8,17 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { open } from 'fs/promises'
 import { join } from 'path'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import { getMongorestorePath, MONGORESTORE_NOT_FOUND_ERROR } from './cli-utils'
-import { buildMongoUri } from '../mongo-uri'
+import {
+  buildMongoUri,
+  resolveMongoAuthSources,
+  isMongoAuthError,
+} from '../mongo-uri'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 // Detect the format of a MongoDB backup
@@ -171,22 +178,41 @@ export async function restoreBackup(
         getDefaultUsername(Engine.MongoDB),
       )
     : null
-  const container =
-    options.containerName
-      ? await containerManager.getConfig(options.containerName)
-      : null
+  const container = options.containerName
+    ? await containerManager.getConfig(options.containerName)
+    : null
   const host = container?.bindAddress ?? '127.0.0.1'
 
-  const args: string[] = savedCreds
-    ? [
-        '--uri',
-        buildMongoUri(port, database, {
-          username: savedCreds.username,
-          password: savedCreds.password,
-          authDatabase: savedCreds.database || 'admin',
-        }, host),
-      ]
-    : ['--host', '127.0.0.1', '--port', String(port)]
+  // Auth args (--uri/--host) vary by authSource; the rest of `args` (--drop,
+  // archive/path, namespace remap, built below) does not. With saved credentials
+  // the auth user may live in <database> (spindb's createUser) OR in `admin` (an
+  // external provisioner's root user, e.g. the cloud's MONGO_INITDB_ROOT), so we
+  // try the candidate authSources in order and retry on an authentication failure.
+  const authArgsForAuthSource = (authDatabase: string | null): string[] =>
+    authDatabase
+      ? [
+          '--uri',
+          buildMongoUri(
+            port,
+            database,
+            {
+              username: savedCreds!.username,
+              password: savedCreds!.password,
+              authDatabase,
+            },
+            host,
+          ),
+        ]
+      : ['--host', host, '--port', String(port)]
+
+  const authSources: (string | null)[] = savedCreds
+    ? resolveMongoAuthSources({
+        authSource: savedCreds.authSource,
+        database: savedCreds.database,
+      })
+    : [null]
+
+  const args: string[] = []
 
   if (drop) {
     args.push('--drop')
@@ -261,56 +287,81 @@ export async function restoreBackup(
     addNamespaceRemapArgs(args, sourceDatabase, database)
   }
 
-  logDebug(`Running mongorestore with args: ${args.join(' ')}`)
+  const runMongorestore = (attemptArgs: string[]): Promise<RestoreResult> => {
+    logDebug(`Running mongorestore with args: ${attemptArgs.join(' ')}`)
 
-  // Note: Don't use shell mode - spawn handles paths with spaces correctly
-  // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
-  const spawnOptions: SpawnOptions = {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  }
+    // Note: Don't use shell mode - spawn handles paths with spaces correctly
+    // when shell: false (the default). Shell mode breaks paths like "C:\Program Files\..."
+    const spawnOptions: SpawnOptions = {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn(mongorestore, args, spawnOptions)
+    return new Promise((resolve, reject) => {
+      const proc = spawn(mongorestore, attemptArgs, spawnOptions)
 
-    let stdout = ''
-    let stderr = ''
+      let stdout = ''
+      let stderr = ''
 
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
 
-    proc.on('error', reject)
+      proc.on('error', reject)
 
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve({
-          format: format.format,
-          stdout,
-          stderr,
-          code,
-        })
-      } else {
-        // mongorestore may exit with non-zero but still restore some data
-        if (
-          stderr.includes('continuing') ||
-          stderr.includes('documents restored')
-        ) {
-          logWarning(`mongorestore completed with warnings: ${stderr}`)
+      proc.on('close', (code) => {
+        if (code === 0) {
           resolve({
             format: format.format,
             stdout,
             stderr,
-            code: code ?? undefined,
+            code,
           })
         } else {
-          reject(new Error(stderr || `mongorestore exited with code ${code}`))
+          // mongorestore may exit with non-zero but still restore some data
+          if (
+            stderr.includes('continuing') ||
+            stderr.includes('documents restored')
+          ) {
+            logWarning(`mongorestore completed with warnings: ${stderr}`)
+            resolve({
+              format: format.format,
+              stdout,
+              stderr,
+              code: code ?? undefined,
+            })
+          } else {
+            reject(new Error(stderr || `mongorestore exited with code ${code}`))
+          }
         }
-      }
+      })
     })
-  })
+  }
+
+  // Try each candidate authSource, retrying ONLY on authentication failures.
+  let lastError: Error | undefined
+  for (let i = 0; i < authSources.length; i++) {
+    try {
+      return await runMongorestore([
+        ...authArgsForAuthSource(authSources[i]),
+        ...args,
+      ])
+    } catch (error) {
+      lastError = error as Error
+      const isLastAttempt = i === authSources.length - 1
+      if (!isLastAttempt && isMongoAuthError(lastError.message)) {
+        logDebug(
+          `mongorestore auth failed against authSource=${authSources[i]}; retrying with next candidate`,
+        )
+        continue
+      }
+      throw lastError
+    }
+  }
+  // Unreachable (the loop returns or throws); satisfies the type checker.
+  throw lastError ?? new Error('mongorestore failed')
 }
 
 /**

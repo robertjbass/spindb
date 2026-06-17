@@ -184,6 +184,57 @@ describe('Credential Manager', () => {
       assert(loaded === null, 'Should return null')
     })
 
+    it('should round-trip an explicit authSource (mongo cloud root user in admin)', async () => {
+      // A caller that provisions the auth user outside <database> (e.g. a cloud
+      // creating the root user in `admin`) persists authSource so backup/restore
+      // authenticate against the right database without guessing.
+      const original: UserCredentials = {
+        username: 'layerbase',
+        password: 'secret123',
+        connectionString: 'mongodb://layerbase:secret123@127.0.0.1:27017/mydb',
+        engine: Engine.MongoDB,
+        container: TEST_CONTAINER,
+        database: 'mydb',
+        authSource: 'admin',
+      }
+
+      await saveCredentials(TEST_CONTAINER, Engine.MongoDB, original)
+      const loaded = await loadCredentials(
+        TEST_CONTAINER,
+        Engine.MongoDB,
+        'layerbase',
+      )
+
+      assert(loaded !== null, 'Should load credentials')
+      assertEqual(loaded!.authSource, 'admin', 'authSource should round-trip')
+      assertEqual(loaded!.database, 'mydb', 'Database should still match')
+    })
+
+    it('should leave authSource undefined when not persisted (local default)', async () => {
+      const original: UserCredentials = {
+        username: 'appuser',
+        password: 'secret123',
+        connectionString: 'mongodb://appuser:secret123@127.0.0.1:27017/mydb',
+        engine: Engine.MongoDB,
+        container: TEST_CONTAINER,
+        database: 'mydb',
+      }
+
+      await saveCredentials(TEST_CONTAINER, Engine.MongoDB, original)
+      const loaded = await loadCredentials(
+        TEST_CONTAINER,
+        Engine.MongoDB,
+        'appuser',
+      )
+
+      assert(loaded !== null, 'Should load credentials')
+      assertEqual(
+        loaded!.authSource,
+        undefined,
+        'authSource stays undefined so backup/restore use the db->admin fallback',
+      )
+    })
+
     it('should load API key credentials', async () => {
       const original: UserCredentials = {
         username: 'mykey',

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.6] - 2026-06-17
+
+### Fixed
+
+- **MongoDB backup/restore now authenticate correctly regardless of where the auth user lives (`<database>` vs `admin`).** `mongodump`/`mongorestore` always built their connection with `authSource = savedCreds.database || 'admin'`, i.e. they authenticated against the TARGET database. That is correct for a spindb-created mongo (spindb's `createUser` puts the user in `<database>`), but WRONG when an external provisioner creates the root user in `admin` - e.g. Layerbase Cloud runs `MONGO_INITDB_ROOT` (`root@admin`; its connection strings use `?authSource=admin`). Against such a deployment every delegated `mongodump`/`mongorestore` failed `AuthenticationFailed`. Two-part fix so spindb is correct in BOTH environments, with the caller able to say which:
+  - **Explicit contract:** `UserCredentials` gains an optional `authSource`, persisted as `DB_AUTH_SOURCE` in the credential file. A caller that provisions the user outside `<database>` (the cloud) sets it to `admin`, and backup/restore authenticate against it with no guessing. When unset (a normal local `spindb create`), behavior is unchanged.
+  - **Fallback:** when `authSource` is not set, backup/restore try `<database>` then `admin`, retrying ONLY on an authentication failure (`resolveMongoAuthSources` / `isMongoAuthError`). This keeps local spindb mongos correct by default AND makes an already-provisioned cloud mongo (whose credential file predates the field) work with no backfill. MongoDB has no failed-auth lockout, so the extra attempt is safe.
+  - `getLocalAuth` (the mongosh/console path) also honors the explicit `authSource`.
+  Found by the Layerbase Cloud e2e canary running REAL mongodb (the restore-drill SKIPs mongo under SSPL and had only proxied it via FerretDB, which authenticates differently).
+
 ## [0.58.5] - 2026-06-17
 
 ### Fixed
