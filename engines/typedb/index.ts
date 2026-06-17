@@ -45,6 +45,10 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
+import {
   validateTypeDBIdentifier,
   requireTypeDBConsolePath,
   getConsoleBaseArgs,
@@ -54,6 +58,7 @@ import {
   TYPEDB_DEFAULT_PASSWORD,
 } from './cli-utils'
 import {
+  Engine,
   type Platform,
   type Arch,
   type ContainerConfig,
@@ -844,6 +849,36 @@ export class TypeDBEngine extends BaseEngine {
   }
 
   /**
+   * Console base args authenticated with the database's SAVED credentials
+   * (falling back to the TypeDB default only when none are stored).
+   *
+   * createDatabase / dropDatabase MUST use these, not the hardcoded
+   * admin/password default: a deployment can rotate the admin password
+   * out-of-band (Layerbase Cloud rotates it to a per-database password during
+   * setup), after which the default credentials no longer authenticate and the
+   * console reports a generic failure ("Failed to drop database"). backup and
+   * restore already authenticate with the saved credentials; these two ops were
+   * the outliers.
+   */
+  private async authenticatedConsoleArgs(
+    container: ContainerConfig,
+  ): Promise<string[]> {
+    const savedCreds = await loadCredentials(
+      container.name,
+      Engine.TypeDB,
+      getDefaultUsername(Engine.TypeDB),
+    )
+    return getConsoleBaseArgs(
+      container.port,
+      '127.0.0.1',
+      true,
+      savedCreds
+        ? { username: savedCreds.username, password: savedCreds.password }
+        : undefined,
+    )
+  }
+
+  /**
    * Create a new database
    * TypeDB requires explicit database creation via console
    */
@@ -851,14 +886,14 @@ export class TypeDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { version } = container
 
     validateTypeDBIdentifier(database)
 
     const consolePath = await this.getConsolePath(version)
 
     const args = [
-      ...getConsoleBaseArgs(port),
+      ...(await this.authenticatedConsoleArgs(container)),
       '--command',
       `database create ${database}`,
     ]
@@ -892,14 +927,14 @@ export class TypeDBEngine extends BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
-    const { port, version } = container
+    const { version } = container
 
     validateTypeDBIdentifier(database)
 
     const consolePath = await this.getConsolePath(version)
 
     const args = [
-      ...getConsoleBaseArgs(port),
+      ...(await this.authenticatedConsoleArgs(container)),
       '--command',
       `database delete ${database}`,
     ]

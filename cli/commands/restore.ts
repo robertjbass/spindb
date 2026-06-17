@@ -484,6 +484,14 @@ export const restoreCommand = new Command('restore')
             if (!restoreCreatesDatabase(engineName)) {
               await engine.createDatabase(config, databaseName)
             }
+            // databaseCreated is true for BOTH paths: this restore owns the
+            // database's creation - either createDatabase above, or (for
+            // restoreCreatesDatabase engines) the engine's own `database import`
+            // below. Any PRE-EXISTING database was already dropped by the
+            // drop+recreate step above, so on failure the rollback can only ever
+            // drop what THIS restore created, never the caller's prior data. For
+            // restoreCreatesDatabase engines the flag must stay true so a
+            // partially-imported database is still cleaned up on failure.
             databaseCreated = true
             dbSpinner.succeed(`Database "${databaseName}" ready`)
 
