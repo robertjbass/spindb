@@ -811,7 +811,7 @@ export class CouchDBEngine extends BaseEngine {
           // locked"), which then rejects even the correct credentials and breaks
           // backup/restore. require_valid_user=false means the anonymous probes
           // fully confirm the node is serving reads and writes.
-          const ready = await this.waitForReady(port)
+          const ready = await this.waitForReady(port, savedAdminAuth)
           if (settled) return
 
           if (ready) {
@@ -865,7 +865,7 @@ export class CouchDBEngine extends BaseEngine {
 
     // Anonymous readiness only - no admin-auth probe (see the start path above:
     // it races out-of-band credential management and trips CouchDB's lockout).
-    const ready = await this.waitForReady(port)
+    const ready = await this.waitForReady(port, savedAdminAuth)
 
     if (ready) {
       return {
@@ -901,6 +901,7 @@ export class CouchDBEngine extends BaseEngine {
   //      any caller doing `PUT /<dbname>` (e.g. restore, tests) fails.
   private async waitForReady(
     port: number,
+    adminAuth: LocalCouchDBAuth | null = null,
     timeoutMs = 30000,
   ): Promise<boolean> {
     const startTime = Date.now()
@@ -947,16 +948,46 @@ export class CouchDBEngine extends BaseEngine {
           // Underscore-prefixed names are reserved for system DBs and will
           // be rejected on PUT, so use a plain name.
           const probeDbPath = '/spindb_writeprobe'
-          const putResponse = await couchdbApiRequest(port, 'PUT', probeDbPath)
+          // Use the database's SAVED admin credentials (or anonymous when none
+          // are stored) - NEVER couchdbApiRequest's admin:admin DEFAULT. Once
+          // [admins] is rotated to a non-default password (Layerbase Cloud
+          // patches it out-of-band, then restarts), an admin:admin PUT is a
+          // FAILED auth for 'admin'. This probe retries every 500ms for up to
+          // 30s, so ~60 failed auths pile up and trip CouchDB's brute-force
+          // lockout (403 "Account is temporarily locked"), which then rejects
+          // even the correct credentials and breaks a backup/restore run right
+          // after create. The saved creds match the current [admins] password
+          // (they are written together), so the PUT succeeds and never locks.
+          const putResponse = await couchdbApiRequest(
+            port,
+            'PUT',
+            probeDbPath,
+            undefined,
+            undefined,
+            adminAuth,
+          )
           if (
             putResponse.status === 201 ||
             putResponse.status === 412 ||
-            putResponse.status === 202
+            putResponse.status === 202 ||
+            // 401/403: the node is up and auth-gating writes (creds managed
+            // out-of-band, or none stored). It is serving - treat as ready
+            // rather than retrying, which is exactly what caused the lockout.
+            putResponse.status === 401 ||
+            putResponse.status === 403
           ) {
-            // Best-effort cleanup. If the DELETE fails, the next probe will
-            // see 412 (already exists) and still treat the cluster as ready.
+            // Best-effort cleanup (only meaningful when the PUT created the
+            // probe DB). If the DELETE fails, the next probe sees 412 (already
+            // exists) and still treats the cluster as ready.
             try {
-              await couchdbApiRequest(port, 'DELETE', probeDbPath)
+              await couchdbApiRequest(
+                port,
+                'DELETE',
+                probeDbPath,
+                undefined,
+                undefined,
+                adminAuth,
+              )
             } catch {
               /* probe cleanup is best-effort */
             }
