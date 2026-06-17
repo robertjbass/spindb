@@ -138,6 +138,22 @@ export function isFileBasedEngine(engine: Engine): boolean {
   return FILE_BASED_ENGINES.has(engine)
 }
 
+// Engines whose RESTORE command itself creates the target database, so the
+// generic restore flow must NOT pre-create it. TypeDB's `database import` is
+// create-and-import (not import-into-existing): if the database already exists
+// the import fails ("Database already exists. Error creating imported database").
+// For these engines, restore still DROPs any existing database first, then the
+// engine's own restore creates it fresh.
+export const RESTORE_CREATES_DATABASE_ENGINES = new Set([Engine.TypeDB])
+
+/**
+ * Check if an engine's restore creates the target database itself (so the CLI
+ * must skip its own createDatabase step). See RESTORE_CREATES_DATABASE_ENGINES.
+ */
+export function restoreCreatesDatabase(engine: Engine): boolean {
+  return RESTORE_CREATES_DATABASE_ENGINES.has(engine)
+}
+
 /**
  * Type helper for exhaustive switch statements
  * Use in the default case to ensure all enum values are handled

@@ -18,7 +18,11 @@ import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
-import { isFileBasedEngine, isRemoteContainer } from '../../types'
+import {
+  isFileBasedEngine,
+  isRemoteContainer,
+  restoreCreatesDatabase,
+} from '../../types'
 import { logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
 
@@ -458,16 +462,36 @@ export const restoreCommand = new Command('restore')
         const tx = new TransactionManager()
         let databaseCreated = false
 
+        // Some engines (TypeDB) create the database as part of their restore
+        // (`database import`), so we must NOT pre-create it here.
+        const createsOnRestore =
+          !options.intoExisting && restoreCreatesDatabase(engineName)
         const dbSpinner = createSpinner(
           options.intoExisting
             ? `Preparing existing database "${databaseName}"...`
-            : `Creating database "${databaseName}"...`,
+            : createsOnRestore
+              ? `Preparing database "${databaseName}"...`
+              : `Creating database "${databaseName}"...`,
         )
         dbSpinner.start()
 
         try {
           if (!options.intoExisting) {
-            await engine.createDatabase(config, databaseName)
+            // TypeDB's restore (`database import`) creates the database itself,
+            // so pre-creating it here makes the import fail "already exists". For
+            // those engines, skip createDatabase - the DROP above already cleared
+            // any existing database, and the engine restore creates it fresh.
+            if (!restoreCreatesDatabase(engineName)) {
+              await engine.createDatabase(config, databaseName)
+            }
+            // databaseCreated is true for BOTH paths: this restore owns the
+            // database's creation - either createDatabase above, or (for
+            // restoreCreatesDatabase engines) the engine's own `database import`
+            // below. Any PRE-EXISTING database was already dropped by the
+            // drop+recreate step above, so on failure the rollback can only ever
+            // drop what THIS restore created, never the caller's prior data. For
+            // restoreCreatesDatabase engines the flag must stay true so a
+            // partially-imported database is still cleaned up on failure.
             databaseCreated = true
             dbSpinner.succeed(`Database "${databaseName}" ready`)
 
