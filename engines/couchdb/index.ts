@@ -570,10 +570,6 @@ export class CouchDBEngine extends BaseEngine {
   ): Promise<{ port: number; connectionString: string }> {
     const { name, port, version, binaryPath } = container
     const savedAdminAuth = await this.getLocalAdminAuth(name)
-    // Use saved credentials if available; skip admin auth check otherwise.
-    // Falling back to admin:admin causes 401 failures when credentials were
-    // changed externally (e.g. cloud setup), eventually locking the account.
-    const startupAdminAuth = savedAdminAuth
 
     // Check if already running
     const alreadyRunning = await processManager.isRunning(name, {
@@ -806,10 +802,16 @@ export class CouchDBEngine extends BaseEngine {
             // Non-fatal
           }
 
-          const ready =
-            (await this.waitForReady(port)) &&
-            (!startupAdminAuth ||
-              (await this.waitForAdminReady(port, startupAdminAuth)))
+          // Readiness is the ANONYMOUS waitForReady (/_up + read + write probes)
+          // only. We deliberately do NOT do an admin-auth probe at start: a
+          // deployment frequently manages the admin password out-of-band
+          // (Layerbase Cloud patches [admins] AFTER start), so an admin probe
+          // races the credential write and 401s; repeated across restarts that
+          // trips CouchDB's brute-force lockout (403 "Account is temporarily
+          // locked"), which then rejects even the correct credentials and breaks
+          // backup/restore. require_valid_user=false means the anonymous probes
+          // fully confirm the node is serving reads and writes.
+          const ready = await this.waitForReady(port)
           if (settled) return
 
           if (ready) {
@@ -861,10 +863,9 @@ export class CouchDBEngine extends BaseEngine {
       // Non-fatal
     }
 
-    const ready =
-      (await this.waitForReady(port)) &&
-      (!startupAdminAuth ||
-        (await this.waitForAdminReady(port, startupAdminAuth)))
+    // Anonymous readiness only - no admin-auth probe (see the start path above:
+    // it races out-of-band credential management and trips CouchDB's lockout).
+    const ready = await this.waitForReady(port)
 
     if (ready) {
       return {
@@ -974,53 +975,6 @@ export class CouchDBEngine extends BaseEngine {
     }
 
     logDebug(`CouchDB did not become ready within ${timeoutMs}ms`)
-    return false
-  }
-
-  private async waitForAdminReady(
-    port: number,
-    auth: LocalCouchDBAuth,
-    timeoutMs = 30000,
-  ): Promise<boolean> {
-    const startTime = Date.now()
-    const checkInterval = 500
-
-    while (Date.now() - startTime < timeoutMs) {
-      try {
-        const response = await couchdbApiRequest(
-          port,
-          'GET',
-          '/_all_dbs',
-          undefined,
-          undefined,
-          auth,
-        )
-        if (response.status === 200) {
-          logDebug(`CouchDB admin auth ready on port ${port}`)
-          return true
-        }
-        // A 401 is a DEFINITIVE answer, not "not ready yet": the node is up and
-        // validating credentials, but spindb's saved admin creds don't match what
-        // CouchDB now has (e.g. a deployment that patches [admins] in local.ini
-        // out-of-band, then restarts). Retrying just sends the wrong password ~60
-        // times in 30s, which trips CouchDB's brute-force protection and
-        // "temporarily locks" the account - so even the CORRECT credentials then
-        // get 401/403 for the lockout window. Stop immediately and treat the node
-        // as ready: anonymous /_up already confirmed it's up, and admin-auth
-        // verification with stale creds is not worth locking the account over.
-        if (response.status === 401 || response.status === 403) {
-          logDebug(
-            `CouchDB up on port ${port} but admin probe returned ${response.status} (credentials managed out-of-band, or account already locked?); treating as ready without retrying to avoid the brute-force lockout`,
-          )
-          return true
-        }
-      } catch {
-        // Admin auth not ready yet, wait and retry
-      }
-      await new Promise((resolve) => setTimeout(resolve, checkInterval))
-    }
-
-    logDebug(`CouchDB admin auth did not become ready within ${timeoutMs}ms`)
     return false
   }
 
