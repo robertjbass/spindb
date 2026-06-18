@@ -19,12 +19,22 @@ import { getMissingDependencies } from '../../core/dependency-manager'
 import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
 import {
+  Engine,
   isFileBasedEngine,
   isRemoteContainer,
   restoreCreatesDatabase,
 } from '../../types'
 import { logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
+import {
+  copyRedisKeyspace,
+  type RedisCopyProgress,
+} from '../../engines/redis/resp-client'
+import { parseRedisConnectionString } from '../../engines/redis'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 
 export const restoreCommand = new Command('restore')
   .description('Restore a backup to a container')
@@ -230,6 +240,9 @@ export const restoreCommand = new Command('restore')
             options.fromUrl.startsWith('postgresql://') ||
             options.fromUrl.startsWith('postgres://')
           const isMysqlUrl = options.fromUrl.startsWith('mysql://')
+          const isRedisUrl =
+            options.fromUrl.startsWith('redis://') ||
+            options.fromUrl.startsWith('rediss://')
 
           if (engineName === 'postgresql' && !isPgUrl) {
             console.error(
@@ -249,13 +262,116 @@ export const restoreCommand = new Command('restore')
             process.exit(1)
           }
 
-          if (!isPgUrl && !isMysqlUrl) {
+          if (isRedisLike && !isRedisUrl) {
             console.error(
               uiError(
-                'Connection string must start with postgresql://, postgres://, or mysql://',
+                'Connection string must start with redis:// or rediss:// for Redis/Valkey containers',
               ),
             )
             process.exit(1)
+          }
+
+          if (!isPgUrl && !isMysqlUrl && !isRedisUrl) {
+            console.error(
+              uiError(
+                'Connection string must start with postgresql://, postgres://, mysql://, redis://, or rediss://',
+              ),
+            )
+            process.exit(1)
+          }
+
+          // Redis/Valkey: a binary-safe SCAN + DUMP/PTTL -> RESTORE copy
+          // streamed straight into the running target container. We do NOT use
+          // the dump-to-file path here: redis-cli cannot move binary DUMP
+          // payloads, and the --rdb/BGSAVE shortcut is blocked on Upstash and
+          // most managed Redis, so we speak RESP directly (resp-client.ts).
+          if (isRedisLike && isRedisUrl) {
+            const running = await processManager.isRunning(containerName, {
+              engine: engineName,
+            })
+            if (!running) {
+              const msg = `Container "${containerName}" must be running to migrate from a connection string. Start it first.`
+              if (options.json) {
+                console.log(JSON.stringify({ error: msg }))
+              } else {
+                console.error(uiError(msg))
+              }
+              process.exit(1)
+            }
+
+            const source = parseRedisConnectionString(options.fromUrl)
+            const engineEnum =
+              engineName === 'valkey' ? Engine.Valkey : Engine.Redis
+            const savedCreds = await loadCredentials(
+              containerName,
+              engineEnum,
+              getDefaultUsername(engineEnum),
+            )
+            const targetDb =
+              parseInt(options.database || config.database || '0', 10) || 0
+
+            const copySpinner = createSpinner(
+              'Copying keyspace from the remote database...',
+            )
+            copySpinner.start()
+            try {
+              const copyResult = await copyRedisKeyspace(
+                {
+                  host: source.host,
+                  port: source.port,
+                  tls: source.tls,
+                  username: source.username,
+                  password: source.password,
+                  database: source.database,
+                },
+                {
+                  host: '127.0.0.1',
+                  port: config.port,
+                  tls: false,
+                  username: savedCreds?.username,
+                  password: savedCreds?.password,
+                  database: targetDb,
+                },
+                {
+                  onProgress: (p: RedisCopyProgress) => {
+                    copySpinner.text = `Copying keyspace... ${p.restored}/${p.total} keys`
+                  },
+                },
+              )
+              copySpinner.succeed(
+                `Copied ${copyResult.keysCopied} keys from the remote ${engineName}`,
+              )
+              if (options.json) {
+                console.log(
+                  JSON.stringify({
+                    success: true,
+                    database: String(targetDb),
+                    container: containerName,
+                    engine: engineName,
+                    format: 'redis-keyspace',
+                    sourceType: 'connection-string',
+                    keysCopied: copyResult.keysCopied,
+                    overwritten: false,
+                  }),
+                )
+              } else {
+                console.log(
+                  uiSuccess(
+                    `Migrated ${copyResult.keysCopied} keys into "${containerName}"`,
+                  ),
+                )
+              }
+            } catch (error) {
+              copySpinner.fail('Redis migration failed')
+              const msg = (error as Error).message
+              if (options.json) {
+                console.log(JSON.stringify({ error: msg }))
+              } else {
+                console.error(uiError(msg))
+              }
+              process.exit(1)
+            }
+            return
           }
 
           const timestamp = Date.now()
