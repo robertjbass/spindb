@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-06-18
+
+### Added
+
+- **Migrate a Redis or Valkey database from a `redis://`/`rediss://` connection string** via `restore --from-url`, the same way the Postgres/MySQL paths work (any provider: Upstash, ElastiCache, self-hosted, or another spindb container). A new dependency-free RESP2 client (`engines/redis/resp-client.ts`) does a binary-safe `SCAN` + `DUMP`/`PTTL` -> `RESTORE` copy streamed straight into the running target, so every type and TTL is preserved and binary keys/values round-trip exactly. We speak RESP directly because `redis-cli` cannot move binary `DUMP` payloads and the `--rdb`/`BGSAVE` snapshot shortcut is blocked on Upstash and most managed Redis. `DUMP`/`RESTORE` is version-locked, so the target engine version must be at least the source's; a version mismatch surfaces an actionable error instead of a raw checksum error.
+
 ## [0.58.6] - 2026-06-17
 
 ### Fixed

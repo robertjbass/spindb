@@ -151,7 +151,7 @@ function toCygwinPath(windowsPath: string): string {
  * - redis://:password@localhost:6379/0
  * - redis://user:password@remote.host:6380/5
  */
-function parseRedisConnectionString(connectionString: string): {
+export function parseRedisConnectionString(connectionString: string): {
   host: string
   port: number
   username: string | undefined
