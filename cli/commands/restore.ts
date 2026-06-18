@@ -263,20 +263,24 @@ export const restoreCommand = new Command('restore')
           }
 
           if (isRedisLike && !isRedisUrl) {
-            console.error(
-              uiError(
-                'Connection string must start with redis:// or rediss:// for Redis/Valkey containers',
-              ),
-            )
+            const msg =
+              'Connection string must start with redis:// or rediss:// for Redis/Valkey containers'
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
 
           if (!isPgUrl && !isMysqlUrl && !isRedisUrl) {
-            console.error(
-              uiError(
-                'Connection string must start with postgresql://, postgres://, mysql://, redis://, or rediss://',
-              ),
-            )
+            const msg =
+              'Connection string must start with postgresql://, postgres://, mysql://, redis://, or rediss://'
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
 
