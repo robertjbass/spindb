@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.1] - 2026-06-23
+
+### Fixed
+
+- **Updated Publishing Docs** to explain the re-publish command that needs to be run locally.
+
+
 ## [0.59.0] - 2026-06-18
 
 ### Added
