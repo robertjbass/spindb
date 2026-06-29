@@ -254,7 +254,7 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 
 **Branch workflow:** `dev` is the staging branch. **All feature branches MUST be cut off `dev`**, not `main`. Merge feature → `dev` first, then open a PR from `dev` → `main`. **Do NOT merge `dev` → `main` with any failing CI checks** — wait for everything to go green. Transient/flaky test failures occasionally occur; if a failure looks transient (network blip, port collision, GitHub Actions runner hiccup), re-run that specific check before assuming a real regression. Real test failures must be fixed, not bypassed.
 
-**Publishing:** npm via GitHub Actions OIDC. Bump version, update CHANGELOG.md, merge `dev` → `main` once CI is fully green. Merge to `main` triggers the OIDC publish job.
+**Publishing:** npm via GitHub Actions OIDC. Bump version, update CHANGELOG.md, merge `dev` → `main` once CI is fully green. Merge to `main` triggers the OIDC publish job. Before publishing a new version, always run `pnpm prep` locally to re-generate `config/version.ts`. Every new version should have a corresponding `CHANGELOG.md` entry too before being published.
 
 ## Planned Improvements
 

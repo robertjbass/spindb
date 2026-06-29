@@ -46,6 +46,8 @@ export type CreateOptions = {
   database: string
   /** Path to the engine binary (for system-installed engines like MySQL, MongoDB, Redis) */
   binaryPath?: string
+  /** Soft memory budget (MB) for the engine's fixed structures. Persisted; applied per-engine at start. */
+  memoryBudgetMb?: number
 }
 
 export type DeleteOptions = {
@@ -54,7 +56,8 @@ export type DeleteOptions = {
 
 export class ContainerManager {
   async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
-    const { engine, version, port, database, binaryPath } = options
+    const { engine, version, port, database, binaryPath, memoryBudgetMb } =
+      options
 
     // Validate container name
     if (!this.isValidName(name)) {
@@ -88,6 +91,8 @@ export class ContainerManager {
       // Store binary path for system-installed engines (MySQL, MongoDB, Redis)
       // This ensures version consistency when starting the container
       ...(binaryPath && { binaryPath }),
+      // Persist the memory budget so every start/wake re-applies it.
+      ...(memoryBudgetMb ? { memoryBudgetMb } : {}),
     }
 
     await this.saveConfig(name, { engine }, config)

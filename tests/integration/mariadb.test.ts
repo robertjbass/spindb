@@ -142,6 +142,54 @@ describe('MariaDB Integration Tests', () => {
     console.log('   ✓ Container started and ready')
   })
 
+  it('should apply a memory budget (boots clean, caches trimmed)', async () => {
+    console.log(`\n🧠 Testing --memory-budget-mb...`)
+    const budgetName = generateTestName('mariadb-memory-budget')
+    const [budgetPort] = await findConsecutiveFreePorts(
+      1,
+      TEST_PORTS.mariadb.base + 100,
+    )
+    const engine = getEngine(ENGINE)
+
+    await containerManager.create(budgetName, {
+      engine: ENGINE,
+      version: DEFAULT_VERSION,
+      port: budgetPort,
+      database: DATABASE,
+      memoryBudgetMb: 256,
+    })
+    await engine.initDataDir(budgetName, DEFAULT_VERSION, { superuser: 'root' })
+
+    const config = await containerManager.getConfig(budgetName)
+    assert(config !== null, 'budget container config should exist')
+    assertEqual(
+      config?.memoryBudgetMb,
+      256,
+      'memory budget should be persisted on the container',
+    )
+
+    // Boots cleanly with the budget args (proves --innodb-buffer-pool-size and
+    // --aria-pagecache-buffer-size are accepted by mariadbd).
+    await engine.start(config!)
+    await containerManager.updateConfig(budgetName, { status: 'running' })
+    const ready = await waitForReady(ENGINE, budgetPort)
+    assert(ready, 'budgeted MariaDB should start and accept connections')
+    await engine.createDatabase(config!, DATABASE)
+
+    // The budget trims the Aria pagecache below its 128 MB default.
+    const aria = await executeQuery(
+      budgetName,
+      "SHOW VARIABLES LIKE 'aria_pagecache_buffer_size'",
+      DATABASE,
+    )
+    assert(
+      Number(Object.values(aria.rows[0])[1]) < 128 * 1024 * 1024,
+      'aria_pagecache_buffer_size should be trimmed below the 128 MB default',
+    )
+
+    console.log('   ✓ Budgeted MariaDB booted with trimmed caches')
+  })
+
   it('should seed the database with test data using runScript', async () => {
     console.log(
       `\n🌱 Seeding database with test data using engine.runScript...`,
