@@ -44,6 +44,12 @@ export type ContainerConfig = {
   //              when false/undefined, passes --no-auth (disables SCRAM)
   // Set via `spindb start --auth` or `spindb start --no-auth`. Persisted across restarts.
   authEnabled?: boolean
+  // Soft memory budget (MB) for the engine's fixed structures. Each engine
+  // translates it into its own server args (see core/memory-budget.ts): MySQL
+  // turns off performance_schema + shrinks the buffer pool; MariaDB trims its
+  // caches; others run at defaults. Set via `spindb create --memory-budget-mb`,
+  // persisted so it re-applies on every start. Unset = engine defaults.
+  memoryBudgetMb?: number
   // Remote database linking (external databases not managed by SpinDB)
   remote?: RemoteConnectionConfig
 }

@@ -10,6 +10,7 @@ import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
+import { memoryBudgetArgs } from '../../core/memory-budget'
 import {
   platformService,
   isWindows,
@@ -436,6 +437,10 @@ export class MariaDBEngine extends BaseEngine {
       `--max-connections=${engineDef.maxConnections}`,
       '--host-cache-size=0',
     ]
+
+    // Engine-agnostic memory budget (persisted on the container, set via
+    // `spindb create --memory-budget-mb`). No-op when unset.
+    args.push(...memoryBudgetArgs(container.engine, container.memoryBudgetMb))
 
     if (platform !== Platform.Win32) {
       const socketFile = join(
