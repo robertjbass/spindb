@@ -134,6 +134,55 @@ describe('MySQL Integration Tests', () => {
     console.log('   ✓ Container started and ready')
   })
 
+  it('should apply a memory budget (performance_schema OFF, boots clean)', async () => {
+    console.log(`\n🧠 Testing --memory-budget-mb...`)
+    const budgetName = generateTestName('mysql-memory-budget')
+    const [budgetPort] = await findConsecutiveFreePorts(
+      1,
+      TEST_PORTS.mysql.base + 100,
+    )
+    const engine = getEngine(ENGINE)
+
+    await containerManager.create(budgetName, {
+      engine: ENGINE,
+      version: TEST_VERSION,
+      port: budgetPort,
+      database: DATABASE,
+      memoryBudgetMb: 256,
+    })
+    await engine.initDataDir(budgetName, TEST_VERSION, { superuser: 'root' })
+
+    const config = await containerManager.getConfig(budgetName)
+    assert(config !== null, 'budget container config should exist')
+    assertEqual(
+      config?.memoryBudgetMb,
+      256,
+      'memory budget should be persisted on the container',
+    )
+
+    // Boots cleanly with the budget args (proves --performance-schema=OFF and
+    // --innodb-buffer-pool-size are accepted by mysqld).
+    await engine.start(config!)
+    await containerManager.updateConfig(budgetName, { status: 'running' })
+    const ready = await waitForReady(ENGINE, budgetPort)
+    assert(ready, 'budgeted MySQL should start and accept connections')
+    await engine.createDatabase(config!, DATABASE)
+
+    // performance_schema is the dominant consumer; the budget turns it off.
+    const ps = await executeQuery(
+      budgetName,
+      "SHOW VARIABLES LIKE 'performance_schema'",
+      DATABASE,
+    )
+    assertEqual(
+      String(Object.values(ps.rows[0])[1]),
+      'OFF',
+      'performance_schema should be OFF under a memory budget',
+    )
+
+    console.log('   ✓ Budgeted MySQL booted with performance_schema OFF')
+  })
+
   it('should seed the database with test data using runScript', async () => {
     console.log(
       `\n🌱 Seeding database with test data using engine.runScript...`,
