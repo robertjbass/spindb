@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-06-29
+
+### Added
+
+- **`spindb create --memory-budget-mb <n>`**: a soft memory budget (MB)
+  persisted on the container and re-applied on every start. Engine-agnostic seam
+  (`core/memory-budget.ts`): MySQL turns off `performance_schema` and shrinks the
+  InnoDB buffer pool; MariaDB trims its InnoDB buffer pool and Aria pagecache;
+  other engines run at their defaults (no-op). Lets a caller run MySQL-family
+  databases lean - a default MySQL measured ~547 MB RSS vs ~169 MB for MariaDB,
+  the difference being `performance_schema` (MySQL ships it on, MariaDB off).
+
 ## [0.59.1] - 2026-06-23
 
 ### Fixed

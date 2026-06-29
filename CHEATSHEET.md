@@ -7,6 +7,7 @@ Quick reference for all SpinDB commands.
 ```bash
 spindb create mydb                      # Create PostgreSQL (default)
 spindb create mydb -e mysql             # Create MySQL
+spindb create mydb -e mysql --memory-budget-mb 256  # Lean MySQL (perf_schema off + small buffer pool)
 spindb create mydb -e mariadb           # Create MariaDB
 spindb create mydb -e sqlite            # Create SQLite
 spindb create mydb -e duckdb            # Create DuckDB

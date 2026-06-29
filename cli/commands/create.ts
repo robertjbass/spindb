@@ -464,6 +464,10 @@ export const createCommand = new Command('create')
     'Maximum number of database connections (default: 200)',
   )
   .option(
+    '--memory-budget-mb <number>',
+    'Soft memory budget in MB; engines run lean within it (MySQL/MariaDB so far, others ignore it)',
+  )
+  .option(
     '-f, --force',
     'Overwrite existing container without prompting (deletes existing data)',
   )
@@ -489,6 +493,7 @@ export const createCommand = new Command('create')
         port?: string
         path?: string
         maxConnections?: string
+        memoryBudgetMb?: string
         force?: boolean
         start?: boolean
         connect?: boolean
@@ -581,7 +586,6 @@ export const createCommand = new Command('create')
             )
           }
         }
-
 
         // Redis/Valkey use numbered databases (0-15), default to "0"
         // Other engines default to container name (with hyphens replaced by underscores for SQL compatibility)
@@ -704,6 +708,18 @@ export const createCommand = new Command('create')
             return exitWithError({
               message:
                 'Invalid --max-connections value: must be a positive integer',
+              json: options.json,
+            })
+          }
+        }
+
+        // Validate --memory-budget-mb if provided
+        if (options.memoryBudgetMb) {
+          const parsed = parseInt(options.memoryBudgetMb, 10)
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            return exitWithError({
+              message:
+                'Invalid --memory-budget-mb value: must be a positive integer',
               json: options.json,
             })
           }
@@ -891,6 +907,9 @@ export const createCommand = new Command('create')
             port,
             database,
             binaryPath,
+            memoryBudgetMb: options.memoryBudgetMb
+              ? parseInt(options.memoryBudgetMb, 10)
+              : undefined,
           })
 
           tx.addRollback({
