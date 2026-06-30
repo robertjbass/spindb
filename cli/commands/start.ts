@@ -33,6 +33,10 @@ export const startCommand = new Command('start')
     '--no-auth',
     'Disable authentication (FerretDB v2: pass --no-auth). Persisted.',
   )
+  .option(
+    '--memory-budget-mb <number>',
+    'Soft memory budget in MB; engines run lean within it (0 clears it). Persisted.',
+  )
   .action(
     async (
       name: string | undefined,
@@ -41,6 +45,7 @@ export const startCommand = new Command('start')
         force?: boolean
         bind?: string
         auth?: boolean
+        memoryBudgetMb?: string
       },
     ) => {
       try {
@@ -186,6 +191,25 @@ export const startCommand = new Command('start')
             })
             config.authEnabled = options.auth
           }
+        }
+
+        // Persist the memory budget if provided (0 clears it). The engine
+        // applies it on this start and every future start from the persisted
+        // config - this is how a caller backfills an existing database (or
+        // updates it on a plan change) without recreating it.
+        if (options.memoryBudgetMb !== undefined) {
+          const parsed = parseInt(options.memoryBudgetMb, 10)
+          if (!Number.isFinite(parsed) || parsed < 0) {
+            return exitWithError({
+              message:
+                'Invalid --memory-budget-mb value: must be a non-negative integer (0 clears it)',
+              json: options.json,
+            })
+          }
+          await containerManager.updateConfig(containerName, {
+            memoryBudgetMb: parsed,
+          })
+          config.memoryBudgetMb = parsed
         }
 
         const engineDefaults = getEngineDefaults(engineName)

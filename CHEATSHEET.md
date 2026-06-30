@@ -39,6 +39,7 @@ spindb start mydb -f                    # Start (auto-download missing binaries)
 spindb start mydb --bind 0.0.0.0        # Listen on all interfaces, not just localhost (persisted)
 spindb start mydb --auth                # Enable auth: MongoDB --auth, FerretDB SCRAM (persisted)
 spindb start mydb --no-auth             # Disable auth: restore default no-auth mode (persisted)
+spindb start mydb --memory-budget-mb 256  # Run lean within a 256MB budget (0 clears it, persisted)
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
