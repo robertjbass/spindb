@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-06-29
+
+### Added
+
+- **`spindb start --memory-budget-mb <n>`**: set or update a container's memory
+  budget on start (0 clears it), persisted like `--bind`. Complements
+  `create --memory-budget-mb` so an existing database can be brought under (or
+  out of) a budget by restarting it, no recreate needed. The engine applies it
+  on that start and every future start.
+
 ## [0.60.0] - 2026-06-29
 
 ### Added
