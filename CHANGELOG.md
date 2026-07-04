@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.1] - 2026-07-04
+
+### Changed
+
+- **Licensing:** standardized the commercial-licensing language in `LICENSE`.
+  The PolyForm Noncommercial 1.0.0 grant is unchanged; the commercial-use
+  notice now explicitly enumerates commercial use (commercial
+  products/services/SaaS, internal for-profit operations, and using the
+  software, its source, or its output to train, fine-tune, evaluate, or
+  retrieval-augment AI/ML models, systems, or agents for any for-profit
+  purpose), states that a one-time commercial license fee applies, and lists
+  the licensing contact as bob@layerbase.com.
+
 ## [0.61.0] - 2026-06-29
 
 ### Added

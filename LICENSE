@@ -5,10 +5,26 @@
 ## Commercial Licensing
 
 This software is free for noncommercial use under the terms below.
-Commercial use — including use in or for a commercial product,
-service, or internal business operation — requires a separate
-commercial license. To inquire about commercial licensing, contact
-the licensor at **bob@bbass.co**.
+**Any commercial use requires a separate, paid commercial license.**
+
+Commercial use includes, without limitation:
+
+- use in or for any commercial product, service, or SaaS offering;
+- use in the internal business operations of any for-profit entity;
+- using the software, its source code, or its output to train,
+  fine-tune, evaluate, retrieval-augment, or otherwise develop any
+  AI or machine-learning model, system, or agent in connection with a
+  commercial, for-profit, or revenue-generating purpose; and
+- any other for-profit endeavor.
+
+A one-time commercial license fee applies. To obtain a commercial
+license, or to confirm whether your use requires one, contact the
+licensor at **bob@layerbase.com**.
+
+This section does not grant any rights beyond the PolyForm
+Noncommercial License 1.0.0 set out below. It describes the separate
+commercial license the licensor offers for uses that the license
+below does not permit.
 
 ## Acceptance
 
