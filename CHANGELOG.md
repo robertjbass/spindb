@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.2] - 2026-07-04
+
+### Fixed
+
+- **Interactive version picker no longer says "(1 versions)".** In the create
+  wizard's major-version list, the count label is now pluralized correctly, so
+  a major with a single available build reads "(1 version)" instead of
+  "(1 versions)". Most visible on pre-v1 engines, which commonly have just one
+  build available.
+
 ## [0.61.1] - 2026-07-04
 
 ### Changed

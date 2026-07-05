@@ -613,7 +613,11 @@ export async function promptVersion(
     }
 
     const countLabel =
-      versionCount > 0 ? chalk.gray(`(${versionCount} versions)`) : ''
+      versionCount > 0
+        ? chalk.gray(
+            `(${versionCount} version${versionCount === 1 ? '' : 's'})`,
+          )
+        : ''
     const deprecatedLabel = allDeprecated ? chalk.yellow(' [deprecated]') : ''
     const label = isLatestMajor
       ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
@@ -817,9 +821,7 @@ export async function promptPort(
     const portAvailable = await portManager.isPortAvailable(port)
     if (!portAvailable) {
       console.log()
-      console.log(
-        chalk.yellow(`  ⚠ Warning: Port ${port} is currently in use`),
-      )
+      console.log(chalk.yellow(`  ⚠ Warning: Port ${port} is currently in use`))
       console.log(
         chalk.gray(
           '    The container will be created but may fail to start until the port is freed.',
