@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.3] - 2026-07-07
+
+### Fixed
+
+- **QuestDB create no longer fails with EROFS on a read-only binary store.**
+  `QuestDBEngine.ensureBinaries` runs `postExtract()` even when binaries are
+  already installed (the cached path), and `postExtract` chmod-ed
+  `questdb.sh` unconditionally. On hosts that mount a shared binary store
+  read-only at `~/.spindb/bin` (e.g. Layerbase cloud user containers), that
+  chmod threw `EROFS` even though the script was already `0o755`, failing
+  every QuestDB create. Post-extract setup is now a no-op against an
+  already-correct read-only store: the new shared `ensureExecutable()`
+  helper (`core/fs-error-utils.ts`) skips the chmod when the executable bits
+  are already set, tolerates `EROFS`/`EPERM`/`EACCES` only when an
+  `access(X_OK)` check confirms the file is executable, and fails loudly
+  otherwise. Engine-agnostic: any engine needing post-extract exec bits
+  should use the same helper.
+
 ## [0.61.2] - 2026-07-04
 
 ### Fixed

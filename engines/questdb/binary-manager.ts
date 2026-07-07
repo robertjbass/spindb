@@ -22,10 +22,10 @@ import { normalizeVersion } from './version-maps'
 import { Engine, Platform, type Arch, type ProgressCallback } from '../../types'
 import { existsSync } from 'fs'
 import { join, dirname, relative } from 'path'
-import { chmod, symlink, readdir } from 'fs/promises'
+import { symlink, readdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
 import { getReleasesUrls } from '../../core/hostdb-client'
-import { moveEntry } from '../../core/fs-error-utils'
+import { moveEntry, ensureExecutable } from '../../core/fs-error-utils'
 import { paths } from '../../config/paths'
 
 class QuestDBBinaryManager extends BaseBinaryManager {
@@ -169,17 +169,24 @@ class QuestDBBinaryManager extends BaseBinaryManager {
    */
   async postExtract(binPath: string, platform: Platform): Promise<void> {
     if (platform !== Platform.Win32) {
-      // Make startup script executable - check both locations
+      // Make startup script executable - check both locations.
+      // This also runs on the cached path (ensureBinaries), so it must be a
+      // no-op against an already-correct read-only binary store (Layerbase
+      // cloud mounts a shared store read-only at ~/.spindb/bin); an
+      // unconditional chmod there throws EROFS even when the file is
+      // already 0o755. ensureExecutable() skips the write when the exec
+      // bits are already set and tolerates EROFS/EPERM only when the file
+      // is verifiably executable.
       const shPathRoot = join(binPath, 'questdb.sh')
       const shPathBin = join(binPath, 'bin', 'questdb.sh')
 
       if (existsSync(shPathRoot)) {
-        await chmod(shPathRoot, 0o755)
-        logDebug(`Made questdb.sh executable: ${shPathRoot}`)
+        await ensureExecutable(shPathRoot)
+        logDebug(`Ensured questdb.sh is executable: ${shPathRoot}`)
       }
       if (existsSync(shPathBin)) {
-        await chmod(shPathBin, 0o755)
-        logDebug(`Made questdb.sh executable: ${shPathBin}`)
+        await ensureExecutable(shPathBin)
+        logDebug(`Ensured questdb.sh is executable: ${shPathBin}`)
       }
 
       // For macOS structure: create symlink from 'java' to 'jre/bin/java' at base level
