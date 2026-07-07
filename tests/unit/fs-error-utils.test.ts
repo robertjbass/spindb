@@ -10,7 +10,7 @@
 import { describe, it, before, after } from 'node:test'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { mkdir, rm, writeFile, chmod, stat } from 'fs/promises'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { assert, assertEqual } from '../utils/assertions'
 import { ensureExecutable } from '../../core/fs-error-utils'
 
@@ -35,13 +35,18 @@ describe('ensureExecutable', () => {
     }
   })
 
+  // All mode/exec-bit behavior is exercised through the injectable statFn/
+  // chmodFn/accessFn rather than the real filesystem: Windows has no POSIX
+  // exec bits (stat never reports 0o755 and access(X_OK) always passes), so
+  // real-fs assertions fail on the win32 CI runner while the injected paths
+  // behave identically on every platform.
   it('does not call chmod when exec bits are already set', async () => {
     const filePath = join(testDir, 'already-exec.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o755)
 
     let chmodCalled = false
     await ensureExecutable(filePath, {
+      statFn: async () => ({ mode: 0o755 }),
       chmodFn: async () => {
         chmodCalled = true
         throw makeFsError('EROFS', 'read-only file system')
@@ -54,15 +59,19 @@ describe('ensureExecutable', () => {
   it('applies chmod when exec bits are missing on a writable fs', async () => {
     const filePath = join(testDir, 'not-exec.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o644)
 
-    await ensureExecutable(filePath)
+    let appliedMode: number | null = null
+    await ensureExecutable(filePath, {
+      statFn: async () => ({ mode: 0o644 }),
+      chmodFn: async (_path, mode) => {
+        appliedMode = mode
+      },
+    })
 
-    const stats = await stat(filePath)
     assertEqual(
-      stats.mode & 0o755,
+      appliedMode,
       0o755,
-      'file should be chmod-ed to 0o755 on a writable fs',
+      'chmod must be invoked with 0o755 when exec bits are missing',
     )
   })
 
@@ -72,21 +81,17 @@ describe('ensureExecutable', () => {
     // access(X_OK) confirmation shows the file is executable for us.
     const filePath = join(testDir, 'ro-store.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o755)
 
-    const realStats = await stat(filePath)
     let threw = false
     try {
       await ensureExecutable(filePath, {
-        statFn: async () => {
-          // Report owner-exec only so the chmod path is exercised
-          const stats = Object.create(realStats) as typeof realStats
-          Object.defineProperty(stats, 'mode', { value: 0o700 })
-          return stats
-        },
+        // Report owner-exec only so the chmod path is exercised
+        statFn: async () => ({ mode: 0o700 }),
         chmodFn: async () => {
           throw makeFsError('EROFS', 'read-only file system')
         },
+        // access(X_OK) confirms the file is executable for us
+        accessFn: async () => {},
       })
     } catch {
       threw = true
@@ -102,20 +107,15 @@ describe('ensureExecutable', () => {
   it('tolerates EPERM from chmod when the file is already executable', async () => {
     const filePath = join(testDir, 'eperm-store.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o755)
 
-    const realStats = await stat(filePath)
     let threw = false
     try {
       await ensureExecutable(filePath, {
-        statFn: async () => {
-          const stats = Object.create(realStats) as typeof realStats
-          Object.defineProperty(stats, 'mode', { value: 0o700 })
-          return stats
-        },
+        statFn: async () => ({ mode: 0o700 }),
         chmodFn: async () => {
           throw makeFsError('EPERM', 'operation not permitted')
         },
+        accessFn: async () => {},
       })
     } catch {
       threw = true
@@ -131,13 +131,16 @@ describe('ensureExecutable', () => {
   it('rethrows EROFS when the file is NOT executable', async () => {
     const filePath = join(testDir, 'broken-store.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o644)
 
     let caught: NodeJS.ErrnoException | null = null
     try {
       await ensureExecutable(filePath, {
+        statFn: async () => ({ mode: 0o644 }),
         chmodFn: async () => {
           throw makeFsError('EROFS', 'read-only file system')
+        },
+        accessFn: async () => {
+          throw makeFsError('EACCES', 'permission denied')
         },
       })
     } catch (error) {
@@ -154,11 +157,11 @@ describe('ensureExecutable', () => {
   it('rethrows unrelated chmod errors immediately', async () => {
     const filePath = join(testDir, 'enoent-like.sh')
     await writeFile(filePath, '#!/bin/sh\n')
-    await chmod(filePath, 0o644)
 
     let caught: NodeJS.ErrnoException | null = null
     try {
       await ensureExecutable(filePath, {
+        statFn: async () => ({ mode: 0o644 }),
         chmodFn: async () => {
           throw makeFsError('EIO', 'i/o error')
         },
