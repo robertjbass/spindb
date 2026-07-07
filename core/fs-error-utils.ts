@@ -4,7 +4,8 @@
  * Shared error detection and file operation functions for filesystem operations.
  */
 
-import { rename, cp, rm } from 'fs/promises'
+import { rename, cp, rm, stat, chmod, access } from 'fs/promises'
+import { constants } from 'fs'
 import { logDebug } from './error-handler'
 
 /**
@@ -55,6 +56,77 @@ export async function moveEntry(
     } else {
       throw error
     }
+  }
+}
+
+/**
+ * Injectable fs operations for ensureExecutable (used by tests to simulate
+ * read-only filesystems without touching real mount options).
+ */
+export type EnsureExecutableOptions = {
+  /** Target mode when a chmod is needed (default 0o755) */
+  mode?: number
+  /** Override for fs.promises.stat (tests) */
+  statFn?: (path: string) => Promise<{ mode: number }>
+  /** Override for fs.promises.chmod (tests) */
+  chmodFn?: (path: string, mode: number) => Promise<void>
+  /** Override for fs.promises.access (tests) */
+  accessFn?: (path: string, mode?: number) => Promise<void>
+}
+
+/**
+ * Ensure a file has its executable bits set, without writing to filesystems
+ * that are already correct.
+ *
+ * Invariant: post-extract setup must be a no-op against an already-correct
+ * read-only binary store. Layerbase cloud mounts a shared binary store
+ * read-only at ~/.spindb/bin inside user containers; an unconditional chmod
+ * against a file that is already 0o755 throws EROFS there and fails the
+ * whole create (seen with QuestDB's questdb.sh).
+ *
+ * Behavior:
+ * 1. If all executable bits are already set, return without writing.
+ * 2. Otherwise attempt chmod(mode).
+ * 3. If chmod fails with EROFS/EPERM/EACCES (read-only or unwritable store),
+ *    tolerate the failure ONLY when an access(X_OK) check confirms the file
+ *    is already executable; otherwise rethrow the original error loudly.
+ */
+export async function ensureExecutable(
+  filePath: string,
+  options: EnsureExecutableOptions = {},
+): Promise<void> {
+  const {
+    mode = 0o755,
+    statFn = stat,
+    chmodFn = chmod,
+    accessFn = access,
+  } = options
+
+  const stats = await statFn(filePath)
+  const execBits = 0o111
+  if ((stats.mode & execBits) === execBits) {
+    // Already executable everywhere - never write (the store may be read-only)
+    return
+  }
+
+  try {
+    await chmodFn(filePath, mode)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    const unwritableCodes = ['EROFS', 'EPERM', 'EACCES']
+    if (typeof code === 'string' && unwritableCodes.includes(code)) {
+      try {
+        await accessFn(filePath, constants.X_OK)
+        logDebug(
+          `chmod failed with ${code} but file is already executable, continuing`,
+          { filePath },
+        )
+        return
+      } catch {
+        // Not executable and we cannot make it so - fall through and fail loudly
+      }
+    }
+    throw error
   }
 }
 
