@@ -109,9 +109,18 @@ export class ContainerManager {
     const { engine } = options || {}
 
     if (engine) {
-      // SQLite uses registry instead of filesystem
+      // File-based engines (SQLite, DuckDB) are tracked in a registry, not on
+      // the filesystem as a container.json, so resolve their config from the
+      // registry. Missing DuckDB here made getConfig(name, { engine: 'duckdb' })
+      // fall through to the non-existent filesystem path and return null, which
+      // broke `spindb branch` for DuckDB (branch-manager could not read back the
+      // config it had just registered). SQLite worked only because it was
+      // special-cased.
       if (engine === Engine.SQLite) {
         return this.getSqliteConfig(name)
+      }
+      if (engine === Engine.DuckDB) {
+        return this.getDuckDBConfig(name)
       }
 
       // Look in specific engine directory
@@ -245,9 +254,12 @@ export class ContainerManager {
     const { engine } = options || {}
 
     if (engine) {
-      // SQLite uses registry
+      // File-based engines (SQLite, DuckDB) use a registry, not the filesystem.
       if (engine === Engine.SQLite) {
         return sqliteRegistry.exists(name)
+      }
+      if (engine === Engine.DuckDB) {
+        return duckdbRegistry.exists(name)
       }
       const configPath = paths.getContainerConfigPath(name, { engine })
       return existsSync(configPath)

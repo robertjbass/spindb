@@ -1,5 +1,11 @@
-import { describe, it } from 'node:test'
-import { ContainerManager } from '../../core/container-manager'
+import { describe, it, afterEach, mock } from 'node:test'
+import {
+  ContainerManager,
+  containerManager,
+} from '../../core/container-manager'
+import { sqliteRegistry } from '../../engines/sqlite/registry'
+import { duckdbRegistry } from '../../engines/duckdb/registry'
+import { Engine } from '../../types'
 import { assert, assertEqual } from '../utils/assertions'
 
 describe('ContainerManager', () => {
@@ -546,4 +552,52 @@ describe('syncDatabases', () => {
       'Should match primary database',
     )
   })
+})
+
+describe('getConfig with engine scope for file-based engines', () => {
+  afterEach(() => mock.restoreAll())
+
+  // Regression: getConfig(name, { engine }) previously special-cased only
+  // SQLite, so DuckDB fell through to the filesystem container.json path (which
+  // never exists for a file-based engine) and returned null. That made
+  // `spindb branch` fail for DuckDB with "Failed to read branched container
+  // config" while SQLite succeeded. Both file-based engines must resolve their
+  // config from the registry when the engine is specified.
+  for (const engine of [Engine.SQLite, Engine.DuckDB] as const) {
+    it(`resolves ${engine} config from the registry`, async () => {
+      const registry =
+        engine === Engine.SQLite ? sqliteRegistry : duckdbRegistry
+      const filePath = `/tmp/${engine}-scope-test${
+        engine === Engine.SQLite ? '.sqlite' : '.duckdb'
+      }`
+      mock.method(registry, 'get', async () => ({
+        name: 'branch_child',
+        filePath,
+        created: '2026-01-01T00:00:00.000Z',
+        lastVerified: '2026-01-01T00:00:00.000Z',
+        branchParent: 'cloud_source',
+        branchedAt: '2026-01-02T00:00:00.000Z',
+      }))
+
+      const config = await containerManager.getConfig('branch_child', {
+        engine,
+      })
+
+      assert(
+        config !== null,
+        `getConfig(name, { engine: '${engine}' }) must not return null`,
+      )
+      assertEqual(config?.engine, engine, 'Config engine should match')
+      assertEqual(
+        config?.database,
+        filePath,
+        'Config database should be the backing file path',
+      )
+      assertEqual(
+        config?.branchParent,
+        'cloud_source',
+        'Branch lineage should be surfaced',
+      )
+    })
+  }
 })

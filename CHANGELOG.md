@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.61.3] - 2026-07-07
+## [0.61.4] - 2026-07-07
+
+### Fixed
+
+- **`spindb branch` now works for DuckDB (and any file-based engine) when the
+  engine is passed explicitly.** Branching a DuckDB container failed
+  deterministically with `Failed to read branched container config`:
+  after cloning the backing file and registering the new entry,
+  `branch-manager` reads the config back via
+  `containerManager.getConfig(name, { engine })`, but that engine-scoped
+  lookup only special-cased SQLite. DuckDB fell through to the filesystem
+  `container.json` path, which never exists for a file-based engine, so
+  `getConfig` returned `null` and the branch aborted. SQLite branched fine
+  purely because it was the one engine handled. `getConfig` (and the matching
+  `exists`) now resolve both file-based engines from their registry when an
+  engine is specified. Surfaced via Layerbase cloud branching of DuckDB
+  databases; also affected `branch reset` for DuckDB.
 
 ### Fixed
 
