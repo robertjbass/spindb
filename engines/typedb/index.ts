@@ -180,16 +180,45 @@ export class TypeDBEngine extends BaseEngine {
    * Initialize a new TypeDB data directory
    * Creates the directory structure and config.yml for TypeDB
    */
-  // TypeDB 3.11+ binds a dedicated localhost admin port (default 1728, the same
-  // for every server). To let multiple TypeDB containers run at once, give each
-  // its own admin port derived from the container port and offset clear of the
-  // gRPC (port) and HTTP (port + 6271) bands. Returns null for < 3.11, whose
-  // config schema has no `server.admin` block - so existing 3.8.x containers are
-  // left untouched when their config is regenerated.
+  // TypeDB 3.11 introduced a mandatory `server.admin` block whose admin service
+  // listened on a dedicated localhost TCP port (default 1728, the same for every
+  // server). To let multiple 3.11 containers run at once, give each its own admin
+  // port derived from the container port and offset clear of the gRPC (port) and
+  // HTTP (port + 6271) bands.
+  //
+  // TypeDB 3.12 moved the admin service off the network onto an OS socket (UDS on
+  // Unix, DACL-guarded named object on Windows) and made it OFF by default:
+  // `--server.admin.port` was replaced by `--server.admin.socket-path`. Since
+  // spindb never uses the admin tool (users/databases are managed via the console
+  // binary), 3.12+ has no admin TCP port at all - see adminConfigLines().
+  //
+  // Returns the TCP admin port for 3.11.x only; null otherwise (< 3.11 has no
+  // admin block, 3.12+ uses the disabled socket-based default with no port).
   private adminPortFor(version: string, port: number): number | null {
     const [major, minor] = normalizeVersion(version).split('.').map(Number)
-    const supportsAdmin = major > 3 || (major === 3 && minor >= 11)
-    return supportsAdmin ? port + 6372 : null
+    const usesTcpAdminPort = major === 3 && minor === 11
+    return usesTcpAdminPort ? port + 6372 : null
+  }
+
+  // The `server.admin` config lines appropriate for the running TypeDB version.
+  //   < 3.11  -> no admin block (schema predates it)
+  //   3.11.x  -> admin enabled on a unique TCP port (see adminPortFor)
+  //   >= 3.12 -> admin explicitly disabled. The admin service is now an OS socket
+  //              (default socket-path, identical for every server) that spindb
+  //              does not use; leaving it enabled makes concurrent containers
+  //              collide on the same admin socket on Windows, so the second
+  //              server exits early during clone/backup-restore. Disabling it
+  //              matches the vendor default and lets containers run concurrently.
+  private adminConfigLines(version: string, port: number): string[] {
+    const [major, minor] = normalizeVersion(version).split('.').map(Number)
+    if (major < 3 || (major === 3 && minor < 11)) {
+      return []
+    }
+    const adminPort = this.adminPortFor(version, port)
+    if (adminPort !== null) {
+      return ['  admin:', '    enabled: true', `    port: ${adminPort}`]
+    }
+    return ['  admin:', '    enabled: false']
   }
 
   async initDataDir(
@@ -210,7 +239,7 @@ export class TypeDBEngine extends BaseEngine {
     // Get port from options or use default
     const port = (options.port as number) || engineDef.defaultPort
     const httpPort = typedbHttpPort(port) // base + 6271 (8000) by default
-    const adminPort = this.adminPortFor(version, port) // 3.11+ only; null otherwise
+    const adminLines = this.adminConfigLines(version, port) // version-gated block
 
     // Generate config.yml for this container
     // Must include all required sections: server (with authentication, encryption), storage, logging, diagnostics
@@ -224,13 +253,12 @@ export class TypeDBEngine extends BaseEngine {
       '  http:',
       '    enabled: true',
       `    address: ${(options.bindAddress as string) ?? '127.0.0.1'}:${httpPort}`,
-      // TypeDB 3.11+ requires a `server.admin` block (the `port` field is
-      // mandatory). Give each container a unique admin port so concurrent
-      // TypeDB containers don't all fight over the default 1728. Omitted for
-      // < 3.11, which doesn't understand this block.
-      ...(adminPort !== null
-        ? ['  admin:', '    enabled: true', `    port: ${adminPort}`]
-        : []),
+      // TypeDB admin service config, version-gated by adminConfigLines():
+      // 3.11.x gets a unique TCP admin port (avoids the default 1728 collision
+      // between concurrent containers); 3.12+ disables the now-socket-based
+      // admin service (spindb doesn't use it, and enabling it collides on the
+      // shared admin socket across concurrent containers); < 3.11 omits it.
+      ...adminLines,
       '  authentication:',
       '    token-expiration-seconds: 5000',
       '  encryption:',

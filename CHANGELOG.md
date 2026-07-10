@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.61.5] - 2026-07-10
 
+### Fixed
+
+- **TypeDB 3.12 clone / backup-restore now works on Windows.** TypeDB 3.12 moved
+  the local admin service off the network onto an OS socket (UDS on Unix, a
+  DACL-guarded named object on Windows) and made it **off by default**:
+  `server.admin.port` was replaced by `server.admin.socket-path`. spindb still
+  generated `admin: { enabled: true, port: <unique> }`, which 3.12 accepts for a
+  single server but — because the `port` no longer selects a distinct endpoint —
+  makes two concurrent containers collide on the same default admin socket. On
+  Windows the second server exited early (`TypeDB process exited early (code: 0)`),
+  breaking `clone` and backup/restore (both start a second server while the source
+  is running); connection-refused (os error 10061) cascaded from there. spindb
+  never uses the admin tool (users/databases go through the console binary), so
+  the admin block is now version-gated: **3.11.x** keeps its unique TCP admin
+  port, **3.12+** explicitly disables the admin service (matching the vendor
+  default), and pre-3.11 still omits the block. Fixes the `TypeDB 🪟 Win x64`
+  clone/backup-restore integration failures.
+
 ### Changed
 
 - **Pin `hostdb` to `0.34.0`** (was 0.33.5). Adds **TypeDB 3.12.0** and makes it
