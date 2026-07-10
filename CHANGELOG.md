@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.6] - 2026-07-10
+
+### Changed
+
+- Formatting-only release: applied `pnpm format` (prettier) across the repo to
+  clear accumulated drift. No functional changes.
+
 ## [0.61.5] - 2026-07-10
 
 ### Fixed
