@@ -12,6 +12,10 @@
  *   │   └── config.yml          (default config)
  *   ├── console/
  *   │   └── typedb_console_bin  (console binary)
+ *   ├── loader/                 (TypeDB 3.12+ only)
+ *   │   └── typedb_loader_bin   (loader binary)
+ *   ├── admin/                  (TypeDB 3.12+ only; NOT relocated, see below)
+ *   │   └── typedb_admin_bin    (admin binary)
  *   └── LICENSE
  *
  * We reorganize this preserving the relative structure the launcher expects:
@@ -21,7 +25,8 @@
  *   │   └── typedb_server_bin   (server binary)
  *   ├── console/
  *   │   └── typedb_console_bin  (console binary)
- *   └── config.yml              (moved for reference)
+ *   └── loader/                 (only when the archive bundles it, 3.12+)
+ *       └── typedb_loader_bin   (loader binary)
  *   server/
  *   └── config.yml              (default config for reference)
  */
@@ -134,6 +139,26 @@ class TypeDBBinaryManager extends BaseBinaryManager {
     if (existsSync(consoleBinPath)) {
       await moveEntry(consoleBinPath, join(destConsoleDir, consoleBinName))
     }
+
+    // Move loader/ directory into bin/ if present (TypeDB 3.12+ bundles it;
+    // 3.8/3.11 archives do not, so this is conditional and must not fail or
+    // warn for older versions). The launcher resolves the loader at
+    // ${TYPEDB_HOME}/loader/typedb_loader_bin and only enables the `loader`
+    // subcommand when that directory exists, so preserving bin/loader/ here is
+    // what makes `typedb loader` work.
+    const loaderBinName = `typedb_loader_bin${ext}`
+    const loaderBinPath = join(sourceDir, 'loader', loaderBinName)
+    if (existsSync(loaderBinPath)) {
+      const destLoaderDir = join(destBinDir, 'loader')
+      await mkdir(destLoaderDir, { recursive: true })
+      await moveEntry(loaderBinPath, join(destLoaderDir, loaderBinName))
+    }
+
+    // NOTE: We deliberately do NOT relocate admin/typedb_admin_bin. spindb
+    // disables the 3.12+ admin service (adminConfigLines() sets enabled: false),
+    // so the admin tool cannot connect to a spindb-managed server. Shipping it
+    // would only confuse users with a tool that always fails to connect. Users
+    // and databases are managed via the console binary instead.
 
     // Preserve server/config.yml as reference config
     const configPath = join(sourceDir, 'server', 'config.yml')
