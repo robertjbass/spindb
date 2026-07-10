@@ -1226,14 +1226,13 @@ export class MeilisearchEngine extends BaseEngine {
     options?: QueryOptions,
   ): Promise<QueryResult> {
     const { name, port } = container
-    const savedCreds =
-      options?.password
-        ? null
-        : await loadCredentials(
-            name,
-            Engine.Meilisearch,
-            getDefaultUsername(Engine.Meilisearch),
-          )
+    const savedCreds = options?.password
+      ? null
+      : await loadCredentials(
+          name,
+          Engine.Meilisearch,
+          getDefaultUsername(Engine.Meilisearch),
+        )
     const apiKey = options?.password || savedCreds?.apiKey
 
     // Parse the query string: METHOD /path [body]

@@ -168,7 +168,17 @@ export class MySQLEngine extends BaseEngine {
 
     await execFileAsync(
       mysql,
-      ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, '-N', '-e', 'SELECT 1'],
+      [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        auth.user,
+        '-N',
+        '-e',
+        'SELECT 1',
+      ],
       {
         env: buildMysqlEnv(auth.password),
       },
@@ -184,7 +194,17 @@ export class MySQLEngine extends BaseEngine {
 
     await execFileAsync(
       mysql,
-      ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, '-N', '-e', 'SHUTDOWN'],
+      [
+        '-h',
+        '127.0.0.1',
+        '-P',
+        String(port),
+        '-u',
+        auth.user,
+        '-N',
+        '-e',
+        'SHUTDOWN',
+      ],
       {
         env: buildMysqlEnv(auth.password),
         timeout: 5000,
@@ -934,18 +954,22 @@ export class MySQLEngine extends BaseEngine {
     const auth = await this.getLocalAdminAuth(name)
 
     try {
-      await execFileAsync(mysql, [
-        '-h',
-        '127.0.0.1',
-        '-P',
-        String(port),
-        '-u',
-        auth.user,
-        '-e',
-        `CREATE DATABASE IF NOT EXISTS \`${database}\``,
-      ], {
-        env: buildMysqlEnv(auth.password),
-      })
+      await execFileAsync(
+        mysql,
+        [
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String(port),
+          '-u',
+          auth.user,
+          '-e',
+          `CREATE DATABASE IF NOT EXISTS \`${database}\``,
+        ],
+        {
+          env: buildMysqlEnv(auth.password),
+        },
+      )
     } catch (error) {
       const err = error as Error
       if (!err.message.includes('database exists')) {
@@ -965,18 +989,22 @@ export class MySQLEngine extends BaseEngine {
     const auth = await this.getLocalAdminAuth(name)
 
     try {
-      await execFileAsync(mysql, [
-        '-h',
-        '127.0.0.1',
-        '-P',
-        String(port),
-        '-u',
-        auth.user,
-        '-e',
-        `DROP DATABASE IF EXISTS \`${database}\``,
-      ], {
-        env: buildMysqlEnv(auth.password),
-      })
+      await execFileAsync(
+        mysql,
+        [
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String(port),
+          '-u',
+          auth.user,
+          '-e',
+          `DROP DATABASE IF EXISTS \`${database}\``,
+        ],
+        {
+          env: buildMysqlEnv(auth.password),
+        },
+      )
     } catch (error) {
       const err = error as Error
       if (!err.message.includes("database doesn't exist")) {
@@ -995,19 +1023,23 @@ export class MySQLEngine extends BaseEngine {
       const mysql = await this.getMysqlClientPath()
       const auth = await this.getLocalAdminAuth(name)
 
-      const { stdout } = await execFileAsync(mysql, [
-        '-h',
-        '127.0.0.1',
-        '-P',
-        String(port),
-        '-u',
-        auth.user,
-        '-N',
-        '-e',
-        `SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'`,
-      ], {
-        env: buildMysqlEnv(auth.password),
-      })
+      const { stdout } = await execFileAsync(
+        mysql,
+        [
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String(port),
+          '-u',
+          auth.user,
+          '-N',
+          '-e',
+          `SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '${db}'`,
+        ],
+        {
+          env: buildMysqlEnv(auth.password),
+        },
+      )
       const size = parseInt(stdout.trim(), 10)
       return isNaN(size) ? null : size
     } catch {
@@ -1101,19 +1133,23 @@ export class MySQLEngine extends BaseEngine {
     // Get all connection IDs for the target database and kill them
     // We need to do this in two steps since MySQL doesn't support subqueries in KILL
     try {
-      const { stdout } = await execFileAsync(mysql, [
-        '-h',
-        '127.0.0.1',
-        '-P',
-        String(port),
-        '-u',
-        auth.user,
-        '-N',
-        '-e',
-        `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
-      ], {
-        env: buildMysqlEnv(auth.password),
-      })
+      const { stdout } = await execFileAsync(
+        mysql,
+        [
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String(port),
+          '-u',
+          auth.user,
+          '-N',
+          '-e',
+          `SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '${database}' AND ID != CONNECTION_ID()`,
+        ],
+        {
+          env: buildMysqlEnv(auth.password),
+        },
+      )
       const lines = stdout
         .trim()
         .split('\n')
@@ -1126,18 +1162,22 @@ export class MySQLEngine extends BaseEngine {
 
       for (const id of ids) {
         try {
-          await execFileAsync(mysql, [
-            '-h',
-            '127.0.0.1',
-            '-P',
-            String(port),
-            '-u',
-            auth.user,
-            '-e',
-            `KILL CONNECTION ${id}`,
-          ], {
-            env: buildMysqlEnv(auth.password),
-          })
+          await execFileAsync(
+            mysql,
+            [
+              '-h',
+              '127.0.0.1',
+              '-P',
+              String(port),
+              '-u',
+              auth.user,
+              '-e',
+              `KILL CONNECTION ${id}`,
+            ],
+            {
+              env: buildMysqlEnv(auth.password),
+            },
+          )
         } catch {
           // Connection may already be gone
         }
@@ -1158,15 +1198,7 @@ export class MySQLEngine extends BaseEngine {
     const mysql = await this.getMysqlClientPath()
     const auth = await this.getLocalAdminAuth(name)
 
-    const args = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(port),
-      '-u',
-      auth.user,
-      db,
-    ]
+    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, db]
 
     if (options.sql) {
       args.push('-e', options.sql)
@@ -1407,14 +1439,7 @@ export class MySQLEngine extends BaseEngine {
     const sql = `CREATE USER IF NOT EXISTS '${escapedUser}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${escapedUser}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${escapedUser}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${escapedUser}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${escapedDb}\`.* TO '${escapedUser}'@'%'; GRANT ALL ON \`${escapedDb}\`.* TO '${escapedUser}'@'localhost'; FLUSH PRIVILEGES;`
 
     // Send SQL via stdin to avoid leaking password in process argv
-    const args = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(port),
-      '-u',
-      auth.user,
-    ]
+    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(mysql, args, {

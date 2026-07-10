@@ -355,7 +355,10 @@ describe('QuestDB Integration Tests', () => {
   it('should prefer saved admin credentials over legacy generic credentials', async () => {
     console.log('\n Testing saved QuestDB auth-backed backup/restore...')
 
-    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.questdb.base + 20)
+    const allPorts = await findConsecutiveFreePorts(
+      4,
+      TEST_PORTS.questdb.base + 20,
+    )
     const targetPort = allPorts[2]
     const targetName = generateTestName('questdb-auth-target')
     const { tmpdir } = await import('os')
@@ -459,9 +462,9 @@ describe('QuestDB Integration Tests', () => {
       if (targetConfig) {
         await engine.stop(targetConfig).catch(() => {})
         await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
-        await containerManager.delete(targetName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(targetName, { force: true })
+          .catch(() => {})
       }
     }
   })

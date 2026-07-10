@@ -6,7 +6,10 @@
 import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync, createReadStream } from 'fs'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import {
   requireClickHousePath,
@@ -34,9 +37,7 @@ type ClickHouseLocalAuth = {
   password?: string
 }
 
-function buildClickHouseEnv(
-  auth?: ClickHouseLocalAuth,
-): NodeJS.ProcessEnv {
+function buildClickHouseEnv(auth?: ClickHouseLocalAuth): NodeJS.ProcessEnv {
   const env = { ...process.env }
   if (auth?.user) {
     env.CLICKHOUSE_USER = auth.user
@@ -434,8 +435,13 @@ export async function restoreBackup(
   backupPath: string,
   options: RestoreOptions,
 ): Promise<RestoreResult> {
-  const { containerName, port, database = 'default', version, clean = false } =
-    options
+  const {
+    containerName,
+    port,
+    database = 'default',
+    version,
+    clean = false,
+  } = options
 
   if (!existsSync(backupPath)) {
     throw new Error(`Backup file not found: ${backupPath}`)

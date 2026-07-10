@@ -6,7 +6,10 @@
 import { readFile, open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { logDebug } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { couchdbApiRequest } from './api-client'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 

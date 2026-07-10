@@ -10,9 +10,7 @@ import { stat } from 'fs/promises'
 import { join } from 'path'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
-import {
-  platformService,
-} from '../../core/platform-service'
+import { platformService } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
 import { paths } from '../../config/paths'
 import { normalizeVersion } from './version-maps'

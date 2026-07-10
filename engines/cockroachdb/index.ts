@@ -703,11 +703,7 @@ export class CockroachDBEngine extends BaseEngine {
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        cockroach,
-        args,
-        spawnOptions,
-      )
+      const proc = spawn(cockroach, args, spawnOptions)
 
       proc.on('error', reject)
       proc.on('close', () => resolve())
@@ -835,7 +831,10 @@ export class CockroachDBEngine extends BaseEngine {
       containerName: name,
       port,
     })
-    args.push('--execute', `ALTER DATABASE ${escapedOld} RENAME TO ${escapedNew}`)
+    args.push(
+      '--execute',
+      `ALTER DATABASE ${escapedOld} RENAME TO ${escapedNew}`,
+    )
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(cockroach, args, {
@@ -1388,16 +1387,17 @@ export class CockroachDBEngine extends BaseEngine {
     // authenticate as root via the generated client certificate, while end users
     // connect with password-based auth over TLS.
     const escapedPassword = password.replace(/'/g, "''")
-    const sql = [
-      `CREATE USER IF NOT EXISTS ${escapedUser}`,
-      `ALTER USER ${escapedUser} WITH PASSWORD '${escapedPassword}'`,
-      `GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser}`,
-      `GRANT ALL ON SCHEMA public TO ${escapedUser}`,
-      `GRANT ALL ON ALL TABLES IN SCHEMA public TO ${escapedUser}`,
-      `GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${escapedUser}`,
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${escapedUser}`,
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${escapedUser}`,
-    ].join('; ') + ';'
+    const sql =
+      [
+        `CREATE USER IF NOT EXISTS ${escapedUser}`,
+        `ALTER USER ${escapedUser} WITH PASSWORD '${escapedPassword}'`,
+        `GRANT ALL ON DATABASE ${escapedDb} TO ${escapedUser}`,
+        `GRANT ALL ON SCHEMA public TO ${escapedUser}`,
+        `GRANT ALL ON ALL TABLES IN SCHEMA public TO ${escapedUser}`,
+        `GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${escapedUser}`,
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${escapedUser}`,
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${escapedUser}`,
+      ].join('; ') + ';'
 
     const args = buildLocalCockroachSqlArgs({
       containerName: name,

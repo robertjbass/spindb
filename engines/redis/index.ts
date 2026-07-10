@@ -72,9 +72,7 @@ function escapeKeyForCommand(key: string): string {
 }
 const engineDef = getEngineDefaults(ENGINE)
 
-function buildRedisCliEnv(
-  password?: string,
-): NodeJS.ProcessEnv {
+function buildRedisCliEnv(password?: string): NodeJS.ProcessEnv {
   return password
     ? { ...process.env, REDISCLI_AUTH: password }
     : { ...process.env }

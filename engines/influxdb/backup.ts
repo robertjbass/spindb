@@ -7,10 +7,18 @@ import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { paths } from '../../config/paths'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 const ADMIN_TOKEN_FILE = 'admin-token.json'
 
@@ -34,7 +42,11 @@ async function loadInfluxAuthToken(
     // Fall back to saved credentials
   }
 
-  const savedCreds = await loadCredentials(containerName, Engine.InfluxDB, username)
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.InfluxDB,
+    username,
+  )
   return savedCreds?.apiKey
 }
 

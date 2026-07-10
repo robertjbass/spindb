@@ -75,7 +75,10 @@ describe('MongoDB <-> FerretDB backup/restore interoperability', () => {
     await cleanupTestContainers()
     // Separate port blocks so the two engines (ferret reserves aux ports for its
     // backend) never collide.
-    const mongoPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mongodb.base)
+    const mongoPorts = await findConsecutiveFreePorts(
+      3,
+      TEST_PORTS.mongodb.base,
+    )
     const ferretPorts = await findConsecutiveFreePorts(
       3,
       TEST_PORTS.ferretdb.base,

@@ -234,9 +234,7 @@ export async function getMissingDependencies(
  * `true` for `--start`, and `undefined` when neither is passed (check still
  * runs, since the container will be started).
  */
-export function clientToolCheckRequired(options: {
-  start?: boolean
-}): boolean {
+export function clientToolCheckRequired(options: { start?: boolean }): boolean {
   return options.start !== false
 }
 

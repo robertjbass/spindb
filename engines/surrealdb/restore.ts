@@ -7,7 +7,10 @@ import { spawn } from 'child_process'
 import { open } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { logDebug } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   addSurrealAuthArgs,
   getBootstrapSurrealAuth,

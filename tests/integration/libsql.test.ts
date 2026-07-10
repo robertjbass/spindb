@@ -441,7 +441,10 @@ describe('libSQL Integration Tests', () => {
   it('should backup and restore with JWT auth enabled on both source and target', async () => {
     console.log('\n Testing auth-backed libSQL backup/restore...')
 
-    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.libsql.base + 20)
+    const allPorts = await findConsecutiveFreePorts(
+      4,
+      TEST_PORTS.libsql.base + 20,
+    )
     const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
     const sourceName = generateTestName('libsql-auth-source')
     const targetName = generateTestName('libsql-auth-target')
@@ -484,7 +487,10 @@ describe('libSQL Integration Tests', () => {
       assertTruthy(sourceCreds.apiKey, 'Source JWT token should exist')
 
       const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
-      assert(sourceAuthedReady, 'Source libSQL should be ready after auth restart')
+      assert(
+        sourceAuthedReady,
+        'Source libSQL should be ready after auth restart',
+      )
 
       await containerManager.create(targetName, {
         engine: ENGINE,
@@ -509,7 +515,10 @@ describe('libSQL Integration Tests', () => {
       assertTruthy(targetCreds.apiKey, 'Target JWT token should exist')
 
       const targetAuthedReady = await waitForReady(ENGINE, targetPort)
-      assert(targetAuthedReady, 'Target libSQL should be ready after auth restart')
+      assert(
+        targetAuthedReady,
+        'Target libSQL should be ready after auth restart',
+      )
 
       await engine.backup(sourceConfig!, backupPath, {
         database: DATABASE,
@@ -526,7 +535,11 @@ describe('libSQL Integration Tests', () => {
       )
       assertEqual(restored.rowCount, 1, 'Should return a single count row')
       const row = restored.rows[0] as Record<string, unknown>
-      assertEqual(Number(row.count), 3, 'Restored auth-backed libSQL data should match source')
+      assertEqual(
+        Number(row.count),
+        3,
+        'Restored auth-backed libSQL data should match source',
+      )
 
       console.log('   JWT-authenticated libSQL backup/restore succeeded')
     } finally {
@@ -536,18 +549,18 @@ describe('libSQL Integration Tests', () => {
       if (sourceConfig) {
         await engine.stop(sourceConfig).catch(() => {})
         await waitForStopped(sourceName, ENGINE, 60000).catch(() => false)
-        await containerManager.delete(sourceName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(sourceName, { force: true })
+          .catch(() => {})
       }
 
       const targetConfig = await containerManager.getConfig(targetName)
       if (targetConfig) {
         await engine.stop(targetConfig).catch(() => {})
         await waitForStopped(targetName, ENGINE, 60000).catch(() => false)
-        await containerManager.delete(targetName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(targetName, { force: true })
+          .catch(() => {})
       }
     }
   })

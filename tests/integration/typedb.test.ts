@@ -413,7 +413,10 @@ describe('TypeDB Integration Tests', () => {
   it('should backup and restore with saved TypeDB credentials', async () => {
     console.log('\n Testing auth-backed TypeDB backup/restore...')
 
-    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.typedb.base + 20)
+    const allPorts = await findConsecutiveFreePorts(
+      4,
+      TEST_PORTS.typedb.base + 20,
+    )
     const targetPort = allPorts[2]
     const targetName = generateTestName('typedb-auth-test-target')
     const username = getDefaultUsername(ENGINE)
@@ -481,9 +484,16 @@ describe('TypeDB Integration Tests', () => {
         },
       )
 
-      assertEqual(restored.rowCount, 1, 'TypeDB executeQuery should return raw output')
+      assertEqual(
+        restored.rowCount,
+        1,
+        'TypeDB executeQuery should return raw output',
+      )
       const output = restored.rows[0].result as string
-      assert(output.includes('Alice'), 'Restored TypeDB data should include Alice')
+      assert(
+        output.includes('Alice'),
+        'Restored TypeDB data should include Alice',
+      )
       assert(output.includes('Bob'), 'Restored TypeDB data should include Bob')
 
       console.log('   Saved-credential TypeDB backup/restore succeeded')
@@ -498,9 +508,9 @@ describe('TypeDB Integration Tests', () => {
       if (targetConfig) {
         await engine.stop(targetConfig).catch(() => {})
         await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
-        await containerManager.delete(targetName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(targetName, { force: true })
+          .catch(() => {})
       }
     }
   })

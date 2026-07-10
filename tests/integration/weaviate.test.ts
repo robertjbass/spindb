@@ -373,7 +373,10 @@ describe('Weaviate Integration Tests', () => {
     async () => {
       console.log('\n Testing auth-backed Weaviate backup/restore...')
 
-      const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.weaviate.base + 20)
+      const allPorts = await findConsecutiveFreePorts(
+        4,
+        TEST_PORTS.weaviate.base + 20,
+      )
       const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
       const sourceName = generateTestName('weaviate-auth-test-source')
       const targetName = generateTestName('weaviate-auth-test-target')
@@ -424,7 +427,10 @@ describe('Weaviate Integration Tests', () => {
         await saveCredentials(sourceName, ENGINE, sourceCreds)
 
         const sourceAuthedReady = await waitForReady(ENGINE, sourcePort)
-        assert(sourceAuthedReady, 'Source Weaviate should be ready after auth restart')
+        assert(
+          sourceAuthedReady,
+          'Source Weaviate should be ready after auth restart',
+        )
 
         await containerManager.create(targetName, {
           engine: ENGINE,
@@ -440,7 +446,10 @@ describe('Weaviate Integration Tests', () => {
         await containerManager.updateConfig(targetName, { status: 'running' })
 
         const targetReady = await waitForReady(ENGINE, targetPort)
-        assert(targetReady, 'Target Weaviate should be ready before auth config')
+        assert(
+          targetReady,
+          'Target Weaviate should be ready before auth config',
+        )
 
         const targetCreds = await engine.createUser(targetConfig!, {
           username,
@@ -449,7 +458,10 @@ describe('Weaviate Integration Tests', () => {
         await saveCredentials(targetName, ENGINE, targetCreds)
 
         const targetAuthedReady = await waitForReady(ENGINE, targetPort)
-        assert(targetAuthedReady, 'Target Weaviate should be ready after auth restart')
+        assert(
+          targetAuthedReady,
+          'Target Weaviate should be ready after auth restart',
+        )
 
         await engine.stop(targetConfig!)
         await containerManager.updateConfig(targetName, { status: 'stopped' })
@@ -491,7 +503,10 @@ describe('Weaviate Integration Tests', () => {
             }),
           },
         )
-        assert(restoreResponse.ok, 'Auth-backed restore API call should succeed')
+        assert(
+          restoreResponse.ok,
+          'Auth-backed restore API call should succeed',
+        )
 
         let restored = false
         for (let attempt = 0; attempt < 30; attempt++) {
@@ -539,18 +554,18 @@ describe('Weaviate Integration Tests', () => {
         if (sourceConfig) {
           await engine.stop(sourceConfig).catch(() => {})
           await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
-          await containerManager.delete(sourceName, { force: true }).catch(
-            () => {},
-          )
+          await containerManager
+            .delete(sourceName, { force: true })
+            .catch(() => {})
         }
 
         const targetConfig = await containerManager.getConfig(targetName)
         if (targetConfig) {
           await engine.stop(targetConfig).catch(() => {})
           await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
-          await containerManager.delete(targetName, { force: true }).catch(
-            () => {},
-          )
+          await containerManager
+            .delete(targetName, { force: true })
+            .catch(() => {})
         }
       }
     },

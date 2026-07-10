@@ -300,7 +300,12 @@ describe('FerretDB Integration Tests', () => {
     )
 
     // 1. Capture current document count of the seeded collection
-    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const before = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
     assertEqual(
       before,
       EXPECTED_ROW_COUNT,

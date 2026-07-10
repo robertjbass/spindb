@@ -780,11 +780,7 @@ describe('SurrealDB Integration Tests', () => {
         'Source should be ready',
       )
       await runScriptFile(sourceName, SEED_FILE, DATABASE)
-      await createSavedRootScopedUser(
-        sourceConfig!,
-        sourceName,
-        sourcePort,
-      )
+      await createSavedRootScopedUser(sourceConfig!, sourceName, sourcePort)
 
       sourceConfig = await containerManager.getConfig(sourceName)
       assert(sourceConfig !== null, 'Source auth config should exist')
@@ -816,11 +812,7 @@ describe('SurrealDB Integration Tests', () => {
         await waitForReady(ENGINE, targetPort, 60000),
         'Target should be ready',
       )
-      await createSavedRootScopedUser(
-        targetConfig!,
-        targetName,
-        targetPort,
-      )
+      await createSavedRootScopedUser(targetConfig!, targetName, targetPort)
 
       const backupResult = await engine.backup(sourceConfig!, backupPath, {
         database: DATABASE,

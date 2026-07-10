@@ -250,7 +250,9 @@ describe('CockroachDB Integration Tests', () => {
   })
 
   it('clean restore (--into-existing semantics) REPLACES contents into the live DB without dropping it', async () => {
-    console.log(`\n Testing clean restore replaces (not merges) into live DB...`)
+    console.log(
+      `\n Testing clean restore replaces (not merges) into live DB...`,
+    )
 
     const config = await containerManager.getConfig(containerName)
     assert(config !== null, 'Source container config should exist')
@@ -258,7 +260,12 @@ describe('CockroachDB Integration Tests', () => {
     const engine = getEngine(ENGINE)
 
     // 1. Capture current row count of the live, running source DB
-    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const before = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
 
     // 2. Back up the current state (this snapshot does NOT contain the extra row)
     const { tmpdir } = await import('os')

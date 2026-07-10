@@ -88,7 +88,9 @@ async function restoreSnapshotBackup(
   containerName: string,
   dataDir?: string,
 ): Promise<RestoreResult> {
-  const containerDir = paths.getContainerPath(containerName, { engine: 'qdrant' })
+  const containerDir = paths.getContainerPath(containerName, {
+    engine: 'qdrant',
+  })
   const targetDir =
     dataDir || paths.getContainerDataPath(containerName, { engine: 'qdrant' })
   const snapshotsDir = join(targetDir, 'snapshots')
@@ -118,8 +120,7 @@ async function restoreSnapshotBackup(
 
   return {
     format: 'snapshot',
-    stdout:
-      `Restored snapshot to ${targetPath}. Next start will load the storage snapshot automatically.`,
+    stdout: `Restored snapshot to ${targetPath}. Next start will load the storage snapshot automatically.`,
     code: 0,
   }
 }

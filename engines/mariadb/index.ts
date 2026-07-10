@@ -11,10 +11,7 @@ import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { memoryBudgetArgs } from '../../core/memory-budget'
-import {
-  platformService,
-  isWindows,
-} from '../../core/platform-service'
+import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
 import {
   getDefaultUsername,
@@ -1066,16 +1063,18 @@ export class MariaDBEngine extends BaseEngine {
     ]
 
     try {
-      const { stdout } = await runMariaDbBinary(getIdsArgs[0], getIdsArgs.slice(1), {
-        password: auth.password,
-      })
+      const { stdout } = await runMariaDbBinary(
+        getIdsArgs[0],
+        getIdsArgs.slice(1),
+        {
+          password: auth.password,
+        },
+      )
       const lines = stdout
         .trim()
         .split('\n')
         .filter((l) => l.trim())
-      const ids = lines
-        .map((l) => l.trim())
-        .filter((l) => /^\d+$/.test(l))
+      const ids = lines.map((l) => l.trim()).filter((l) => /^\d+$/.test(l))
 
       for (const id of ids) {
         const killArgs = [
@@ -1113,15 +1112,7 @@ export class MariaDBEngine extends BaseEngine {
     const mysql = await this.getMariadbClientPath()
     const auth = await this.getLocalAdminAuth(name)
 
-    const args = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(port),
-      '-u',
-      auth.user,
-      db,
-    ]
+    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user, db]
 
     if (options.sql) {
       args.push('-e', options.sql)
@@ -1353,14 +1344,7 @@ export class MariaDBEngine extends BaseEngine {
     const sql = `CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${escapedPass}'; CREATE USER IF NOT EXISTS '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'%' IDENTIFIED BY '${escapedPass}'; ALTER USER '${username}'@'localhost' IDENTIFIED BY '${escapedPass}'; GRANT ALL ON \`${db}\`.* TO '${username}'@'%'; GRANT ALL ON \`${db}\`.* TO '${username}'@'localhost'; FLUSH PRIVILEGES;`
 
     // Send SQL via stdin to avoid leaking password in process argv
-    const args = [
-      '-h',
-      '127.0.0.1',
-      '-P',
-      String(port),
-      '-u',
-      auth.user,
-    ]
+    const args = ['-h', '127.0.0.1', '-P', String(port), '-u', auth.user]
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(mariadb, args, {

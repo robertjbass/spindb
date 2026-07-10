@@ -403,7 +403,11 @@ describe('remote-container', () => {
         provider: 'neon',
       })
       assertEqual(config.host, 'db.neon.tech', 'host should match')
-      assertEqual(config.origin, 'external', 'origin should default to external')
+      assertEqual(
+        config.origin,
+        'external',
+        'origin should default to external',
+      )
       assertEqual(config.ssl, true, 'SSL should be true for remote host')
       assertEqual(config.provider, 'neon', 'provider should be neon')
       assert(

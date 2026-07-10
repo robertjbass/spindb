@@ -23,9 +23,7 @@ type ValkeyCliAuth = {
   password?: string
 }
 
-function shouldPassValkeyCliUsername(
-  username?: string,
-): username is string {
+function shouldPassValkeyCliUsername(username?: string): username is string {
   if (!username) {
     return false
   }

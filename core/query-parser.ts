@@ -28,7 +28,9 @@ export function parseCSVToQueryResult(csv: string): QueryResult {
   const nonEmptyLines = lines.filter((l) => l.trim())
   if (nonEmptyLines.every((l) => PG_COMMAND_TAG.test(l.trim()))) {
     const lastTag = nonEmptyLines[nonEmptyLines.length - 1].trim()
-    const countMatch = lastTag.match(/^(?:INSERT \d+ |UPDATE |DELETE |MERGE |COPY |SELECT )(\d+)$/)
+    const countMatch = lastTag.match(
+      /^(?:INSERT \d+ |UPDATE |DELETE |MERGE |COPY |SELECT )(\d+)$/,
+    )
     return {
       columns: [],
       rows: [],

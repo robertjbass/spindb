@@ -37,7 +37,8 @@ function buildVersionMap(engine: string): Record<string, string> {
   return map
 }
 
-export const FERRETDB_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const FERRETDB_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const DOCUMENTDB_VERSION_MAP: Record<string, string> =
   buildVersionMap(DOCUMENTDB_ENGINE)

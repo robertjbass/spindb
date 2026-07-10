@@ -67,13 +67,19 @@ if (!targetVersion) {
 }
 
 if (!/^\d+\.\d+\.\d+$/.test(targetVersion)) {
-  console.error(`Target version must be exact semver (e.g., 0.31.0). Got: ${targetVersion}`)
+  console.error(
+    `Target version must be exact semver (e.g., 0.31.0). Got: ${targetVersion}`,
+  )
   process.exit(2)
 }
 
 console.log(`\nVerifying hostdb@${targetVersion} exists on npm...`)
 try {
-  const published = execCapture('npm', ['view', `hostdb@${targetVersion}`, 'version'])
+  const published = execCapture('npm', [
+    'view',
+    `hostdb@${targetVersion}`,
+    'version',
+  ])
   if (published !== targetVersion) {
     throw new Error(`npm returned ${published}, not ${targetVersion}`)
   }
@@ -82,15 +88,17 @@ try {
   console.error(
     `\n✗ hostdb@${targetVersion} is NOT on npm yet. The publish workflow needs to complete first.`,
   )
+  console.error(`  Check: gh workflow view publish.yml (in ~/dev/hostdb)`)
   console.error(
-    `  Check: gh workflow view publish.yml (in ~/dev/hostdb)`,
+    `  Or:    npm view hostdb version  (should return ${targetVersion})`,
   )
-  console.error(`  Or:    npm view hostdb version  (should return ${targetVersion})`)
   console.error(`\nUnderlying error: ${err.message}`)
   process.exit(3)
 }
 
-console.log(`\nUpdating package.json: hostdb -> ${targetVersion} (exact pin)...`)
+console.log(
+  `\nUpdating package.json: hostdb -> ${targetVersion} (exact pin)...`,
+)
 const pkgPath = join(ROOT, 'package.json')
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
 const previous = pkg.dependencies.hostdb
@@ -119,4 +127,6 @@ console.log(
   `  git add package.json pnpm-lock.yaml && git commit -m "chore(deps): pin hostdb ${targetVersion}"`,
 )
 console.log(`  git push`)
-console.log(`\nNow safe to merge upgrade/spindb-hostdb-integration -> dev -> main.`)
+console.log(
+  `\nNow safe to merge upgrade/spindb-hostdb-integration -> dev -> main.`,
+)

@@ -39,7 +39,10 @@ describe('PostgreSQL Restore Module', () => {
       // object so the result REPLACES the contents (not merges into them), while
       // leaving the database itself (and its open connections) untouched.
       const cmd = buildPgRestoreCommand({ ...base, clean: true })
-      assert(cmd.includes('--clean --if-exists'), 'includes --clean --if-exists')
+      assert(
+        cmd.includes('--clean --if-exists'),
+        'includes --clean --if-exists',
+      )
       // ordering: clean flags before the format flag and the file
       assert(
         cmd.indexOf('--clean --if-exists') < cmd.indexOf('-Fc'),

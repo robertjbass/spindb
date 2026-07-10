@@ -22,7 +22,10 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   logDebug,
   logWarning,
@@ -199,9 +202,7 @@ export class SurrealDBEngine extends BaseEngine {
     )
   }
 
-  private async getLocalAuth(
-    containerName: string,
-  ): Promise<LocalSurrealAuth> {
+  private async getLocalAuth(containerName: string): Promise<LocalSurrealAuth> {
     const savedCreds = await loadCredentials(
       containerName,
       Engine.SurrealDB,
@@ -237,7 +238,11 @@ export class SurrealDBEngine extends BaseEngine {
     logDebug(
       `Loading credentials for ${name} engine=${Engine.SurrealDB} username=${defaultUser}`,
     )
-    const savedCreds = await loadCredentials(name, Engine.SurrealDB, defaultUser)
+    const savedCreds = await loadCredentials(
+      name,
+      Engine.SurrealDB,
+      defaultUser,
+    )
     logDebug(
       `loadCredentials result: ${savedCreds ? `user=${savedCreds.username}` : 'null (using root/root fallback)'}`,
     )

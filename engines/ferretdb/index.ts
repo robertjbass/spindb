@@ -34,7 +34,10 @@ import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { containerManager } from '../../core/container-manager'
 import {
   logDebug,
@@ -1275,14 +1278,7 @@ export class FerretDBEngine extends BaseEngine {
     const savedCreds = await this.getLocalAuth(container.name)
     const connectHost = normalizeMongoHost(container.bindAddress)
     const args = savedCreds
-      ? [
-          buildMongoUri(
-            container.port,
-            database,
-            savedCreds,
-            connectHost,
-          ),
-        ]
+      ? [buildMongoUri(container.port, database, savedCreds, connectHost)]
       : ['--host', connectHost, '--port', String(container.port), database]
 
     if (options?.quiet) {
@@ -1295,7 +1291,12 @@ export class FerretDBEngine extends BaseEngine {
   private async runLocalMongosh(
     container: ContainerConfig,
     database: string,
-    options: { eval?: string; file?: string; quiet?: boolean; timeoutMs?: number },
+    options: {
+      eval?: string
+      file?: string
+      quiet?: boolean
+      timeoutMs?: number
+    },
   ): Promise<{ stdout: string; stderr: string }> {
     const mongosh = await this.getMongoshPath()
     const args = await this.buildLocalMongoshArgs(container, database, {
@@ -1408,7 +1409,8 @@ export class FerretDBEngine extends BaseEngine {
     backupPath: string,
     options: Record<string, unknown> = {},
   ): Promise<RestoreResult> {
-    const database = (options.database as string) || container.database || 'test'
+    const database =
+      (options.database as string) || container.database || 'test'
 
     // Validate database name before restore (defense-in-depth)
     assertValidDatabaseName(database)
@@ -1716,12 +1718,7 @@ export class FerretDBEngine extends BaseEngine {
       const connectHost = normalizeMongoHost(container.bindAddress)
       args = savedCreds
         ? [
-            buildMongoUri(
-              port,
-              db,
-              savedCreds,
-              connectHost,
-            ),
+            buildMongoUri(port, db, savedCreds, connectHost),
             '--quiet',
             '--eval',
             script,

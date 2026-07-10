@@ -814,7 +814,9 @@ describe('MySQL Integration Tests', () => {
   })
 
   it('should backup and restore with password-authenticated local root credentials', async () => {
-    console.log(`\n🔐 Testing auth-aware MySQL backup/restore on local containers...`)
+    console.log(
+      `\n🔐 Testing auth-aware MySQL backup/restore on local containers...`,
+    )
 
     const [sourcePort, targetPort] = await findConsecutiveFreePorts(
       2,
@@ -855,7 +857,10 @@ describe('MySQL Integration Tests', () => {
       )
     }
 
-    const waitForAuthedReady = async (containerName: string, timeoutMs = 30000) => {
+    const waitForAuthedReady = async (
+      containerName: string,
+      timeoutMs = 30000,
+    ) => {
       const start = Date.now()
       let lastError: string | null = null
 
@@ -863,11 +868,9 @@ describe('MySQL Integration Tests', () => {
         try {
           const config = await containerManager.getConfig(containerName)
           if (config) {
-            const result = await engine.executeQuery(
-              config,
-              'SELECT 1 AS ok',
-              { database: DATABASE },
-            )
+            const result = await engine.executeQuery(config, 'SELECT 1 AS ok', {
+              database: DATABASE,
+            })
             if (result.rowCount === 1) {
               return { ready: true, lastError: null }
             }
@@ -904,7 +907,10 @@ describe('MySQL Integration Tests', () => {
       await writeDefaultCredentialFile(containerName, port, password)
 
       const config = await containerManager.getConfig(containerName)
-      assert(config !== null, 'Container config should exist before auth restart')
+      assert(
+        config !== null,
+        'Container config should exist before auth restart',
+      )
       await engine.stop(config!)
       await containerManager.updateConfig(containerName, { status: 'stopped' })
       const stopped = await waitForStopped(containerName, ENGINE)
@@ -934,7 +940,10 @@ describe('MySQL Integration Tests', () => {
       assert(sourceConfig !== null, 'Source config should exist')
       await engine.start(sourceConfig!)
       await containerManager.updateConfig(sourceName, { status: 'running' })
-      assert(await waitForReady(ENGINE, sourcePort), 'Source MySQL should be ready')
+      assert(
+        await waitForReady(ENGINE, sourcePort),
+        'Source MySQL should be ready',
+      )
       await engine.createDatabase(sourceConfig!, DATABASE)
       await runScriptFile(sourceName, SEED_FILE, DATABASE)
 
@@ -952,7 +961,10 @@ describe('MySQL Integration Tests', () => {
       assert(targetConfig !== null, 'Target config should exist')
       await engine.start(targetConfig!)
       await containerManager.updateConfig(targetName, { status: 'running' })
-      assert(await waitForReady(ENGINE, targetPort), 'Target MySQL should be ready')
+      assert(
+        await waitForReady(ENGINE, targetPort),
+        'Target MySQL should be ready',
+      )
       await engine.createDatabase(targetConfig!, DATABASE)
 
       await enableRootPasswordAuth(targetName, targetPort, targetPassword)
