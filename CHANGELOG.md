@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.5] - 2026-07-10
+
+### Changed
+
+- **Pin `hostdb` to `0.34.0`** (was 0.33.5). Adds **TypeDB 3.12.0** and makes it
+  the default for the `3` major: `defaults["3"]` now resolves to 3.12.0, so new
+  `typedb 3` containers provision the current release instead of 3.11.5. TypeDB
+  **3.11.5** is deprecated in hostdb (hidden from discovery) but remains fully
+  resolvable and downloadable for existing containers. The TypeDB version-map
+  wrapper rebuilds from hostdb's bundled snapshot at load time, so no MAP edits
+  were needed; `TYPEDB_VERSION_MAP["3"]` is now `3.12.0`. `pnpm test:hostdb-sync`
+  and the unit suite pass against the new snapshot.
+
 ## [0.61.4] - 2026-07-07
 
 ### Fixed
