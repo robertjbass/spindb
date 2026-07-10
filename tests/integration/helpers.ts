@@ -314,7 +314,10 @@ export async function executeSQL(
         `Could not find CockroachDB container config for port ${port}`,
       )
     }
-    const certsDir = join(paths.getContainerPath(config.name, { engine }), 'certs')
+    const certsDir = join(
+      paths.getContainerPath(config.name, { engine }),
+      'certs',
+    )
     const cmd = `"${cockroachPath}" sql --certs-dir "${certsDir}" --user root --host 127.0.0.1:${port} --database ${database} --execute "${sql.replace(/"/g, '\\"')}"`
     return execAsync(cmd)
   } else if (engine === Engine.SurrealDB) {
@@ -378,9 +381,8 @@ export async function executeSQL(
     const consolePath = await engineImpl.getTypeDBConsolePath(
       TEST_VERSIONS.typedb,
     )
-    const { getConsoleBaseArgs } = await import(
-      '../../engines/typedb/cli-utils'
-    )
+    const { getConsoleBaseArgs } =
+      await import('../../engines/typedb/cli-utils')
     const { spawn } = await import('child_process')
     const { writeFile, unlink } = await import('fs/promises')
     const { tmpdir } = await import('os')
@@ -519,7 +521,10 @@ export async function executeSQLFile(
         `Could not find CockroachDB container config for port ${port}`,
       )
     }
-    const certsDir = join(paths.getContainerPath(config.name, { engine }), 'certs')
+    const certsDir = join(
+      paths.getContainerPath(config.name, { engine }),
+      'certs',
+    )
     // CockroachDB uses --file flag for SQL files
     const cmd = `"${cockroachPath}" sql --certs-dir "${certsDir}" --user root --host 127.0.0.1:${port} --database ${database} --file "${filePath}"`
     return execAsync(cmd)
@@ -550,9 +555,8 @@ export async function executeSQLFile(
     const consolePath = await engineImpl.getTypeDBConsolePath(
       TEST_VERSIONS.typedb,
     )
-    const { getConsoleBaseArgs } = await import(
-      '../../engines/typedb/cli-utils'
-    )
+    const { getConsoleBaseArgs } =
+      await import('../../engines/typedb/cli-utils')
     const args = [...getConsoleBaseArgs(port), '--script', filePath]
     const cmd = `"${consolePath}" ${args.map((a) => `"${a}"`).join(' ')}`
     return execAsync(cmd)
@@ -605,7 +609,9 @@ export async function getRowCount(
 
     const rawCount = result.rows[0]?.count
     const count =
-      typeof rawCount === 'number' ? rawCount : Number.parseInt(String(rawCount), 10)
+      typeof rawCount === 'number'
+        ? rawCount
+        : Number.parseInt(String(rawCount), 10)
 
     if (!Number.isNaN(count)) {
       return count
@@ -875,18 +881,13 @@ export async function waitForReady(
           const upData = (await upResponse.json()) as { status?: string }
           if (upData?.status !== 'ok') {
             clearTimeout(timeoutId)
-            throw new Error(
-              `CouchDB /_up status=${upData?.status}, not ready`,
-            )
+            throw new Error(`CouchDB /_up status=${upData?.status}, not ready`)
           }
           const probeResponse = await fetch(
             `http://127.0.0.1:${port}/_spindb_test_probe`,
             { signal: controller.signal },
           )
-          if (
-            probeResponse.status !== 404 &&
-            probeResponse.status !== 401
-          ) {
+          if (probeResponse.status !== 404 && probeResponse.status !== 401) {
             clearTimeout(timeoutId)
             throw new Error(
               `CouchDB DB-lookup probe returned ${probeResponse.status}, cluster not ready`,
@@ -1605,7 +1606,9 @@ export async function createCouchDBDatabase(
     const err = error as Error & { cause?: { code?: string; message?: string } }
     console.error(
       `createCouchDBDatabase PUT ${url} threw ${err.name}: ${err.message}` +
-        (err.cause ? ` (cause.code=${err.cause.code} cause.message=${err.cause.message})` : ''),
+        (err.cause
+          ? ` (cause.code=${err.cause.code} cause.message=${err.cause.message})`
+          : ''),
     )
     return false
   }

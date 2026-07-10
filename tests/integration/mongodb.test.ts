@@ -395,7 +395,12 @@ describe('MongoDB Integration Tests', () => {
     assert(config !== null, 'Container config should exist')
 
     // 1. Capture the current document count of the seeded collection
-    const before = await getRowCount(ENGINE, testPorts[0], DATABASE, 'test_user')
+    const before = await getRowCount(
+      ENGINE,
+      testPorts[0],
+      DATABASE,
+      'test_user',
+    )
 
     // 2. Back up the live database (archive format, same as the backup tests above)
     const { tmpdir } = await import('os')
@@ -767,7 +772,10 @@ describe('MongoDB Integration Tests', () => {
     const targetPassword = 'targetpass456'
     const { tmpdir } = await import('os')
     const { mkdir, rm, writeFile } = await import('fs/promises')
-    const backupPath = join(tmpdir(), `mongodb-auth-backup-${Date.now()}.archive`)
+    const backupPath = join(
+      tmpdir(),
+      `mongodb-auth-backup-${Date.now()}.archive`,
+    )
     const engine = getEngine(ENGINE)
 
     const writeDefaultCredentialFile = async (
@@ -961,7 +969,9 @@ describe('MongoDB Integration Tests', () => {
       }
     }
 
-    console.log('   ✓ Backup and restore work with password-authenticated MongoDB')
+    console.log(
+      '   ✓ Backup and restore work with password-authenticated MongoDB',
+    )
   })
 
   it('should have no test containers remaining', async () => {

@@ -7,16 +7,12 @@ type RedisCliAuth = {
 }
 
 function getRedisCliErrorMarkers(): RegExp[] {
-  return [
-    /^ERR\b/m,
-    /\bNOAUTH\b/,
-    /\bWRONGPASS\b/,
-    /\bNOPERM\b/,
-    /\bACL\b/,
-  ]
+  return [/^ERR\b/m, /\bNOAUTH\b/, /\bWRONGPASS\b/, /\bNOPERM\b/, /\bACL\b/]
 }
 
-export function shouldPassRedisCliUsername(username?: string): username is string {
+export function shouldPassRedisCliUsername(
+  username?: string,
+): username is string {
   if (!username) {
     return false
   }

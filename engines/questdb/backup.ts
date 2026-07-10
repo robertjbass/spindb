@@ -15,7 +15,11 @@ import { writeFile, stat } from 'fs/promises'
 import { spawn } from 'child_process'
 import { configManager } from '../../core/config-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
-import { type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 import { loadLocalQuestAuth, type QuestLocalAuth } from './auth'
 
 /**

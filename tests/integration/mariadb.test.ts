@@ -848,7 +848,10 @@ describe('MariaDB Integration Tests', () => {
       )
     }
 
-    const waitForAuthedReady = async (containerName: string, timeoutMs = 30000) => {
+    const waitForAuthedReady = async (
+      containerName: string,
+      timeoutMs = 30000,
+    ) => {
       const start = Date.now()
       let lastError: string | null = null
 
@@ -856,11 +859,9 @@ describe('MariaDB Integration Tests', () => {
         try {
           const config = await containerManager.getConfig(containerName)
           if (config) {
-            const result = await engine.executeQuery(
-              config,
-              'SELECT 1 AS ok',
-              { database: DATABASE },
-            )
+            const result = await engine.executeQuery(config, 'SELECT 1 AS ok', {
+              database: DATABASE,
+            })
             if (result.rowCount === 1) {
               return { ready: true, lastError: null }
             }
@@ -896,7 +897,10 @@ describe('MariaDB Integration Tests', () => {
       await writeDefaultCredentialFile(containerName, port, password)
 
       const config = await containerManager.getConfig(containerName)
-      assert(config !== null, 'Container config should exist before auth restart')
+      assert(
+        config !== null,
+        'Container config should exist before auth restart',
+      )
       await engine.stop(config!)
       await containerManager.updateConfig(containerName, { status: 'stopped' })
       const stopped = await waitForStopped(containerName, ENGINE)

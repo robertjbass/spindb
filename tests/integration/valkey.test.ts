@@ -694,9 +694,8 @@ describe('Valkey Integration Tests', () => {
     const sourcePassword = 'sourcepass123'
     const targetPassword = 'targetpass456'
     const { tmpdir } = await import('os')
-    const { appendFile, mkdir, readFile, rm, writeFile } = await import(
-      'fs/promises'
-    )
+    const { appendFile, mkdir, readFile, rm, writeFile } =
+      await import('fs/promises')
     const backupPath = join(tmpdir(), `valkey-auth-backup-${Date.now()}.valkey`)
     const engine = getEngine(ENGINE)
 
@@ -841,10 +840,14 @@ describe('Valkey Integration Tests', () => {
       assert(await waitForReady(ENGINE, targetPort), 'Target should be ready')
       await enableRequirePass(targetName, targetPort, targetPassword)
 
-      const backupResult = await engine.backup(sourceAuthedConfig!, backupPath, {
-        database: DATABASE,
-        format: 'text',
-      })
+      const backupResult = await engine.backup(
+        sourceAuthedConfig!,
+        backupPath,
+        {
+          database: DATABASE,
+          format: 'text',
+        },
+      )
       assertEqual(backupResult.format, 'text', 'Backup should use text format')
       const backupContent = await readFile(backupPath, 'utf-8')
       assert(
@@ -854,10 +857,14 @@ describe('Valkey Integration Tests', () => {
 
       const targetAuthedConfig = await containerManager.getConfig(targetName)
       assert(targetAuthedConfig !== null, 'Target auth config should exist')
-      const restoreResult = await engine.restore(targetAuthedConfig!, backupPath, {
-        database: DATABASE,
-        flush: true,
-      })
+      const restoreResult = await engine.restore(
+        targetAuthedConfig!,
+        backupPath,
+        {
+          database: DATABASE,
+          flush: true,
+        },
+      )
       assert(
         !restoreResult.stdout?.includes('NOAUTH') &&
           !restoreResult.stdout?.includes('WRONGPASS') &&

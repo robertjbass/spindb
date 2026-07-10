@@ -153,7 +153,10 @@ describe('cow-copy: isTransientReflinkError (EAGAIN retry classifier)', () => {
       ),
       false,
     )
-    assert.equal(isTransientReflinkError(new Error('some other failure')), false)
+    assert.equal(
+      isTransientReflinkError(new Error('some other failure')),
+      false,
+    )
     assert.equal(isTransientReflinkError('plain string error'), false)
   })
 })

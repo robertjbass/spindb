@@ -602,7 +602,9 @@ describe('JSON Output Validation', () => {
       // TypeDB's HTTP-API offset is runtime-configurable (SPINDB_TYPEDB_HTTP_OFFSET),
       // so it is deliberately NOT a static auxPort.
       if (engines.typedb.auxPorts.length !== 0) {
-        throw new Error('typedb.auxPorts should be empty (offset is env-driven)')
+        throw new Error(
+          'typedb.auxPorts should be empty (offset is env-driven)',
+        )
       }
     })
 

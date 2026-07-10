@@ -45,7 +45,10 @@ export function getBundledBinaryPath(
 
   for (const entry of installed) {
     // Match same-major installs (version === "18" or starts with "18.")
-    if (entry.version !== majorVersion && !entry.version.startsWith(majorPrefix)) {
+    if (
+      entry.version !== majorVersion &&
+      !entry.version.startsWith(majorPrefix)
+    ) {
       continue
     }
 

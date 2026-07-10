@@ -367,9 +367,9 @@ describe('Meilisearch Integration Tests', () => {
           if (config) {
             await engine.stop(config).catch(() => {})
             await waitForStopped(cleanupName, ENGINE).catch(() => false)
-            await containerManager.delete(cleanupName, { force: true }).catch(
-              () => {},
-            )
+            await containerManager
+              .delete(cleanupName, { force: true })
+              .catch(() => {})
           }
         }
         await rm(backupPath, { force: true })

@@ -328,7 +328,6 @@ async function restoreTextBackup(
       fileStream.destroy()
       lineReader.close()
     })
-
     ;(async () => {
       try {
         for await (const rawLine of lineReader) {

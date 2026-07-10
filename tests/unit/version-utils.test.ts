@@ -13,7 +13,10 @@ describe('isShorthandVersion', () => {
     it('2-part is shorthand', () => {
       assert(isShorthandVersion('8.4') === true, "'8.4' should be shorthand")
       assert(isShorthandVersion('11.8') === true, "'11.8' should be shorthand")
-      assert(isShorthandVersion('25.12') === true, "'25.12' should be shorthand")
+      assert(
+        isShorthandVersion('25.12') === true,
+        "'25.12' should be shorthand",
+      )
     })
 
     it('3-part is full', () => {
@@ -21,14 +24,8 @@ describe('isShorthandVersion', () => {
         isShorthandVersion('17.10.0') === false,
         "'17.10.0' should be full",
       )
-      assert(
-        isShorthandVersion('11.8.6') === false,
-        "'11.8.6' should be full",
-      )
-      assert(
-        isShorthandVersion('8.0.23') === false,
-        "'8.0.23' should be full",
-      )
+      assert(isShorthandVersion('11.8.6') === false, "'11.8.6' should be full")
+      assert(isShorthandVersion('8.0.23') === false, "'8.0.23' should be full")
     })
 
     it('4-part ClickHouse is full', () => {

@@ -12,10 +12,21 @@ import { existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { mkdir } from 'fs/promises'
 import { logDebug } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { buildMongoUri } from '../mongo-uri'
-import { getMongodumpPath, MONGODUMP_NOT_FOUND_ERROR } from '../mongodb/cli-utils'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  getMongodumpPath,
+  MONGODUMP_NOT_FOUND_ERROR,
+} from '../mongodb/cli-utils'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 function redactMongoUri(uri: string): string {
   try {
@@ -73,22 +84,20 @@ export async function createBackup(
   const args: string[] = savedCreds
     ? [
         '--uri',
-        buildMongoUri(port, database, {
-          username: savedCreds.username,
-          password: savedCreds.password,
-          authDatabase: savedCreds.database || 'admin',
-        }, container.bindAddress ?? '127.0.0.1'),
+        buildMongoUri(
+          port,
+          database,
+          {
+            username: savedCreds.username,
+            password: savedCreds.password,
+            authDatabase: savedCreds.database || 'admin',
+          },
+          container.bindAddress ?? '127.0.0.1',
+        ),
         '--db',
         database,
       ]
-    : [
-        '--host',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--db',
-        database,
-      ]
+    : ['--host', '127.0.0.1', '--port', String(port), '--db', database]
 
   // FerretDB now uses Mongo-compatible backup formats under the hood:
   // - archive: single compressed file

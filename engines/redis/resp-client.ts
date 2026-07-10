@@ -82,7 +82,9 @@ function parseReply(
       return { value: items, offset: cur }
     }
     default:
-      throw new Error(`Unsupported RESP reply type: ${String.fromCharCode(type)}`)
+      throw new Error(
+        `Unsupported RESP reply type: ${String.fromCharCode(type)}`,
+      )
   }
 }
 
@@ -114,13 +116,12 @@ export class RespClient {
     this.socket = socket
     socket.on('data', (chunk: Buffer) => this.onData(chunk))
     socket.on('error', (err: Error) => this.onFatal(err))
-    socket.on('close', () =>
-      this.onFatal(new Error('Redis connection closed')),
-    )
+    socket.on('close', () => this.onFatal(new Error('Redis connection closed')))
   }
 
   private onData(chunk: Buffer): void {
-    this.inbox = this.inbox.length === 0 ? chunk : Buffer.concat([this.inbox, chunk])
+    this.inbox =
+      this.inbox.length === 0 ? chunk : Buffer.concat([this.inbox, chunk])
     let offset = 0
     for (;;) {
       const parsed = parseReply(this.inbox, offset)
@@ -222,7 +223,10 @@ export class RespClient {
 
   // One SCAN step. Returns the next cursor ('0' when complete) and the batch of
   // keys as Buffers (binary-safe).
-  async scan(cursor: string, count: number): Promise<{
+  async scan(
+    cursor: string,
+    count: number,
+  ): Promise<{
     cursor: string
     keys: Buffer[]
   }> {

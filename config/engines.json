@@ -12,11 +12,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "postgresql",
       "superuser": "postgres",
-      "clientTools": [
-        "psql",
-        "pg_dump",
-        "pg_restore"
-      ],
+      "clientTools": ["psql", "pg_dump", "pg_restore"],
       "notes": "Windows uses EDB binaries instead of hostdb"
     },
     "mysql": {
@@ -30,11 +26,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "mysql",
       "superuser": "root",
-      "clientTools": [
-        "mysql",
-        "mysqldump",
-        "mysqladmin"
-      ],
+      "clientTools": ["mysql", "mysqldump", "mysqladmin"],
       "licensing": "commercial"
     },
     "mariadb": {
@@ -48,11 +40,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "mysql",
       "superuser": "root",
-      "clientTools": [
-        "mariadb",
-        "mariadb-dump",
-        "mariadb-admin"
-      ]
+      "clientTools": ["mariadb", "mariadb-dump", "mariadb-admin"]
     },
     "sqlite": {
       "displayName": "SQLite",
@@ -65,12 +53,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "sqlite",
       "superuser": null,
-      "clientTools": [
-        "sqlite3",
-        "sqldiff",
-        "sqlite3_analyzer",
-        "sqlite3_rsync"
-      ]
+      "clientTools": ["sqlite3", "sqldiff", "sqlite3_analyzer", "sqlite3_rsync"]
     },
     "duckdb": {
       "displayName": "DuckDB",
@@ -83,9 +66,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "duckdb",
       "superuser": null,
-      "clientTools": [
-        "duckdb"
-      ],
+      "clientTools": ["duckdb"],
       "licensing": "MIT",
       "notes": "Embedded OLAP database optimized for analytical queries. File-based like SQLite."
     },
@@ -100,12 +81,7 @@
       "scriptFileLabel": "Run script file",
       "connectionScheme": "mongodb",
       "superuser": null,
-      "clientTools": [
-        "mongod",
-        "mongosh",
-        "mongodump",
-        "mongorestore"
-      ],
+      "clientTools": ["mongod", "mongosh", "mongodump", "mongorestore"],
       "licensing": "commercial"
     },
     "redis": {
@@ -119,15 +95,8 @@
       "scriptFileLabel": "Run command file",
       "connectionScheme": "redis",
       "superuser": null,
-      "clientTools": [
-        "redis-server",
-        "redis-cli"
-      ],
-      "licensing": [
-        "RSALv2",
-        "SSPLv1",
-        "AGPLv3"
-      ]
+      "clientTools": ["redis-server", "redis-cli"],
+      "licensing": ["RSALv2", "SSPLv1", "AGPLv3"]
     },
     "valkey": {
       "displayName": "Valkey",
@@ -140,10 +109,7 @@
       "scriptFileLabel": "Run command file",
       "connectionScheme": "redis",
       "superuser": null,
-      "clientTools": [
-        "valkey-server",
-        "valkey-cli"
-      ],
+      "clientTools": ["valkey-server", "valkey-cli"],
       "licensing": "BSD-3-Clause",
       "notes": "Redis fork with permissive licensing. Shares default port 6379 with Redis; port conflicts are resolved automatically."
     },
@@ -158,17 +124,10 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "clickhouse",
       "superuser": "default",
-      "clientTools": [
-        "clickhouse"
-      ],
+      "clientTools": ["clickhouse"],
       "licensing": "Apache-2.0",
       "notes": "Column-oriented OLAP database. Uses YY.MM.X.build versioning. Native port 9000, HTTP port 8123. WSL only on Windows.",
-      "platforms": [
-        "darwin-arm64",
-        "darwin-x64",
-        "linux-arm64",
-        "linux-x64"
-      ]
+      "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
     },
     "qdrant": {
       "displayName": "Qdrant",
@@ -181,9 +140,7 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "qdrant"
-      ],
+      "clientTools": ["qdrant"],
       "licensing": "Apache-2.0",
       "notes": "Vector similarity search engine. REST API on port 6333, gRPC on 6334. Uses collections instead of databases."
     },
@@ -198,9 +155,7 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "meilisearch"
-      ],
+      "clientTools": ["meilisearch"],
       "licensing": "MIT",
       "notes": "Full-text search engine. REST API on port 7700. Uses indexes instead of databases."
     },
@@ -215,12 +170,7 @@
       "scriptFileLabel": "Run script file",
       "connectionScheme": "mongodb",
       "superuser": null,
-      "clientTools": [
-        "ferretdb",
-        "mongosh",
-        "mongodump",
-        "mongorestore"
-      ],
+      "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
       "licensing": "Apache-2.0",
       "notes": "MongoDB-compatible proxy. v2 uses postgresql-documentdb (macOS/Linux). v1 uses plain PostgreSQL (all platforms incl. Windows)."
     },
@@ -235,9 +185,7 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "couchdb"
-      ],
+      "clientTools": ["couchdb"],
       "licensing": "Apache-2.0",
       "notes": "Document database with REST API. Fauxton web UI at /_utils. Uses JSON documents."
     },
@@ -252,13 +200,8 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "postgresql",
       "superuser": "root",
-      "clientTools": [
-        "cockroach"
-      ],
-      "licensing": [
-        "BSL",
-        "Apache-2.0"
-      ],
+      "clientTools": ["cockroach"],
+      "licensing": ["BSL", "Apache-2.0"],
       "notes": "Distributed SQL database with PostgreSQL compatibility. HTTP admin UI at port+1 (default 8080). Single binary handles server and client."
     },
     "surrealdb": {
@@ -272,13 +215,8 @@
       "scriptFileLabel": "Run SurrealQL file",
       "connectionScheme": "ws",
       "superuser": "root",
-      "clientTools": [
-        "surreal"
-      ],
-      "licensing": [
-        "BSL",
-        "Apache-2.0"
-      ],
+      "clientTools": ["surreal"],
+      "licensing": ["BSL", "Apache-2.0"],
       "notes": "Multi-model database supporting document, graph, and relational data. SurrealQL query language. Uses namespace/database hierarchy."
     },
     "questdb": {
@@ -292,9 +230,7 @@
       "scriptFileLabel": "Run SQL file",
       "connectionScheme": "postgresql",
       "superuser": "admin",
-      "clientTools": [
-        "questdb"
-      ],
+      "clientTools": ["questdb"],
       "licensing": "Apache-2.0",
       "notes": "High-performance time-series database. PostgreSQL wire protocol on port 8812. Web Console at port+188. Bundled JRE (no Java required)."
     },
@@ -309,10 +245,7 @@
       "scriptFileLabel": "Run TypeQL file",
       "connectionScheme": "typedb",
       "superuser": "admin",
-      "clientTools": [
-        "typedb",
-        "typedb-console"
-      ],
+      "clientTools": ["typedb", "typedb-console"],
       "licensing": "MPL-2.0",
       "notes": "Strongly-typed database for knowledge representation and reasoning. TypeQL query language. Main port 1729, HTTP port 8000. Default credentials: admin/password."
     },
@@ -327,13 +260,8 @@
       "scriptFileLabel": "Run LP/SQL file",
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "influxdb3"
-      ],
-      "licensing": [
-        "Apache-2.0",
-        "MIT"
-      ],
+      "clientTools": ["influxdb3"],
+      "licensing": ["Apache-2.0", "MIT"],
       "notes": "Purpose-built time-series database with SQL support. InfluxDB 3.x is a Rust rewrite using Apache Arrow/DataFusion. HTTP API on port 8086."
     },
     "weaviate": {
@@ -347,9 +275,7 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "weaviate"
-      ],
+      "clientTools": ["weaviate"],
       "licensing": "BSD-3-Clause",
       "notes": "AI-native vector database. REST API on port 8080, gRPC on port+1. Uses classes/collections instead of databases."
     },
@@ -364,9 +290,7 @@
       "scriptFileLabel": null,
       "connectionScheme": null,
       "superuser": null,
-      "clientTools": [
-        "tigerbeetle"
-      ],
+      "clientTools": ["tigerbeetle"],
       "licensing": "Apache-2.0",
       "notes": "High-performance financial ledger database. Custom binary protocol, REPL client. Uses --development flag for local dev."
     },
@@ -381,17 +305,10 @@
       "scriptFileLabel": null,
       "connectionScheme": "http",
       "superuser": null,
-      "clientTools": [
-        "sqld"
-      ],
+      "clientTools": ["sqld"],
       "licensing": "MIT",
       "notes": "SQLite fork by Turso with server mode (sqld), HTTP API, replication support. No Windows binaries. Enhanced clients: litecli, usql.",
-      "platforms": [
-        "darwin-arm64",
-        "darwin-x64",
-        "linux-arm64",
-        "linux-x64"
-      ]
+      "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
     }
   }
 }

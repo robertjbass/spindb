@@ -10,11 +10,19 @@
 import { mkdir, stat, cp, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
 import { weaviateApiRequest } from './api-client'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 /**
  * Create a snapshot backup using Weaviate's REST API.

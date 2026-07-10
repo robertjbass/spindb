@@ -393,9 +393,7 @@ describe('Query Parser', () => {
     it('should ignore SurrealDB prompt lines before JSON output', () => {
       const json = [
         'surrealdb_test/test> SELECT * FROM test_user;',
-        JSON.stringify([
-          [{ id: 'test_user:1', name: 'Alice' }],
-        ]),
+        JSON.stringify([[{ id: 'test_user:1', name: 'Alice' }]]),
       ].join('\n')
       const result = parseSurrealDBResult(json)
 
@@ -411,7 +409,11 @@ describe('Query Parser', () => {
       const result = parseSurrealDBResult(json)
 
       assertEqual(result.rowCount, 1, 'Should parse the first JSON document')
-      assertEqual(result.rows[0].name, 'Alice', 'Trailing prompt should be ignored')
+      assertEqual(
+        result.rows[0].name,
+        'Alice',
+        'Trailing prompt should be ignored',
+      )
     })
   })
 

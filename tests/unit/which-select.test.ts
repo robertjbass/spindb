@@ -111,9 +111,7 @@ describe('selectContainerForWhich', () => {
   })
 
   it('returns null when no container matches the port', () => {
-    const containers = [
-      container({ name: 'a', port: 5432, status: 'running' }),
-    ]
+    const containers = [container({ name: 'a', port: 5432, status: 'running' })]
     const match = selectContainerForWhich(containers, { targetPort: 9999 })
     assertNullish(match, 'Should return null when nothing matches')
   })

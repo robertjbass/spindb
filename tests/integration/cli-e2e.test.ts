@@ -283,11 +283,17 @@ describe('CLI PostgreSQL Workflow', () => {
     )
     assert(qExit === 0, `Branch query should succeed. stdout: ${q}`)
     const parsed = JSON.parse(q.trim())
-    assertEqual(Number(parsed.rows[0].n), 2, 'Branch should contain seeded rows')
+    assertEqual(
+      Number(parsed.rows[0].n),
+      2,
+      'Branch should contain seeded rows',
+    )
 
     // Clean up the branch so later source assertions are unaffected
     await runCLI(`branch delete ${branchName} --force`)
-    console.log('   Branched running container; data copied and source stayed up')
+    console.log(
+      '   Branched running container; data copied and source stayed up',
+    )
   })
 
   it('should stop container via CLI', async () => {
@@ -467,7 +473,11 @@ describe('CLI Branch Workflow (SQLite)', () => {
     assert(exitCode === 0, `Branch should succeed. stderr: ${stderr}`)
     const result = JSON.parse(stdout.trim())
     assertEqual(result.success, true, 'Branch should report success')
-    assertEqual(result.branchParent, source, 'branchParent should be the source')
+    assertEqual(
+      result.branchParent,
+      source,
+      'branchParent should be the source',
+    )
     assert(
       result.method === 'reflink' || result.method === 'copy',
       'Branch should report a copy method',
@@ -1063,7 +1073,11 @@ describe('CLI Git Branching (PostgreSQL)', () => {
       'feature branch should be running',
     )
     const featureConfig = await containerManager.getConfig(result.container)
-    assertEqual(featureConfig?.port, testPort, 'feature runs on the stable port')
+    assertEqual(
+      featureConfig?.port,
+      testPort,
+      'feature runs on the stable port',
+    )
     assert(
       !(await processManager.isRunning(base, { engine: Engine.PostgreSQL })),
       'base should be stopped while the feature branch is active',

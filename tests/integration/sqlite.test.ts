@@ -271,7 +271,9 @@ describe('SQLite Integration Tests', () => {
       'Explicit-path parent directory should be preserved after deleting the branch',
     )
 
-    console.log(`   ✓ Branched to ${branchPath} — lineage + data + cleanup verified`)
+    console.log(
+      `   ✓ Branched to ${branchPath} — lineage + data + cleanup verified`,
+    )
   })
 
   it('should backup database (SQL format)', async () => {

@@ -569,7 +569,9 @@ export class QdrantEngine extends BaseEngine {
     let snapshotApplied = false
     if (existsSync(pendingSnapshotMarker)) {
       try {
-        const snapshotPath = (await readFile(pendingSnapshotMarker, 'utf-8')).trim()
+        const snapshotPath = (
+          await readFile(pendingSnapshotMarker, 'utf-8')
+        ).trim()
         if (snapshotPath && existsSync(snapshotPath)) {
           args.push(
             '--storage-snapshot',

@@ -6,11 +6,19 @@
 import { mkdir, stat, copyFile, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { paths } from '../../config/paths'
 import { qdrantApiRequest } from './api-client'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 // Backup operations may take longer than the default timeout
 const BACKUP_TIMEOUT_MS = 600000 // 10 minutes
