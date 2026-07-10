@@ -83,7 +83,10 @@ export async function requireCockroachPath(version?: string): Promise<string> {
 }
 
 export function getCockroachCertsDir(containerName: string): string {
-  return join(paths.getContainerPath(containerName, { engine: 'cockroachdb' }), 'certs')
+  return join(
+    paths.getContainerPath(containerName, { engine: 'cockroachdb' }),
+    'certs',
+  )
 }
 
 export function getCockroachCaCertPath(containerName: string): string {

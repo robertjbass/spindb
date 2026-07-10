@@ -59,9 +59,7 @@ type ValkeyCliAuth = {
   password?: string
 }
 
-function shouldPassValkeyCliUsername(
-  username?: string,
-): username is string {
+function shouldPassValkeyCliUsername(username?: string): username is string {
   if (!username) {
     return false
   }
@@ -807,10 +805,7 @@ export class ValkeyEngine extends BaseEngine {
             }
 
             // Check for library loading errors first
-            const libError = detectLibraryError(
-              logContent,
-              'Valkey',
-            )
+            const libError = detectLibraryError(logContent, 'Valkey')
             if (libError) {
               reject(new Error(libError))
               return

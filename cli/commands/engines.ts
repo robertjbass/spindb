@@ -1872,11 +1872,7 @@ enginesCommand
           }),
         )
         console.log(
-          JSON.stringify(
-            { ...enginesData, engines: enrichedEngines },
-            null,
-            2,
-          ),
+          JSON.stringify({ ...enginesData, engines: enrichedEngines }, null, 2),
         )
         return
       }

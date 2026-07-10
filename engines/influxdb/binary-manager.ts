@@ -65,7 +65,9 @@ class InfluxDBBinaryManager extends BaseBinaryManager {
    * Windows only searches the application directory by default. Adding
    * bin/python/ to PATH makes it discoverable.
    */
-  protected override getSpawnEnv(binPath: string): Record<string, string> | undefined {
+  protected override getSpawnEnv(
+    binPath: string,
+  ): Record<string, string> | undefined {
     return getWindowsDllEnv(join(binPath, 'bin', 'python'))
   }
 

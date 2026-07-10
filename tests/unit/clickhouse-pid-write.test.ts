@@ -71,11 +71,7 @@ describe('ClickHouse writePidFromPort (BUG-2 regression)', () => {
         intervalMs: 50,
       })
       assert.equal(wrote, true, 'should report PID file was written')
-      assert.equal(
-        existsSync(pidFile),
-        true,
-        'PID file should exist on disk',
-      )
+      assert.equal(existsSync(pidFile), true, 'PID file should exist on disk')
       const contents = (await readFile(pidFile, 'utf8')).trim()
       assert.match(contents, /^\d+$/, 'PID file should contain a numeric PID')
       // The lsof scrape may return any process holding the port — at minimum

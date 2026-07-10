@@ -11,7 +11,10 @@ import { readFile, rename, rm, stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { logDebug } from '../../core/error-handler'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import {
   addSurrealAuthArgs,
   getBootstrapSurrealAuth,
@@ -19,7 +22,12 @@ import {
   sanitizeSurrealAuthArgs,
 } from './auth'
 import { requireSurrealPath } from './cli-utils'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 function shouldStripSurrealStatement(statement: string): boolean {
   const normalized = statement.trim().replace(/\s+/g, ' ').toUpperCase()

@@ -79,7 +79,8 @@ function parseConnectionUrl(url: string): {
 } | null {
   try {
     const parsed = new URL(url)
-    const database = parsed.pathname.replace(/^\//, '').split('?')[0] || undefined
+    const database =
+      parsed.pathname.replace(/^\//, '').split('?')[0] || undefined
 
     // If URL has explicit port, use it
     if (parsed.port) {

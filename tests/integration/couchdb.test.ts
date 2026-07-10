@@ -392,10 +392,7 @@ describe('CouchDB Integration Tests', () => {
     ]
     const { tmpdir } = await import('os')
     const { mkdir, rm, writeFile } = await import('fs/promises')
-    const backupPath = join(
-      tmpdir(),
-      `couchdb-auth-backup-${Date.now()}.json`,
-    )
+    const backupPath = join(tmpdir(), `couchdb-auth-backup-${Date.now()}.json`)
     const engine = getEngine(ENGINE)
 
     const writeDefaultCredentialFile = async (
@@ -449,7 +446,10 @@ describe('CouchDB Integration Tests', () => {
       assert(restartedConfig !== null, 'Restarted config should exist')
       await engine.start(restartedConfig!)
       await containerManager.updateConfig(containerName, { status: 'running' })
-      assert(await waitForReady(ENGINE, port), 'Auth-enabled container should be ready')
+      assert(
+        await waitForReady(ENGINE, port),
+        'Auth-enabled container should be ready',
+      )
     }
 
     try {

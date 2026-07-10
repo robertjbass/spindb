@@ -11,23 +11,29 @@ import { spawn } from 'child_process'
 import { stat, mkdir, writeFile } from 'fs/promises'
 import { existsSync, createWriteStream } from 'fs'
 import { dirname } from 'path'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug, logWarning } from '../../core/error-handler'
 import {
   requireClickHousePath,
   validateClickHouseIdentifier,
   escapeClickHouseIdentifier,
 } from './cli-utils'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 type ClickHouseLocalAuth = {
   user?: string
   password?: string
 }
 
-function buildClickHouseEnv(
-  auth?: ClickHouseLocalAuth,
-): NodeJS.ProcessEnv {
+function buildClickHouseEnv(auth?: ClickHouseLocalAuth): NodeJS.ProcessEnv {
   const env = { ...process.env }
   if (auth?.user) {
     env.CLICKHOUSE_USER = auth.user

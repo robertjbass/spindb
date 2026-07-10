@@ -70,11 +70,7 @@ async function execRedisCommand(
 
     proc.on('close', (code, signal) => {
       const combinedOutput = `${stdout}\n${stderr}`.trim()
-      const hasCliError = hasRedisCliError(
-        stdout,
-        stderr,
-        inspectStdoutErrors,
-      )
+      const hasCliError = hasRedisCliError(stdout, stderr, inspectStdoutErrors)
       const libraryError = detectLibraryError(combinedOutput, 'Redis')
 
       if (libraryError) {

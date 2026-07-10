@@ -7,7 +7,10 @@ import { open, readFile as readFileAsync } from 'fs/promises'
 import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { paths } from '../../config/paths'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { influxdbApiRequest } from './api-client'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
@@ -34,7 +37,11 @@ async function loadInfluxAuthToken(
     // Fall back to saved credentials
   }
 
-  const savedCreds = await loadCredentials(containerName, Engine.InfluxDB, username)
+  const savedCreds = await loadCredentials(
+    containerName,
+    Engine.InfluxDB,
+    username,
+  )
   return savedCreds?.apiKey
 }
 

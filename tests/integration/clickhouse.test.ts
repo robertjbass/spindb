@@ -39,7 +39,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
-import { getDefaultUsername, saveCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -623,18 +626,18 @@ describe(
         if (sourceConfig) {
           await engine.stop(sourceConfig).catch(() => {})
           await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
-          await containerManager.delete(sourceName, { force: true }).catch(
-            () => {},
-          )
+          await containerManager
+            .delete(sourceName, { force: true })
+            .catch(() => {})
         }
 
         const targetConfig = await containerManager.getConfig(targetName)
         if (targetConfig) {
           await engine.stop(targetConfig).catch(() => {})
           await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
-          await containerManager.delete(targetName, { force: true }).catch(
-            () => {},
-          )
+          await containerManager
+            .delete(targetName, { force: true })
+            .catch(() => {})
         }
       }
     })

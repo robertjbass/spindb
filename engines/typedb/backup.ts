@@ -9,10 +9,18 @@ import { spawn } from 'child_process'
 import { mkdir } from 'fs/promises'
 import { stat } from 'fs/promises'
 import { dirname } from 'path'
-import { getDefaultUsername, loadCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  loadCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { requireTypeDBConsolePath, getConsoleBaseArgs } from './cli-utils'
-import { Engine, type ContainerConfig, type BackupOptions, type BackupResult } from '../../types'
+import {
+  Engine,
+  type ContainerConfig,
+  type BackupOptions,
+  type BackupResult,
+} from '../../types'
 
 /**
  * Create a TypeQL backup using typedb console export

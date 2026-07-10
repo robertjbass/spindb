@@ -12,7 +12,10 @@ describe('BACKUP_FORMATS', () => {
   it('mongodb + ferretdb expose an uncompressed archive-plain format', () => {
     for (const engine of [Engine.MongoDB, Engine.FerretDB] as const) {
       const { formats, defaultFormat } = BACKUP_FORMATS[engine]
-      assert('archive' in formats, `${engine} should keep the compressed archive`)
+      assert(
+        'archive' in formats,
+        `${engine} should keep the compressed archive`,
+      )
       assert(
         'archive-plain' in formats,
         `${engine} should expose archive-plain`,
@@ -23,7 +26,11 @@ describe('BACKUP_FORMATS', () => {
         `${engine} archive-plain extension`,
       )
       // the default stays the compressed archive (no behavior change)
-      assertEqual(defaultFormat, 'archive', `${engine} default format unchanged`)
+      assertEqual(
+        defaultFormat,
+        'archive',
+        `${engine} default format unchanged`,
+      )
     }
   })
 })

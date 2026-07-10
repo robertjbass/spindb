@@ -26,7 +26,10 @@ import {
   executeQuery,
 } from './helpers'
 import { assert, assertEqual, assertTruthy } from '../utils/assertions'
-import { getDefaultUsername, saveCredentials } from '../../core/credential-manager'
+import {
+  getDefaultUsername,
+  saveCredentials,
+} from '../../core/credential-manager'
 import { logDebug } from '../../core/error-handler'
 import { branchManager } from '../../core/branch-manager'
 import { containerManager } from '../../core/container-manager'
@@ -335,7 +338,10 @@ describe('Qdrant Integration Tests', () => {
 
     console.log(`\n🔐 Testing auth-aware Qdrant backup/restore...`)
 
-    const allPorts = await findConsecutiveFreePorts(4, TEST_PORTS.qdrant.base + 20)
+    const allPorts = await findConsecutiveFreePorts(
+      4,
+      TEST_PORTS.qdrant.base + 20,
+    )
     const [sourcePort, targetPort] = [allPorts[0], allPorts[2]]
     const sourceName = generateTestName('qdrant-auth-test-source')
     const targetName = generateTestName('qdrant-auth-test-target')
@@ -470,18 +476,18 @@ describe('Qdrant Integration Tests', () => {
       if (sourceConfig) {
         await engine.stop(sourceConfig).catch(() => {})
         await waitForStopped(sourceName, ENGINE, 90000).catch(() => false)
-        await containerManager.delete(sourceName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(sourceName, { force: true })
+          .catch(() => {})
       }
 
       const targetConfig = await containerManager.getConfig(targetName)
       if (targetConfig) {
         await engine.stop(targetConfig).catch(() => {})
         await waitForStopped(targetName, ENGINE, 90000).catch(() => false)
-        await containerManager.delete(targetName, { force: true }).catch(
-          () => {},
-        )
+        await containerManager
+          .delete(targetName, { force: true })
+          .catch(() => {})
       }
     }
   })
@@ -570,7 +576,10 @@ describe('Qdrant Integration Tests', () => {
         await waitForReady(ENGINE, branchPort),
         'Branched Qdrant should be ready on its own port',
       )
-      const branchPoints = await getQdrantPointCount(branchPort, TEST_COLLECTION)
+      const branchPoints = await getQdrantPointCount(
+        branchPort,
+        TEST_COLLECTION,
+      )
       assertEqual(
         branchPoints,
         3,

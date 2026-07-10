@@ -12,7 +12,9 @@ import { detectBackupFormat as detectFerret } from '../../engines/ferretdb/resto
 // classified it as 'unknown' and defaulted to --gzip, failing with
 // "gzip: invalid header" on every archive-plain backup (its own AND FerretDB's,
 // breaking cross-engine restore). The gzip magic (1f 8b) is the compressed case.
-const ARCHIVE_MAGIC = Buffer.from([0x6d, 0xe2, 0x99, 0x81, 0x10, 0x20, 0x30, 0x40])
+const ARCHIVE_MAGIC = Buffer.from([
+  0x6d, 0xe2, 0x99, 0x81, 0x10, 0x20, 0x30, 0x40,
+])
 const GZIP_MAGIC = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x11, 0x22, 0x33, 0x44])
 
 describe('Mongo-wire uncompressed archive detection (archive-plain)', () => {
@@ -20,7 +22,9 @@ describe('Mongo-wire uncompressed archive detection (archive-plain)', () => {
   let seq = 0
 
   after(async () => {
-    await Promise.all(created.map((p) => rm(p, { force: true }).catch(() => {})))
+    await Promise.all(
+      created.map((p) => rm(p, { force: true }).catch(() => {})),
+    )
   })
 
   async function fixture(label: string, buf: Buffer): Promise<string> {

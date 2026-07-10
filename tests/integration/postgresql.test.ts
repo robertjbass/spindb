@@ -1041,11 +1041,19 @@ describe('PostgreSQL Integration Tests', () => {
       await engine.createDatabase(targetConfig!, DATABASE)
       await enablePasswordAuth(targetName, targetPort, targetPassword)
 
-      const backupResult = await engine.backup(sourceAuthedConfig!, backupPath, {
-        database: DATABASE,
-        format: 'custom',
-      })
-      assertEqual(backupResult.format, 'custom', 'Backup should use custom format')
+      const backupResult = await engine.backup(
+        sourceAuthedConfig!,
+        backupPath,
+        {
+          database: DATABASE,
+          format: 'custom',
+        },
+      )
+      assertEqual(
+        backupResult.format,
+        'custom',
+        'Backup should use custom format',
+      )
 
       const targetAuthedConfig = await containerManager.getConfig(targetName)
       assert(targetAuthedConfig !== null, 'Target auth config should exist')
@@ -1074,9 +1082,11 @@ describe('PostgreSQL Integration Tests', () => {
       for (const containerName of [sourceName, targetName]) {
         const config = await containerManager.getConfig(containerName)
         if (config) {
-          const running = await processManager.isRunning(containerName, {
-            engine: ENGINE,
-          }).catch(() => false)
+          const running = await processManager
+            .isRunning(containerName, {
+              engine: ENGINE,
+            })
+            .catch(() => false)
           if (running) {
             await engine.stop(config).catch(() => {})
             await containerManager
@@ -1084,11 +1094,15 @@ describe('PostgreSQL Integration Tests', () => {
               .catch(() => {})
           }
         }
-        await containerManager.delete(containerName, { force: true }).catch(() => {})
+        await containerManager
+          .delete(containerName, { force: true })
+          .catch(() => {})
       }
     }
 
-    console.log('   ✓ Backup and restore work with password-authenticated PostgreSQL')
+    console.log(
+      '   ✓ Backup and restore work with password-authenticated PostgreSQL',
+    )
   })
 
   it('should have no test containers remaining', async () => {

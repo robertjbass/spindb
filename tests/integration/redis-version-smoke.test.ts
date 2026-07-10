@@ -88,11 +88,9 @@ describe('Redis version coverage smoke', () => {
         )
         assertEqual(setResult.rows[0]?.result, 'OK', 'SET should return OK')
 
-        const getResult = await engine.executeQuery(
-          config!,
-          'GET smoke:key',
-          { database: DATABASE },
-        )
+        const getResult = await engine.executeQuery(config!, 'GET smoke:key', {
+          database: DATABASE,
+        })
         assertEqual(
           getResult.rows[0]?.result,
           'smoke_value_works',

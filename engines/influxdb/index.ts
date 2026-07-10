@@ -183,9 +183,9 @@ async function readAdminToken(
   }
 
   try {
-    const parsed = JSON.parse(await readFile(tokenPath, 'utf-8')) as Partial<
-      StoredAdminToken
-    >
+    const parsed = JSON.parse(
+      await readFile(tokenPath, 'utf-8'),
+    ) as Partial<StoredAdminToken>
 
     if (!parsed.token || !parsed.name) {
       throw new Error('is missing token or name')
@@ -535,7 +535,9 @@ export class InfluxDBEngine extends BaseEngine {
     }
 
     // On Windows, influxdb3.exe needs python313.dll from the co-located python/ dir
-    const pythonDllEnv = getWindowsDllEnv(join(dirname(influxdbServer), 'python'))
+    const pythonDllEnv = getWindowsDllEnv(
+      join(dirname(influxdbServer), 'python'),
+    )
 
     // InfluxDB runs in foreground, so we need to spawn detached
     if (isWindows()) {
@@ -561,11 +563,7 @@ export class InfluxDBEngine extends BaseEngine {
           if (settled) return
           settled = true
           const reason = signal ? `signal ${signal}` : `code ${code}`
-          reject(
-            new Error(
-              `InfluxDB process exited unexpectedly (${reason}).`,
-            ),
-          )
+          reject(new Error(`InfluxDB process exited unexpectedly (${reason}).`))
         })
 
         proc.unref()
@@ -589,7 +587,8 @@ export class InfluxDBEngine extends BaseEngine {
 
           const ready =
             (await this.waitForReady(port)) &&
-            (!adminToken || (await this.waitForAuthReady(port, adminToken.token)))
+            (!adminToken ||
+              (await this.waitForAuthReady(port, adminToken.token)))
           if (settled) return
 
           if (ready) {
