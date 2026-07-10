@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.7] - 2026-07-10
+
+### Added
+
+- **TypeDB 3.12 `loader` binary is now installed.** TypeDB 3.12 archives bundle a
+  new top-level `loader/typedb_loader_bin` alongside the launcher, server, and
+  console. spindb previously relocated only the launcher, server, and console at
+  extract time and discarded the rest, so `typedb loader` errored with "loader
+  was not included in this distribution." The binary manager now relocates
+  `loader/` into `bin/loader/` (matching the launcher's expected relative path,
+  `${TYPEDB_HOME}/loader/typedb_loader_bin`) whenever the archive contains it, so
+  `typedb loader` works for 3.12+ containers. The relocation is conditional:
+  TypeDB 3.8 and 3.11 archives do not ship a loader, and those extractions stay
+  clean with no failure and no new warnings.
+- The 3.12 `admin` tool (`admin/typedb_admin_bin`) is **deliberately excluded**.
+  spindb disables the 3.12+ admin service (`adminConfigLines()` sets
+  `enabled: false`), so the admin tool cannot connect to a spindb-managed server;
+  shipping it would only present users a tool that always fails to connect. Users
+  and databases continue to be managed through the console binary.
+
 ## [0.61.6] - 2026-07-10
 
 ### Changed
