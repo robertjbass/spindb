@@ -8,8 +8,8 @@
 - [docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md) — Per-engine implementation details
 - [docs/KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md) — Custom keyboard shortcut guide
 - Other: [TODO.md](TODO.md), [CHANGELOG.md](CHANGELOG.md), [TEST_COVERAGE.md](TEST_COVERAGE.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
-- **Ecosystem docs:** `~/dev/layerbase-architecture/` — Shared architecture, infrastructure inventory, cross-project rules, and agent configs.
-- **Ecosystem invariants:** `~/dev/layerbase-architecture/INVARIANTS.md` — Non-negotiable rules (scripting-first, thin desktop wrapper, platform-agnostic cloud, binary ownership). Read before making architectural changes.
+- **Ecosystem docs:** `~/dev/layerbase-cloud/` — Shared architecture, infrastructure inventory, cross-project rules, and agent configs.
+- **Ecosystem invariants:** `~/dev/layerbase-cloud/INVARIANTS.md` — Non-negotiable rules (scripting-first, thin desktop wrapper, platform-agnostic cloud, binary ownership). Read before making architectural changes.
 
 ## Ecosystem
 
@@ -280,7 +280,7 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 
 **Target (not scheduled):** A native, pure-TS spindb pgwire proxy for file-based engines - `pg-gateway` plus Node's native SQLite/DuckDB bindings - that exposes a local file DB over the PostgreSQL wire protocol. This would let Layerbase Cloud drop both external binaries (including the maintained duckgres fork) and give desktop a "serve my local file DB over Postgres wire" feature.
 
-**Status:** Recorded as a deliberate FUTURE option from the 2026-06-15 C-033 spindb-convergence decision (`~/dev/layerbase-architecture/tracker.md`, `~/dev/layerbase-cloud/plans/active/spindb-convergence-c033.md`). The decision there was the opposite for now: the proxy/pooler lifecycle is **intentionally kept in Layerbase Cloud** (moving it would force spindb to bundle foreign Go/Rust binaries, violating "spindb ships only database binaries"), and the near-term fix for the fragile restore-restart dance is a cloud-internal supervisor module, not a spindb change. Revisit Model B only as a separate, larger product bet.
+**Status:** Recorded as a deliberate FUTURE option from the 2026-06-15 C-033 spindb-convergence decision (`~/dev/layerbase-cloud/tracker.md`, `~/dev/layerbase-cloud/plans/active/spindb-convergence-c033.md`). The decision there was the opposite for now: the proxy/pooler lifecycle is **intentionally kept in Layerbase Cloud** (moving it would force spindb to bundle foreign Go/Rust binaries, violating "spindb ships only database binaries"), and the near-term fix for the fragile restore-restart dance is a cloud-internal supervisor module, not a spindb change. Revisit Model B only as a separate, larger product bet.
 
 ## Recent Fixes (0.47.3 → 0.47.13)
 
