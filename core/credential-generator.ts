@@ -23,7 +23,7 @@ const ALPHANUMERIC_CHARSET = LOWERCASE + UPPERCASE + DIGITS
 // Canonical length for a generated database credential.
 //
 // Shared credential spec (ADR-001,
-// layerbase-architecture/decisions/001-credential-charsets.md): the standard
+// layerbase-cloud/docs/decisions/001-credential-charsets.md): the standard
 // generated DB password is 24 alphanumeric characters. The same spec is
 // implemented in layerbase-cloud's `src/lib/credentials.ts`; both repos run
 // conformance tests so the two cannot re-drift.
