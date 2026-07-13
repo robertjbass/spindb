@@ -31,7 +31,10 @@ function buildVersionMap(engine: string): Record<string, string> {
     const r = hostdbResolveVersion(engine, minor)
     if (r) map[minor] = r
   }
-  for (const full of listVersions(engine, { format: 'full' })) {
+  for (const full of listVersions(engine, {
+    format: 'full',
+    includePrerelease: true,
+  })) {
     map[full] = full
   }
   return map

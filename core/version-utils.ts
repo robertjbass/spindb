@@ -76,6 +76,70 @@ export function isNewerVersion(versionA: string, versionB: string): boolean {
   return compareVersions(versionA, versionB) > 0
 }
 
+export type PrereleaseType = 'alpha' | 'beta' | 'rc'
+
+/**
+ * Parse a prerelease version string into its components.
+ *
+ * Accepts two shapes:
+ *   - hostdb canonical form: "19.0.0-beta.1" (X.Y.Z-type.N)
+ *   - upstream self-reported form: "19beta1" (X<type>N, e.g. `postgres --version`)
+ *
+ * Returns null for GA versions and any string that is not a recognised
+ * prerelease.
+ */
+export function parsePrereleaseVersion(version: string): {
+  major: number
+  type: PrereleaseType
+  num: number
+} | null {
+  const canonical = version.match(/^(\d+)(?:\.\d+)*-(alpha|beta|rc)\.(\d+)$/)
+  if (canonical) {
+    return {
+      major: parseInt(canonical[1], 10),
+      type: canonical[2] as PrereleaseType,
+      num: parseInt(canonical[3], 10),
+    }
+  }
+
+  const reported = version.match(/^(\d+)(alpha|beta|rc)(\d+)$/)
+  if (reported) {
+    return {
+      major: parseInt(reported[1], 10),
+      type: reported[2] as PrereleaseType,
+      num: parseInt(reported[3], 10),
+    }
+  }
+
+  return null
+}
+
+/**
+ * Return true if a version string is a prerelease (alpha/beta/rc), in either
+ * the canonical "19.0.0-beta.1" or self-reported "19beta1" form.
+ */
+export function isPrereleaseVersion(version: string): boolean {
+  return parsePrereleaseVersion(version) !== null
+}
+
+/**
+ * Verify that an expected prerelease version matches a binary's self-reported
+ * version. This bridges hostdb's canonical form ("19.0.0-beta.1") and the
+ * upstream form a server reports ("19beta1").
+ *
+ * Returns false when either side is not a prerelease so GA verification is
+ * never loosened.
+ */
+export function prereleaseVersionMatches(
+  expected: string,
+  reported: string,
+): boolean {
+  const e = parsePrereleaseVersion(expected)
+  const r = parsePrereleaseVersion(reported)
+  if (!e || !r) return false
+  return e.major === r.major && e.type === r.type && e.num === r.num
+}
+
 /**
  * Regex pattern for validating semver-like version strings.
  * Matches: X, X.Y, or X.Y.Z where each component is numeric.

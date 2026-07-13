@@ -181,6 +181,39 @@ describe('JSON Output Validation', () => {
       if (!parsed.engines.postgresql) {
         throw new Error('engines supported --json should include postgresql')
       }
+
+      // PostgreSQL ships a prerelease (19.0.0-beta.1); it must surface via the
+      // additive prereleaseVersions map keyed by exact token -> channel.
+      const pg = parsed.engines.postgresql
+      if (
+        !pg.prereleaseVersions ||
+        pg.prereleaseVersions['19.0.0-beta.1'] !== 'beta'
+      ) {
+        throw new Error(
+          'engines supported --json postgresql should expose prereleaseVersions with 19.0.0-beta.1: beta',
+        )
+      }
+
+      // The prerelease token must NOT leak into supportedVersions (those are
+      // major-version buckets and exclude the beta major).
+      if (pg.supportedVersions.includes('19.0.0-beta.1')) {
+        throw new Error(
+          'engines supported --json postgresql supportedVersions should not include the beta token',
+        )
+      }
+
+      // Engines with no prereleases must omit the key entirely (stable shape).
+      if (
+        parsed.engines.mysql &&
+        Object.prototype.hasOwnProperty.call(
+          parsed.engines.mysql,
+          'prereleaseVersions',
+        )
+      ) {
+        throw new Error(
+          'engines supported --json mysql should omit prereleaseVersions when it has none',
+        )
+      }
     })
 
     it('spindb config show --json', () => {

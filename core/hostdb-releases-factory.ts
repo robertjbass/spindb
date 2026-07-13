@@ -13,8 +13,10 @@ import { compareVersions } from './version-utils'
 import {
   getAvailableVersions as getHostdbVersions,
   getDeprecatedVersions as getHostdbDeprecatedVersions,
+  getPrereleaseVersions as getHostdbPrereleaseVersions,
 } from './hostdb-metadata'
 import { logDebug } from './error-handler'
+import type { ReleaseType } from 'hostdb'
 import type { Engine, InstalledBinary } from '../types'
 
 /**
@@ -55,6 +57,7 @@ export type HostdbReleasesModule = {
   fetchAvailableVersions: () => Promise<Record<string, string[]>>
   getLatestVersion: (major: string) => Promise<string>
   fetchDeprecatedVersions: () => Promise<Set<string>>
+  fetchPrereleaseVersions: () => Promise<Map<string, ReleaseType>>
 }
 
 /**
@@ -256,9 +259,32 @@ export function createHostdbReleases(
     }
   }
 
+  // Cache for prerelease versions
+  let cachedPrerelease: Map<string, ReleaseType> | null = null
+  let prereleaseCachedAt = 0
+
+  async function fetchPrereleaseVersions(): Promise<Map<string, ReleaseType>> {
+    const now = Date.now()
+    if (cachedPrerelease && now - prereleaseCachedAt < cacheTTLMs) {
+      return cachedPrerelease
+    }
+
+    try {
+      cachedPrerelease = await getHostdbPrereleaseVersions(engine)
+      prereleaseCachedAt = Date.now()
+      return cachedPrerelease
+    } catch (error) {
+      logDebug(`Failed to fetch prerelease versions for ${displayName}`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return new Map()
+    }
+  }
+
   return {
     fetchAvailableVersions: getCachedVersions,
     getLatestVersion,
     fetchDeprecatedVersions,
+    fetchPrereleaseVersions,
   }
 }

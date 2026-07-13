@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-07-13
+
+### Added
+
+- **Prerelease (alpha/beta/rc) database support, starting with PostgreSQL
+  19.0.0-beta.1.** hostdb now publishes prerelease binaries, and spindb can
+  create containers from them without ever treating them as GA. The support is
+  end to end:
+  - **Exact-token resolution only.** A prerelease resolves only by its full
+    token: `19.0.0-beta.1` resolves to itself, while `19` resolves to nothing
+    (no bare-major key is created for a prerelease). GA majors are unaffected,
+    so `18` still resolves to `18.4.0`. `SUPPORTED_MAJOR_VERSIONS` deliberately
+    excludes the prerelease major `19`.
+  - **Beta tag in the version picker.** The interactive create flow surfaces
+    prerelease versions with a channel tag so users can opt in explicitly.
+  - **Non-blocking create warning.** Choosing a prerelease prints a yellow
+    caution (via stderr, so `--json` output stays clean) noting it is not
+    recommended for production and that its data directory is not compatible
+    with the GA release.
+  - **Prerelease-aware binary verification.** PostgreSQL prerelease binaries
+    self-report the upstream form (for example `19beta1`), which is matched
+    against hostdb's canonical `19.0.0-beta.1` instead of failing the version
+    check.
+  - **Migration guard.** A prerelease counts as a supported value (identity
+    map) so it is not flagged as outdated, but it exposes no GA migration
+    target for its major, so nothing auto-upgrades onto or off of it.
+  - **`prereleaseVersions` in `engines supported --json`.** PostgreSQL now
+    reports `"prereleaseVersions": { "19.0.0-beta.1": "beta" }` alongside its
+    unchanged `supportedVersions` major buckets (which still omit `19`).
+
+### Changed
+
+- **Pin `hostdb` to `0.35.0`** (was 0.34.1). Adds the PostgreSQL
+  19.0.0-beta.1 prerelease entry and the `getReleaseType` /
+  `listVersions({ includePrerelease })` surface the wrappers now consume. The
+  bundled snapshot matches the live registry, so the hostdb-sync integration
+  check passes against `registry.layerbase.host`.
+
 ## [0.61.7] - 2026-07-10
 
 ### Added

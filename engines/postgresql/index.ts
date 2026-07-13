@@ -239,8 +239,11 @@ export class PostgreSQLEngine extends BaseEngine {
 
   async verifyBinary(binPath: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    // Extract version from path like "postgresql-17.7.0-darwin-arm64"
-    const match = binPath.match(/postgresql-(\d+(?:\.\d+)*)/)
+    // Extract version from path like "postgresql-17.7.0-darwin-arm64" or a
+    // prerelease path like "postgresql-19.0.0-beta.1-darwin-arm64".
+    const match = binPath.match(
+      /postgresql-(\d+(?:\.\d+)*(?:-(?:alpha|beta|rc)\.\d+)?)/,
+    )
     if (!match) {
       throw new Error(
         `Could not extract PostgreSQL version from path: ${binPath}`,

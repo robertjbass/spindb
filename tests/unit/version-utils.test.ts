@@ -1,5 +1,11 @@
 import { describe, it } from 'node:test'
-import { isShorthandVersion } from '../../core/version-utils'
+import {
+  isShorthandVersion,
+  parsePrereleaseVersion,
+  isPrereleaseVersion,
+  prereleaseVersionMatches,
+  compareVersions,
+} from '../../core/version-utils'
 import { assert } from '../utils/assertions'
 
 describe('isShorthandVersion', () => {
@@ -74,5 +80,104 @@ describe('isShorthandVersion', () => {
         "'unknown' should not be flagged — caller treats it specially",
       )
     })
+  })
+})
+
+describe('parsePrereleaseVersion', () => {
+  it('parses hostdb canonical form', () => {
+    const parsed = parsePrereleaseVersion('19.0.0-beta.1')
+    assert(parsed !== null, 'should parse canonical form')
+    assert(parsed?.major === 19, 'major should be 19')
+    assert(parsed?.type === 'beta', 'type should be beta')
+    assert(parsed?.num === 1, 'num should be 1')
+  })
+
+  it('parses upstream self-reported form', () => {
+    const parsed = parsePrereleaseVersion('19beta1')
+    assert(parsed !== null, 'should parse reported form')
+    assert(parsed?.major === 19, 'major should be 19')
+    assert(parsed?.type === 'beta', 'type should be beta')
+    assert(parsed?.num === 1, 'num should be 1')
+  })
+
+  it('parses rc and alpha channels', () => {
+    assert(
+      parsePrereleaseVersion('17.0.0-rc.2')?.type === 'rc',
+      'rc channel parsed',
+    )
+    assert(
+      parsePrereleaseVersion('17alpha3')?.type === 'alpha',
+      'alpha channel parsed',
+    )
+  })
+
+  it('returns null for GA versions', () => {
+    assert(parsePrereleaseVersion('18.4.0') === null, 'GA is not a prerelease')
+    assert(parsePrereleaseVersion('19') === null, 'bare major is not prerelease')
+    assert(parsePrereleaseVersion('') === null, 'empty string is not prerelease')
+  })
+})
+
+describe('isPrereleaseVersion', () => {
+  it('is true for prerelease forms', () => {
+    assert(isPrereleaseVersion('19.0.0-beta.1') === true, 'canonical beta')
+    assert(isPrereleaseVersion('19beta1') === true, 'reported beta')
+  })
+
+  it('is false for GA', () => {
+    assert(isPrereleaseVersion('18.4.0') === false, 'GA release')
+  })
+})
+
+describe('prereleaseVersionMatches', () => {
+  it('matches canonical expected against self-reported', () => {
+    assert(
+      prereleaseVersionMatches('19.0.0-beta.1', '19beta1') === true,
+      'expected 19.0.0-beta.1 should accept reported 19beta1',
+    )
+  })
+
+  it('does not match a different channel or number', () => {
+    assert(
+      prereleaseVersionMatches('19.0.0-beta.1', '19beta2') === false,
+      'different prerelease number should not match',
+    )
+    assert(
+      prereleaseVersionMatches('19.0.0-beta.1', '19rc1') === false,
+      'different channel should not match',
+    )
+  })
+
+  it('never matches when either side is GA (does not loosen GA verify)', () => {
+    assert(
+      prereleaseVersionMatches('19.0.0', '19') === false,
+      'GA expected should not match via prerelease path',
+    )
+    assert(
+      prereleaseVersionMatches('19.0.0-beta.1', '19') === false,
+      'GA reported should not match a prerelease expectation',
+    )
+  })
+})
+
+describe('compareVersions prerelease ordering', () => {
+  it('sorts a prerelease below its GA release', () => {
+    assert(
+      compareVersions('19.0.0', '19.0.0-beta.2') > 0,
+      'GA should be greater than beta of same version',
+    )
+    assert(
+      compareVersions('19.0.0-beta.2', '19.0.0') < 0,
+      'beta should be less than GA of same version',
+    )
+  })
+
+  it('descending sort places GA first, then prereleases newest-first', () => {
+    const sorted = ['19.0.0-beta.1', '19.0.0', '18.4.0'].sort((a, b) =>
+      compareVersions(b, a),
+    )
+    assert(sorted[0] === '19.0.0', 'GA 19.0.0 should sort first')
+    assert(sorted[1] === '19.0.0-beta.1', 'beta should follow its GA')
+    assert(sorted[2] === '18.4.0', 'older GA last')
   })
 })

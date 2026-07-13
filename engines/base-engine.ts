@@ -14,6 +14,7 @@ import type {
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
 import { stopPgweb } from '../core/pgweb-utils'
+import type { ReleaseType } from 'hostdb'
 
 /**
  * Base class for database engines
@@ -264,6 +265,15 @@ export abstract class BaseEngine {
    */
   async fetchDeprecatedVersions(): Promise<Set<string>> {
     return new Set()
+  }
+
+  /**
+   * Fetch the map of prerelease version strings to their release channel
+   * (alpha/beta/rc) from hostdb. Prereleases are opt-in: they are downloadable
+   * but never the default or "latest" pick.
+   */
+  async fetchPrereleaseVersions(): Promise<Map<string, ReleaseType>> {
+    return new Map()
   }
 
   // Create a dump from a remote database using a connection string
