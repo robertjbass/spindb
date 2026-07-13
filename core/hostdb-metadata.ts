@@ -13,6 +13,7 @@
 import {
   loadDatabasesJson as hostdbLoadDatabasesJson,
   loadDownloadsJson as hostdbLoadDownloadsJson,
+  type ReleaseType,
 } from 'hostdb'
 import { logDebug } from './error-handler'
 import { LAYERBASE_REGISTRY_BASE } from './hostdb-client'
@@ -33,6 +34,7 @@ type CliTools = {
 export type VersionEntryObject = {
   enabled?: boolean
   deprecated?: boolean
+  releaseType?: ReleaseType
   note?: string
   platforms?: string[]
   dependencies?: Array<{
@@ -399,6 +401,48 @@ export function isVersionDeprecated(
 ): boolean {
   if (typeof value === 'boolean') return false
   return value.deprecated === true
+}
+
+/**
+ * Get the release type of a version entry (prerelease channel or null for GA).
+ */
+export function getReleaseType(
+  value: boolean | VersionEntryObject,
+): ReleaseType | null {
+  if (typeof value === 'boolean') return null
+  return value.releaseType ?? null
+}
+
+/**
+ * Get the map of prerelease version strings to their release type for an engine
+ * from databases.json. Mirrors getDeprecatedVersions but returns the channel
+ * (alpha/beta/rc) so callers can render the correct tag.
+ * @param engine Engine (e.g., Engine.PostgreSQL or 'postgresql')
+ * @returns Map of version string -> release type, or empty map if fetch fails
+ */
+export async function getPrereleaseVersions(
+  engine: Engine | string,
+): Promise<Map<string, ReleaseType>> {
+  try {
+    const data = await fetchDatabasesJson()
+    const key = engine.toLowerCase()
+    const entry = data[key]
+    if (!entry?.versions) return new Map()
+
+    const result = new Map<string, ReleaseType>()
+    for (const [version, value] of Object.entries(entry.versions)) {
+      if (!isVersionEnabled(value)) continue
+      const type = getReleaseType(value)
+      if (type) result.set(version, type)
+    }
+    return result
+  } catch (error) {
+    logDebug('Failed to fetch prerelease versions from hostdb', {
+      engine,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return new Map()
+  }
 }
 
 /**

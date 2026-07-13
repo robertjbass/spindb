@@ -17,6 +17,7 @@ import { paths } from '../../config/paths'
 import { spawnAsync } from '../../core/spawn-utils'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
+import { prereleaseVersionMatches } from '../../core/version-utils'
 import { Engine, Platform, type Arch } from '../../types'
 
 class PostgreSQLBinaryManager extends BaseServerBinaryManager {
@@ -40,8 +41,11 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
   }
 
   protected parseVersionFromOutput(stdout: string): string | null {
-    // Extract version from output like "postgres (PostgreSQL) 18.1"
-    const match = stdout.match(/postgres \(PostgreSQL\) ([\d.]+)/)
+    // Extract version from output like "postgres (PostgreSQL) 18.1" or a
+    // prerelease like "postgres (PostgreSQL) 19beta1".
+    const match = stdout.match(
+      /postgres \(PostgreSQL\) ([\d.]+(?:(?:alpha|beta|rc)\d+)?)/,
+    )
     return match?.[1] ?? null
   }
 
@@ -102,6 +106,12 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
     const expectedMajorMinor = fullVersion.split('.').slice(0, 2).join('.')
     const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
     if (expectedMajorMinor === reportedMajorMinor) {
+      return true
+    }
+
+    // Prerelease binaries self-report the upstream form (e.g. "19beta1") which
+    // maps to hostdb's canonical "19.0.0-beta.1".
+    if (prereleaseVersionMatches(fullVersion, reportedVersion)) {
       return true
     }
 

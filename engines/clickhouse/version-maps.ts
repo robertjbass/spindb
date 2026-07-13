@@ -28,7 +28,10 @@ function buildVersionMap(): Record<string, string> {
     const r = hostdbResolveVersion(ENGINE, minor)
     if (r) map[minor] = r
   }
-  for (const full of listVersions(ENGINE, { format: 'full' })) {
+  for (const full of listVersions(ENGINE, {
+    format: 'full',
+    includePrerelease: true,
+  })) {
     map[full] = full
     // ClickHouse 4-part full versions have a 3-part prefix (e.g., 25.12.3) that
     // should also resolve. Add 3-part prefix to the MAP for spindb's existing

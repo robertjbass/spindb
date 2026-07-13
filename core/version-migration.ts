@@ -11,6 +11,7 @@ import { rm } from 'fs/promises'
 import { paths } from '../config/paths'
 import { containerManager } from './container-manager'
 import { platformService } from './platform-service'
+import { isPrereleaseVersion } from './version-utils'
 import { Engine, isFileBasedEngine, type ContainerConfig } from '../types'
 
 // Import version maps from all engines
@@ -238,12 +239,23 @@ export async function findOutdatedContainers(): Promise<OutdatedContainer[]> {
       continue
     }
 
+    // Never migrate a container that is on a prerelease. Prerelease data
+    // directories are not compatible with the GA release, so moving off (or
+    // onto) a prerelease would corrupt the data dir.
+    if (isPrereleaseVersion(container.version)) {
+      continue
+    }
+
     // Check main version
     if (!isVersionSupported(engine, container.version)) {
       const majorVersion = getMajorVersion(engine, container.version)
       if (majorVersion) {
         const targetVersion = getTargetVersion(engine, majorVersion)
-        if (targetVersion && targetVersion !== container.version) {
+        if (
+          targetVersion &&
+          targetVersion !== container.version &&
+          !isPrereleaseVersion(targetVersion)
+        ) {
           outdated.push({
             container,
             currentVersion: container.version,
@@ -256,12 +268,20 @@ export async function findOutdatedContainers(): Promise<OutdatedContainer[]> {
     }
 
     // Check FerretDB backend version
-    if (engine === Engine.FerretDB && container.backendVersion) {
+    if (
+      engine === Engine.FerretDB &&
+      container.backendVersion &&
+      !isPrereleaseVersion(container.backendVersion)
+    ) {
       if (!isDocumentDBVersionSupported(container.backendVersion)) {
         const majorVersion = getDocumentDBMajorVersion(container.backendVersion)
         if (majorVersion) {
           const targetVersion = getDocumentDBTargetVersion(majorVersion)
-          if (targetVersion && targetVersion !== container.backendVersion) {
+          if (
+            targetVersion &&
+            targetVersion !== container.backendVersion &&
+            !isPrereleaseVersion(targetVersion)
+          ) {
             outdated.push({
               container,
               currentVersion: container.backendVersion,

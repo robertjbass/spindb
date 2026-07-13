@@ -2,6 +2,7 @@ import { join } from 'path'
 import { readdirSync, existsSync } from 'fs'
 import { getEngineDefaults } from './engine-defaults'
 import { platformService } from '../core/platform-service'
+import { compareVersions } from '../core/version-utils'
 
 /**
  * Get the SpinDB home directory.
@@ -148,27 +149,10 @@ export const paths = {
         }
       }
 
-      // Sort by version descending (newest first)
-      // Handles non-numeric segments (e.g., "1.0.0-beta") by falling back to string comparison
-      return results.sort((a, b) => {
-        const aParts = a.version.split('.')
-        const bParts = b.version.split('.')
-        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-          const aRaw = aParts[i] || '0'
-          const bRaw = bParts[i] || '0'
-          const aNum = Number(aRaw)
-          const bNum = Number(bRaw)
-          // If both are valid numbers, compare numerically
-          if (!isNaN(aNum) && !isNaN(bNum)) {
-            if (bNum !== aNum) return bNum - aNum
-          } else {
-            // Fall back to string comparison for non-numeric segments
-            const cmp = bRaw.localeCompare(aRaw)
-            if (cmp !== 0) return cmp
-          }
-        }
-        return 0
-      })
+      // Sort by version descending (newest first). compareVersions handles
+      // prerelease suffixes (e.g. "19.0.0-beta.1") and sorts them below the
+      // matching GA release.
+      return results.sort((a, b) => compareVersions(b.version, a.version))
     } catch {
       return []
     }
