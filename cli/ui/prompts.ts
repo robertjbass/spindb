@@ -12,7 +12,9 @@ import { listEngines, getEngine } from '../../engines'
 import {
   getDeprecatedVersions,
   getAvailableVersions,
+  getPrereleaseVersions,
 } from '../../core/hostdb-metadata'
+import type { ReleaseType } from 'hostdb'
 import { defaults, getEngineDefaults } from '../../config/defaults'
 import { portManager } from '../../core/port-manager'
 import { containerManager } from '../../core/container-manager'
@@ -565,13 +567,16 @@ export async function promptVersion(
 
   let availableVersions: Record<string, string[]>
   let deprecatedVersions: Set<string> = new Set()
+  let prereleaseVersions: Map<string, ReleaseType> = new Map()
   try {
-    const [versions, deprecated] = await Promise.all([
+    const [versions, deprecated, prereleases] = await Promise.all([
       engine.fetchAvailableVersions(),
       getDeprecatedVersions(engineName),
+      getPrereleaseVersions(engineName),
     ])
     availableVersions = versions
     deprecatedVersions = deprecated
+    prereleaseVersions = prereleases
     spinner.stop()
   } catch {
     spinner.stop()
@@ -594,14 +599,27 @@ export async function promptVersion(
   const latestMajor = majorVersions[0]
   let hiddenDeprecatedCount = 0
 
-  for (let i = 0; i < majorVersions.length; i++) {
-    const major = majorVersions[i]
+  // Prerelease majors (e.g. PostgreSQL '19' while only 19.0.0-beta.1 exists) are
+  // deliberately absent from supportedVersions. Surface them so users can opt
+  // into a prerelease by selecting it - they are never the default or "latest".
+  const prereleaseMajors = Object.keys(availableVersions).filter(
+    (major) =>
+      !majorVersions.includes(major) &&
+      availableVersions[major].some((v) => prereleaseVersions.has(v)),
+  )
+  const allMajors = [...majorVersions, ...prereleaseMajors]
+
+  for (const major of allMajors) {
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
     const isLatestMajor = major === latestMajor
     const allDeprecated =
       fullVersions.length > 0 &&
       fullVersions.every((v) => deprecatedVersions.has(v))
+    const firstPrerelease = fullVersions.find((v) => prereleaseVersions.has(v))
+    const allPrerelease =
+      fullVersions.length > 0 &&
+      fullVersions.every((v) => prereleaseVersions.has(v))
 
     // Hide all-deprecated major versions unless --show-deprecated is set
     // TODO: If an engine has ALL majors deprecated, majorChoices will be empty.
@@ -619,9 +637,13 @@ export async function promptVersion(
           )
         : ''
     const deprecatedLabel = allDeprecated ? chalk.yellow(' [deprecated]') : ''
+    const prereleaseLabel =
+      allPrerelease && firstPrerelease
+        ? chalk.yellow(` [${prereleaseVersions.get(firstPrerelease)}]`)
+        : ''
     const label = isLatestMajor
       ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `${engine.displayName} ${major} ${countLabel}${deprecatedLabel}`
+      : `${engine.displayName} ${major} ${countLabel}${deprecatedLabel}${prereleaseLabel}`
 
     majorChoices.push({
       name: label,
@@ -680,10 +702,16 @@ export async function promptVersion(
 
   const minorChoices: Choice[] = minorVersions.map((v, i) => {
     const isDeprecated = deprecatedVersions.has(v)
+    const prereleaseType = prereleaseVersions.get(v)
     const deprecatedTag = isDeprecated ? chalk.yellow(' [deprecated]') : ''
-    const latestTag = i === 0 ? ` ${chalk.green('← latest')}` : ''
+    const prereleaseTag = prereleaseType
+      ? chalk.yellow(` [${prereleaseType}]`)
+      : ''
+    // A prerelease is never "latest" even if it sorts first in its major.
+    const latestTag =
+      i === 0 && !prereleaseType ? ` ${chalk.green('← latest')}` : ''
     return {
-      name: `${v}${latestTag}${deprecatedTag}`,
+      name: `${v}${latestTag}${deprecatedTag}${prereleaseTag}`,
       value: v,
       short: v,
     }

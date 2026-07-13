@@ -10,6 +10,7 @@
  */
 
 import { Platform, type Arch, type Engine } from '../types'
+import type { ReleaseType } from 'hostdb'
 import { logDebug } from './error-handler'
 
 // Registry base URLs
@@ -37,6 +38,7 @@ export type HostdbRelease = {
   releaseTag: string
   releasedAt: string
   deprecated?: boolean
+  releaseType?: ReleaseType
   platforms: Record<string, HostdbPlatform>
 }
 

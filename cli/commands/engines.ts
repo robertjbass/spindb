@@ -13,6 +13,11 @@ import { getEngine } from '../../engines'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { paths } from '../../config/paths'
 import { getEngineDefaults, type AuxPort } from '../../config/defaults'
+import {
+  getPrereleaseVersions as getHostdbPrereleaseVersions,
+  getReleaseType as getHostdbReleaseType,
+  type ReleaseType,
+} from 'hostdb'
 import { platformService } from '../../core/platform-service'
 import { detectPackageManager, findBinary } from '../../core/dependency-manager'
 import {
@@ -1849,6 +1854,11 @@ enginesCommand
             // source of truth. Additive - existing fields are unchanged.
             let dataSubdir: string | undefined
             let auxPorts: AuxPort[] = []
+            // Prerelease (beta/rc/alpha) versions, keyed by exact version token.
+            // Additive and cross-repo-agreed: layerbase-desktop/cloud render a
+            // Beta badge from this. Omitted entirely when empty so existing
+            // consumers see a stable shape.
+            const prereleaseVersions: Record<string, ReleaseType> = {}
             try {
               const engineInstance = getEngine(name)
               supportedVersions = [...engineInstance.supportedVersions]
@@ -1856,9 +1866,16 @@ enginesCommand
               defaultVersion = defaults.defaultVersion
               dataSubdir = defaults.dataSubdir
               auxPorts = defaults.auxPorts ?? []
+              for (const version of getHostdbPrereleaseVersions(name)) {
+                const type = getHostdbReleaseType(name, version)
+                if (type && type !== 'ga') {
+                  prereleaseVersions[version] = type
+                }
+              }
             } catch {
               // Engine not registered (e.g., status='planned') - leave version fields empty.
             }
+            const hasPrereleases = Object.keys(prereleaseVersions).length > 0
             return [
               name,
               {
@@ -1867,6 +1884,7 @@ enginesCommand
                 defaultVersion,
                 dataSubdir,
                 auxPorts,
+                ...(hasPrereleases ? { prereleaseVersions } : {}),
               },
             ]
           }),

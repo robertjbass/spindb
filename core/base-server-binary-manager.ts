@@ -24,6 +24,7 @@ import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
 import { fetchWithRegistryFallback } from './hostdb-client'
+import { prereleaseVersionMatches } from './version-utils'
 import {
   type Engine,
   Platform,
@@ -439,6 +440,12 @@ export abstract class BaseServerBinaryManager {
       const expectedMajor = version.split('.').slice(0, 2).join('.')
       const reportedMajor = reportedVersion.split('.').slice(0, 2).join('.')
       if (expectedMajor === reportedMajor) {
+        return true
+      }
+
+      // Prerelease binaries self-report the upstream form (e.g. "19beta1")
+      // which maps to hostdb's canonical "19.0.0-beta.1".
+      if (prereleaseVersionMatches(fullVersion, reportedVersion)) {
         return true
       }
 
