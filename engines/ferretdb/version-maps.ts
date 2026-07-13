@@ -14,31 +14,12 @@
 import {
   resolveVersion as hostdbResolveVersion,
   getSupportedMajorVersions,
-  listVersions,
 } from 'hostdb'
+import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'ferretdb'
 const DOCUMENTDB_ENGINE = 'postgresql-documentdb'
-
-function buildVersionMap(engine: string): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const major of getSupportedMajorVersions(engine)) {
-    const r = hostdbResolveVersion(engine, major)
-    if (r) map[major] = r
-  }
-  for (const minor of listVersions(engine, { format: 'major-minor' })) {
-    const r = hostdbResolveVersion(engine, minor)
-    if (r) map[minor] = r
-  }
-  for (const full of listVersions(engine, {
-    format: 'full',
-    includePrerelease: true,
-  })) {
-    map[full] = full
-  }
-  return map
-}
 
 export const FERRETDB_VERSION_MAP: Record<string, string> =
   buildVersionMap(ENGINE)

@@ -23,7 +23,11 @@ import {
 import { platformService } from '../../core/platform-service'
 import { startWithRetry } from '../../core/start-with-retry'
 import { TransactionManager } from '../../core/transaction-manager'
-import { isValidDatabaseName, exitWithError } from '../../core/error-handler'
+import {
+  isValidDatabaseName,
+  exitWithError,
+  logWarning,
+} from '../../core/error-handler'
 import { resolve } from 'path'
 import { Engine, Platform, ALL_ENGINES } from '../../types'
 import { canCreateDatabase } from '../../core/database-capabilities'
@@ -655,21 +659,19 @@ export const createCommand = new Command('create')
         }
         version = resolvedVersion
 
-        // Warn (non-blocking) when the user opts into a prerelease. Printed to
-        // stderr via console.warn so it is visible in --json mode without
-        // corrupting the JSON on stdout.
+        // Warn (non-blocking) when the user opts into a prerelease. Omitted in
+        // --json mode so machine-readable output stays clean; JSON consumers can
+        // detect prereleases from the resolved version token instead.
         const releaseChannel = getHostdbReleaseType(dbEngine.name, version)
-        if (releaseChannel && releaseChannel !== 'ga') {
+        if (releaseChannel && releaseChannel !== 'ga' && !options.json) {
           const channelLabel =
             releaseChannel === 'rc'
               ? 'release candidate'
               : releaseChannel === 'alpha'
                 ? 'an alpha release'
                 : 'a beta release'
-          console.warn(
-            chalk.yellow(
-              `${dbEngine.displayName} ${version} is ${releaseChannel === 'rc' ? 'a ' : ''}${channelLabel}. Not recommended for production; data directories are not compatible with the GA release.`,
-            ),
+          logWarning(
+            `${dbEngine.displayName} ${version} is ${releaseChannel === 'rc' ? 'a ' : ''}${channelLabel}. Not recommended for production; data directories are not compatible with the GA release.`,
           )
         }
 
