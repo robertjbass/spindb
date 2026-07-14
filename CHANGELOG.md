@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.1] - 2026-07-13
+
+### Documentation
+
+- Add a "Sponsored by Layerbase" banner to the README, with the Layerbase icon
+  vendored to `assets/` and a link to [layerbase.com](https://layerbase.com).
+
 ## [0.62.0] - 2026-07-13
 
 ### Added
