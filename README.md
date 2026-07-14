@@ -1,5 +1,12 @@
 # SpinDB
 
+<p align="center">
+  <a href="https://layerbase.com">
+    <img src="assets/layerbase-icon.svg" alt="Layerbase" width="20" height="20" align="top" />
+    Sponsored by <strong>Layerbase</strong>
+  </a>
+</p>
+
 [![npm version](https://img.shields.io/npm/v/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![npm downloads](https://img.shields.io/npm/dm/spindb.svg)](https://www.npmjs.com/package/spindb)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
