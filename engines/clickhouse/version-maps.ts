@@ -9,33 +9,21 @@
  * is 2-part to preserve that convention; '25' still resolves via the MAP.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-  listVersions,
-} from 'hostdb'
+import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
+import { buildVersionMap as buildBaseVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'clickhouse'
 
 function buildVersionMap(): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const major of getSupportedMajorVersions(ENGINE)) {
-    const r = hostdbResolveVersion(ENGINE, major)
-    if (r) map[major] = r
-  }
-  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
-    const r = hostdbResolveVersion(ENGINE, minor)
-    if (r) map[minor] = r
-  }
+  const map = buildBaseVersionMap(ENGINE)
+  // ClickHouse 4-part full versions have a 3-part prefix (e.g., 25.12.3) that
+  // should also resolve. Add 3-part prefix to the MAP for spindb's existing
+  // identity-match call paths.
   for (const full of listVersions(ENGINE, {
     format: 'full',
     includePrerelease: true,
   })) {
-    map[full] = full
-    // ClickHouse 4-part full versions have a 3-part prefix (e.g., 25.12.3) that
-    // should also resolve. Add 3-part prefix to the MAP for spindb's existing
-    // identity-match call paths.
     const parts = full.split('.')
     if (parts.length === 4) {
       const threePartPrefix = `${parts[0]}.${parts[1]}.${parts[2]}`

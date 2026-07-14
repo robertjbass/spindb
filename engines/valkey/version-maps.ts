@@ -8,32 +8,13 @@
 import {
   resolveVersion as hostdbResolveVersion,
   getSupportedMajorVersions,
-  listVersions,
 } from 'hostdb'
+import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'valkey'
 
-function buildVersionMap(): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const major of getSupportedMajorVersions(ENGINE)) {
-    const r = hostdbResolveVersion(ENGINE, major)
-    if (r) map[major] = r
-  }
-  for (const minor of listVersions(ENGINE, { format: 'major-minor' })) {
-    const r = hostdbResolveVersion(ENGINE, minor)
-    if (r) map[minor] = r
-  }
-  for (const full of listVersions(ENGINE, {
-    format: 'full',
-    includePrerelease: true,
-  })) {
-    map[full] = full
-  }
-  return map
-}
-
-export const VALKEY_VERSION_MAP: Record<string, string> = buildVersionMap()
+export const VALKEY_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
