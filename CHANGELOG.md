@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.2] - 2026-07-24
+
+### Changed
+
+- **Pin `hostdb` to `0.36.0`** (was 0.35.0). Adds **DuckDB 1.5.5** and makes it
+  the default for the `1` major: `defaults["1"]` now resolves to 1.5.5, so a bare
+  `spindb create duckdb` (or `--db-version 1`) provisions 1.5.5 instead of 1.4.4.
+  The 1.4 line stays fully supported (`1.4` still resolves to `1.4.4`), and
+  existing containers self-pin their stored full version, so nothing on 1.4 is
+  disturbed. The bundled snapshot matches the live registry, so the hostdb-sync
+  integration test stays green.
+
 ## [0.62.1] - 2026-07-13
 
 ### Documentation
