@@ -99,15 +99,9 @@ export class DuckDBEngine extends BaseEngine {
     return binPath
   }
 
-  // Get path to duckdb binary - checks downloaded binary first
+  // Get path to duckdb binary. Versioned operations must use the exact
+  // requested install and must never fall back to a different cached version.
   override async getDuckDBPath(version?: string): Promise<string | null> {
-    // Check config manager first (cached path from downloaded binaries)
-    const configPath = await configManager.getBinaryPath('duckdb')
-    if (configPath && existsSync(configPath)) {
-      return configPath
-    }
-
-    // If version provided, check downloaded binary path directly
     if (version) {
       const { platform, arch } = platformService.getPlatformInfo()
       const fullVersion = normalizeVersion(version)
@@ -122,6 +116,14 @@ export class DuckDBEngine extends BaseEngine {
       if (existsSync(duckdbPath)) {
         return duckdbPath
       }
+
+      return null
+    }
+
+    // Versionless operations retain the most recently registered binary.
+    const configPath = await configManager.getBinaryPath('duckdb')
+    if (configPath && existsSync(configPath)) {
+      return configPath
     }
 
     // Not found - require download
