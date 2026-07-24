@@ -105,15 +105,9 @@ export class SQLiteEngine extends BaseEngine {
     return binPath
   }
 
-  // Get path to sqlite3 binary - checks downloaded binary first
+  // Get path to sqlite3 binary. Versioned operations must use the exact
+  // requested install and must never fall back to a different cached version.
   override async getSqlite3Path(version?: string): Promise<string | null> {
-    // Check config manager first (cached path from downloaded binaries)
-    const configPath = await configManager.getBinaryPath('sqlite3')
-    if (configPath && existsSync(configPath)) {
-      return configPath
-    }
-
-    // If version provided, check downloaded binary path directly
     if (version) {
       const { platform, arch } = platformService.getPlatformInfo()
       const fullVersion = normalizeVersion(version)
@@ -128,6 +122,14 @@ export class SQLiteEngine extends BaseEngine {
       if (existsSync(sqlite3Path)) {
         return sqlite3Path
       }
+
+      return null
+    }
+
+    // Versionless operations retain the most recently registered binary.
+    const configPath = await configManager.getBinaryPath('sqlite3')
+    if (configPath && existsSync(configPath)) {
+      return configPath
     }
 
     // Not found - require download

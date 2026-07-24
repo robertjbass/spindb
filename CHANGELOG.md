@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.3] - 2026-07-24
+
+### Fixed
+
+- **File-based creates now honor the exact requested binary version.** DuckDB
+  and SQLite creation ensure the resolved version before checking tools, and
+  versioned binary lookup no longer accepts a differently versioned cached
+  executable. This prevents a request for DuckDB 1.5.5 from recording 1.5.5
+  metadata while silently running a cached DuckDB 1.4.x binary.
+
 ## [0.62.2] - 2026-07-24
 
 ### Changed
