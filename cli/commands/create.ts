@@ -39,6 +39,36 @@ import {
 import type { BaseEngine } from '../../engines/base-engine'
 import { getEngineMetadata } from '../helpers'
 
+async function ensureFileBasedBinaries(
+  dbEngine: BaseEngine,
+  version: string,
+  json?: boolean,
+): Promise<void> {
+  const binarySpinner = json
+    ? null
+    : createSpinner(`Checking ${dbEngine.displayName} ${version} binaries...`)
+  binarySpinner?.start()
+
+  try {
+    await dbEngine.ensureBinaries(version, ({ stage, message }) => {
+      if (binarySpinner) {
+        binarySpinner.text =
+          stage === 'cached'
+            ? `${dbEngine.displayName} ${version} binaries ready (cached)`
+            : message
+      }
+    })
+    binarySpinner?.succeed(`${dbEngine.displayName} ${version} binaries ready`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    binarySpinner?.fail(`${dbEngine.displayName} ${version} not available`)
+    return exitWithError({
+      message: `${dbEngine.displayName} ${version} not available: ${detail}`,
+      json,
+    })
+  }
+}
+
 /**
  * Simplified SQLite container creation flow
  * SQLite is file-based, so no port, start/stop, or server management needed
@@ -62,6 +92,10 @@ async function createSqliteContainer(
     force,
     json,
   } = options
+
+  // File-based engines bypass the common server create flow, so ensure the
+  // exact requested binary version here before the generic dependency check.
+  await ensureFileBasedBinaries(dbEngine, version, json)
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
@@ -233,6 +267,10 @@ async function createDuckDBContainer(
     force,
     json,
   } = options
+
+  // File-based engines bypass the common server create flow, so ensure the
+  // exact requested binary version here before the generic dependency check.
+  await ensureFileBasedBinaries(dbEngine, version, json)
 
   // Check dependencies
   const depsSpinner = json ? null : createSpinner('Checking required tools...')
