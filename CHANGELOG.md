@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.4] - 2026-08-06
+
+### Changed
+
+- **Pin `hostdb` to `0.38.3`** (was 0.36.0). Picks up the QuestDB bump from
+  hostdb 0.37.0 and the thirteen-engine security + feature wave from hostdb
+  0.38.0, plus the 0.38.1 metadata republish, the 0.38.2 QuestDB JRE fix and the
+  0.38.3 Linux fixes for Qdrant and CouchDB. Nineteen new engine versions across
+  thirteen engines; no version was removed, every prior version still resolves,
+  and existing containers self-pin their stored full version, so nothing running
+  is disturbed. The version-map wrappers rebuild from hostdb's bundled snapshot
+  at load time, so no MAP edits were needed.
+
+  **Pin `0.38.3`.** Every earlier release of this wave is unsafe to pin, each
+  for a different reason:
+  - `0.38.0` published to npm while four release workflows were still building,
+    so its bundled `releases.json` snapshot is missing `valkey 9.0.5`,
+    `redis 8.4.5`, `influxdb 3.10.5` and `mariadb 11.8.8`. On that snapshot
+    `getReleaseInfo` returns null for those four and the binaries cannot be
+    downloaded even though they are on R2.
+  - `0.38.1` fixed the snapshot but still bundled an Adoptium Temurin **21** JRE
+    with QuestDB 9.4.3 on darwin-arm64, darwin-x64 and linux-arm64, which cannot
+    start it (see below).
+  - `0.38.2` fixed the JRE but shipped two broken Linux artifacts: the Qdrant
+    1.18.3 `linux-x64` build required `GLIBC_2.38`, so it failed its own
+    `--version` verify on Ubuntu 22.04 (glibc 2.35) and inside the Docker E2E
+    image, and CouchDB 3.5.2 `linux-x64` failed to start at all on both Ubuntu
+    22.04 and 24.04. `0.38.3` reworks both: Qdrant `linux-x64` moves to the
+    static musl asset, and CouchDB is rebuilt from the official Apache jammy
+    package instead of a docker-extract that had inherited Debian 13's glibc
+    2.41 and OpenSSL 3.5. Both rebuilt artifacts are verified booting on
+    `ubuntu:22.04`.
+
+  **Security fixes in this wave:**
+  - **Valkey 9.0.5 and 8.0.10** - `CVE-2026-56684` (TLS use-after-free reachable
+    by an authenticated client via `CLIENT KILL`) and `CVE-2026-63639` (corrupt
+    stream RDB sharing a NACK across consumers, leading to RCE).
+  - **Redis 7.2.15, 8.4.5 and 7.4.10** - `CVE-2026-66373` (a crafted stream
+    `RESTORE` payload makes two consumers share a NACK, a use-after-free leading
+    to RCE). 7.2.15 stays BSD-3-Clause, so the managed-service-safe line takes
+    the fix without a license change.
+  - **MongoDB 8.0.28, 8.2.12 and 7.0.39** - the July 2026 MongoDB security
+    batch, including `CVE-2026-13072` and `CVE-2026-13074`.
+  - **MySQL 8.4.11 and 9.7.2** - the July 2026 Oracle Critical Patch Update for
+    the MySQL Server tree, including `CVE-2026-60311`.
+  - **MariaDB 11.8.8** - `CVE-2026-44171`.
+
+  **Also new:** QuestDB 9.4.3, TypeDB 3.12.1, Meilisearch 1.52.0, Qdrant 1.18.3,
+  Weaviate 1.38.8, InfluxDB 3.10.5, SQLite 3.53.4, CouchDB 3.5.2.
+
+  **Default patches shifted** so a bare major resolves to the fixed or newest
+  patch: valkey `'9'` 9.0.4 to 9.0.5 and `'8'` 8.0.9 to 8.0.10; redis `'7'`
+  7.2.14 to 7.2.15 and `'8'` 8.4.0 to 8.4.5; mongodb `'8'` 8.0.23 to 8.0.28 and
+  `'7'` 7.0.34 to 7.0.39 (`'8'` deliberately stays on the 8.0 LTS line and is
+  NOT pointed at 8.2.x); mysql `'8'` 8.4.9 to 8.4.11 and `'9'` 9.6.0 to 9.7.2;
+  mariadb `'11'` 11.8.6 to 11.8.8 (the 10.11 line is untouched); questdb `'9'`
+  9.2.3 to 9.4.3; typedb `'3'` 3.12.0 to 3.12.1; meilisearch `'1'` 1.43.1 to
+  1.52.0; qdrant `'1'` 1.16.3 to 1.18.3; weaviate `'1'` 1.35.7 to 1.38.8;
+  influxdb `'3'` 3.8.0 to 3.10.5; sqlite `'3'` 3.53.1 to 3.53.4; couchdb `'3'`
+  3.5.1 to 3.5.2.
+
+  The bundled snapshot matches the live registry, so the hostdb-sync integration
+  test stays green.
+
+### Fixed
+
+- **QuestDB 9.4.3 now starts on darwin-arm64, darwin-x64 and linux-arm64**
+  (via the hostdb 0.38.2 JRE fix). QuestDB 9.4.3's own `questdb.sh` launcher
+  passes `--sun-misc-unsafe-memory-access=allow`, a flag that only exists on
+  JDK 24 and newer, but hostdb 0.38.0/0.38.1 bundled an Adoptium Temurin **21**
+  JRE for exactly those three platforms. The JVM refused the option and exited
+  with `Unrecognized option: --sun-misc-unsafe-memory-access=allow` /
+  `Could not create the Java Virtual Machine`, so a bare `spindb create questdb`
+  would have failed on macOS the moment 9.4.3 became the default for major `9`.
+  hostdb 0.38.2 bundles a JDK 25 JRE on those platforms. `linux-x64` and
+  `win32-x64` use QuestDB's official `-rt-` runtime bundles, which always
+  carried a correct JRE, and were never affected.
+
 ## [0.62.3] - 2026-07-24
 
 ### Fixed
