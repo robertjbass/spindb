@@ -11,24 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Pin `hostdb` to `0.38.2`** (was 0.36.0). Picks up the QuestDB bump from
+- **Pin `hostdb` to `0.38.3`** (was 0.36.0). Picks up the QuestDB bump from
   hostdb 0.37.0 and the thirteen-engine security + feature wave from hostdb
-  0.38.0, plus the 0.38.1 metadata republish and the 0.38.2 QuestDB JRE fix.
-  Nineteen new engine versions across thirteen engines; no version was removed,
-  every prior version still resolves, and existing containers self-pin their
-  stored full version, so nothing running is disturbed. The version-map wrappers
-  rebuild from hostdb's bundled snapshot at load time, so no MAP edits were
-  needed.
+  0.38.0, plus the 0.38.1 metadata republish, the 0.38.2 QuestDB JRE fix and the
+  0.38.3 Linux fixes for Qdrant and CouchDB. Nineteen new engine versions across
+  thirteen engines; no version was removed, every prior version still resolves,
+  and existing containers self-pin their stored full version, so nothing running
+  is disturbed. The version-map wrappers rebuild from hostdb's bundled snapshot
+  at load time, so no MAP edits were needed.
 
-  **Pin `0.38.2`, never `0.38.0` or `0.38.1`.** Two earlier releases of this
-  wave are unsafe to pin. `0.38.0` published to npm while four release workflows
-  were still building, so its bundled `releases.json` snapshot is missing
-  `valkey 9.0.5`, `redis 8.4.5`, `influxdb 3.10.5` and `mariadb 11.8.8`; on that
-  snapshot `getReleaseInfo` returns null for those four and the binaries cannot
-  be downloaded even though they are on R2. `0.38.1` fixed the snapshot but
-  still bundled an Adoptium Temurin **21** JRE with QuestDB 9.4.3 on
-  darwin-arm64, darwin-x64 and linux-arm64, which cannot start it (see below).
-  `0.38.2` is the first release of this wave that is correct on both counts.
+  **Pin `0.38.3`.** Every earlier release of this wave is unsafe to pin, each
+  for a different reason:
+  - `0.38.0` published to npm while four release workflows were still building,
+    so its bundled `releases.json` snapshot is missing `valkey 9.0.5`,
+    `redis 8.4.5`, `influxdb 3.10.5` and `mariadb 11.8.8`. On that snapshot
+    `getReleaseInfo` returns null for those four and the binaries cannot be
+    downloaded even though they are on R2.
+  - `0.38.1` fixed the snapshot but still bundled an Adoptium Temurin **21** JRE
+    with QuestDB 9.4.3 on darwin-arm64, darwin-x64 and linux-arm64, which cannot
+    start it (see below).
+  - `0.38.2` fixed the JRE but shipped two broken Linux artifacts: the Qdrant
+    1.18.3 `linux-x64` build required `GLIBC_2.38`, so it failed its own
+    `--version` verify on Ubuntu 22.04 (glibc 2.35) and inside the Docker E2E
+    image, and CouchDB 3.5.2 `linux-x64` failed to start at all on both Ubuntu
+    22.04 and 24.04. `0.38.3` reworks both: Qdrant `linux-x64` moves to the
+    static musl asset, and CouchDB is rebuilt from the official Apache jammy
+    package instead of a docker-extract that had inherited Debian 13's glibc
+    2.41 and OpenSSL 3.5. Both rebuilt artifacts are verified booting on
+    `ubuntu:22.04`.
 
   **Security fixes in this wave:**
   - **Valkey 9.0.5 and 8.0.10** - `CVE-2026-56684` (TLS use-after-free reachable
