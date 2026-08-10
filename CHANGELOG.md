@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.5] - 2026-08-10
+
+### Fixed
+
+- **Spawning an engine no longer discards your own `LD_LIBRARY_PATH` /
+  `DYLD_FALLBACK_LIBRARY_PATH`.** `getLibraryEnv()` returned a bare
+  `{ LD_LIBRARY_PATH: <binPath>/lib }`, and every call site spreads it over
+  `process.env` (`{ ...process.env, ...getLibraryEnv(binPath) }`), so the
+  caller's existing value was replaced rather than extended for MariaDB, Redis
+  and Valkey child processes. Anyone relying on that variable to resolve their
+  own libraries lost it for the spawned engine. The bundled `lib` directory is
+  now PREPENDED, so it still wins while the caller's search path survives
+  behind it.
+- **`getWindowsDllEnv()` now prepends to `PATH` instead of appending.** It
+  exists to make a bundled DLL resolve (InfluxDB's `python/python313.dll`),
+  but appending loses to any same-named DLL already reachable on `PATH`. A
+  stray `python313.dll` from another install would win, turning a clear
+  missing-DLL failure into a harder-to-read version-mismatch one.
+
+Both paths are covered by `tests/unit/library-env.test.ts`, including the
+Windows separator (exercised directly through the extracted `prependPath`
+helper, since `getWindowsDllEnv` early-returns off Windows and that branch
+would otherwise never run in CI). The prepend assertion was verified to fail
+against the previous implementation.
+
 ## [0.62.4] - 2026-08-06
 
 ### Changed
