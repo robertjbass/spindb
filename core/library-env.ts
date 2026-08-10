@@ -22,6 +22,14 @@ import { join } from 'path'
  * On Linux: LD_LIBRARY_PATH
  * On Windows: returns undefined (not applicable).
  *
+ * {binPath}/lib is PREPENDED to any value the caller already has, never
+ * substituted for it. Callers spread the result over process.env
+ * (`{ ...process.env, ...getLibraryEnv(binPath) }`), so returning a bare
+ * value silently dropped a user's own LD_LIBRARY_PATH / DYLD_FALLBACK_LIBRARY_PATH
+ * for the spawned engine - which breaks anyone who relies on it to resolve
+ * their own libraries. Prepending keeps our bundled copy winning while
+ * leaving their search path intact behind it.
+ *
  * Usage: spread into spawn env: `{ ...process.env, ...getLibraryEnv(binPath) }`
  */
 export function getLibraryEnv(
@@ -31,22 +39,52 @@ export function getLibraryEnv(
   const libDir = join(binPath, 'lib')
 
   if (plat === 'darwin') {
-    return { DYLD_FALLBACK_LIBRARY_PATH: libDir }
+    return {
+      DYLD_FALLBACK_LIBRARY_PATH: prependPath(
+        libDir,
+        process.env.DYLD_FALLBACK_LIBRARY_PATH,
+        ':',
+      ),
+    }
   }
   if (plat === 'linux') {
-    return { LD_LIBRARY_PATH: libDir }
+    return {
+      LD_LIBRARY_PATH: prependPath(libDir, process.env.LD_LIBRARY_PATH, ':'),
+    }
   }
   return undefined
 }
 
 /**
+ * Puts `dir` at the front of an existing search path, preserving whatever was
+ * already there. An absent or empty existing value yields just `dir`, so no
+ * caller ever gets a stray leading or trailing separator.
+ *
+ * Exported for tests: it is the whole of the prepend-not-replace behavior, and
+ * testing it directly is the only way to cover the Windows separator on a
+ * non-Windows CI runner.
+ */
+export function prependPath(
+  dir: string,
+  existing: string | undefined,
+  separator: string,
+): string {
+  return existing ? `${dir}${separator}${existing}` : dir
+}
+
+/**
  * Returns env vars that add a directory to the Windows DLL search path.
- * Appends the directory to the existing PATH environment variable.
+ * PREPENDS the directory to the existing PATH environment variable.
  * Returns undefined on non-Windows platforms (not needed).
  *
  * Use for engines that bundle DLLs in subdirectories that aren't on the
  * default search path (e.g., InfluxDB's python/ directory containing
  * python313.dll needed at load time).
+ *
+ * Prepend rather than append: this exists to make OUR bundled DLL resolve,
+ * and appending loses to any same-named DLL already reachable on PATH. A
+ * stray python313.dll of a different build then wins, which produces a
+ * second, harder-to-read failure than the missing-DLL one this fixes.
  *
  * Usage: spread into spawn env: `{ ...process.env, ...getWindowsDllEnv(dllDir) }`
  */
@@ -54,8 +92,7 @@ export function getWindowsDllEnv(
   dllDir: string,
 ): Record<string, string> | undefined {
   if (osPlatform() !== 'win32') return undefined
-  const currentPath = process.env.PATH || ''
-  return { PATH: `${currentPath};${dllDir}` }
+  return { PATH: prependPath(dllDir, process.env.PATH, ';') }
 }
 
 /**

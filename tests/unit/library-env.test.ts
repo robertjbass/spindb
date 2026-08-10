@@ -1,48 +1,166 @@
 import { describe, it } from 'node:test'
 import { platform as osPlatform } from 'os'
 import { join } from 'path'
-import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
+import {
+  getLibraryEnv,
+  getWindowsDllEnv,
+  prependPath,
+  detectLibraryError,
+} from '../../core/library-env'
 import { assert, assertEqual } from '../utils/assertions'
+
+// The unit suite runs with --experimental-test-isolation=none, so every test
+// shares one process: any process.env write has to be restored or it leaks
+// into unrelated tests.
+function withEnv<T>(key: string, value: string | undefined, fn: () => T): T {
+  const had = Object.hasOwn(process.env, key)
+  const previous = process.env[key]
+  if (value === undefined) delete process.env[key]
+  else process.env[key] = value
+  try {
+    return fn()
+  } finally {
+    if (had) process.env[key] = previous
+    else delete process.env[key]
+  }
+}
+
+const LIBRARY_PATH_VAR: Record<string, string> = {
+  darwin: 'DYLD_FALLBACK_LIBRARY_PATH',
+  linux: 'LD_LIBRARY_PATH',
+}
 
 describe('library-env', () => {
   describe('getLibraryEnv', () => {
     const binPath = '/home/user/.spindb/bin/redis-8.4.0-linux-arm64'
+    const plat = osPlatform()
+    const envVar = LIBRARY_PATH_VAR[plat]
 
     it('should return an object with the correct library path', () => {
-      const result = getLibraryEnv(binPath)
-      const plat = osPlatform()
-
-      if (plat === 'darwin') {
-        assert(result !== undefined, 'Should return env on macOS')
+      if (!envVar) {
         assertEqual(
-          result!.DYLD_FALLBACK_LIBRARY_PATH,
-          join(binPath, 'lib'),
-          'Should set DYLD_FALLBACK_LIBRARY_PATH',
+          getLibraryEnv(binPath),
+          undefined,
+          'Should return undefined on Windows',
         )
-      } else if (plat === 'linux') {
-        assert(result !== undefined, 'Should return env on Linux')
-        assertEqual(
-          result!.LD_LIBRARY_PATH,
-          join(binPath, 'lib'),
-          'Should set LD_LIBRARY_PATH',
-        )
-      } else if (plat === 'win32') {
-        assertEqual(result, undefined, 'Should return undefined on Windows')
+        return
       }
+
+      withEnv(envVar, undefined, () => {
+        const result = getLibraryEnv(binPath)
+        assert(result !== undefined, `Should return env on ${plat}`)
+        assertEqual(
+          result![envVar],
+          join(binPath, 'lib'),
+          `Should set ${envVar}`,
+        )
+      })
     })
 
     it('should point to the lib subdirectory of binPath', () => {
-      const result = getLibraryEnv(binPath)
-      const plat = osPlatform()
+      if (!envVar) return
 
-      if (plat === 'win32') return
+      withEnv(envVar, undefined, () => {
+        const result = getLibraryEnv(binPath)
+        assert(result !== undefined, 'Should return env on Unix')
+        const values = Object.values(result!)
+        assert(values.length === 1, 'Should have exactly one env var')
+        assert(
+          values[0].endsWith('/lib'),
+          `Path should end with /lib, got: ${values[0]}`,
+        )
+      })
+    })
 
-      assert(result !== undefined, 'Should return env on Unix')
-      const values = Object.values(result!)
-      assert(values.length === 1, 'Should have exactly one env var')
-      assert(
-        values[0].endsWith('/lib'),
-        `Path should end with /lib, got: ${values[0]}`,
+    it("should PREPEND to the caller's existing library path, not replace it", () => {
+      if (!envVar) return
+
+      withEnv(envVar, '/opt/mylibs:/usr/local/custom/lib', () => {
+        const result = getLibraryEnv(binPath)
+        assert(result !== undefined, 'Should return env on Unix')
+        assertEqual(
+          result![envVar],
+          `${join(binPath, 'lib')}:/opt/mylibs:/usr/local/custom/lib`,
+          'Bundled lib dir should win, existing entries should survive behind it',
+        )
+      })
+    })
+
+    it('should not emit a trailing separator when the existing value is empty', () => {
+      if (!envVar) return
+
+      withEnv(envVar, '', () => {
+        const result = getLibraryEnv(binPath)
+        assertEqual(
+          result![envVar],
+          join(binPath, 'lib'),
+          'Empty existing value should yield just the lib dir',
+        )
+      })
+    })
+  })
+
+  describe('getWindowsDllEnv', () => {
+    it('should return undefined off Windows', () => {
+      if (osPlatform() === 'win32') return
+      assertEqual(
+        getWindowsDllEnv('C:\\bin\\influxdb\\python'),
+        undefined,
+        'Only Windows needs the PATH treatment',
+      )
+    })
+
+    it('should prepend the DLL dir to PATH on Windows', () => {
+      if (osPlatform() !== 'win32') return
+
+      withEnv('PATH', 'C:\\Windows\\System32', () => {
+        assertEqual(
+          getWindowsDllEnv('C:\\bin\\influxdb\\python')!.PATH,
+          'C:\\bin\\influxdb\\python;C:\\Windows\\System32',
+          'Bundled DLL dir must come first so a stray same-named DLL cannot win',
+        )
+      })
+    })
+  })
+
+  // Covers the Windows separator on non-Windows runners: getWindowsDllEnv
+  // itself early-returns off win32, so without this the ';' branch would
+  // never execute in CI.
+  describe('prependPath', () => {
+    it('should place the new directory first', () => {
+      assertEqual(
+        prependPath('/new', '/old', ':'),
+        '/new:/old',
+        'New directory should come first',
+      )
+    })
+
+    it('should preserve every existing entry in order', () => {
+      assertEqual(
+        prependPath('/new', '/a:/b:/c', ':'),
+        '/new:/a:/b:/c',
+        'Existing entries should survive in their original order',
+      )
+    })
+
+    it('should use the Windows separator when asked', () => {
+      assertEqual(
+        prependPath('C:\\new', 'C:\\Windows\\System32', ';'),
+        'C:\\new;C:\\Windows\\System32',
+        'Windows paths join with a semicolon',
+      )
+    })
+
+    it('should return just the directory when nothing exists', () => {
+      assertEqual(
+        prependPath('/new', undefined, ':'),
+        '/new',
+        'Absent existing value should not add a separator',
+      )
+      assertEqual(
+        prependPath('/new', '', ':'),
+        '/new',
+        'Empty existing value should not add a separator',
       )
     })
   })
