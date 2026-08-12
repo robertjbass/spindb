@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.6] - 2026-08-12
+
+### Changed
+
+- Bump `hostdb` to 0.39.0: adds TypeDB 3.12.2 (all platforms) and moves the TypeDB 3.x default to 3.12.2. Also picks up hostdb 0.38.4's release-pipeline hardening (no artifact changes) and the Redis 7.4.10 deprecation flag.
+
 ## [0.62.5] - 2026-08-10
 
 ### Fixed
