@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.8] - 2026-08-15
+
 ### Changed
 
 - **`spindb branch`, `spindb branch reset` and `spindb clone` now REFUSE CouchDB** instead of producing a copy that silently writes to the original. CouchDB 3.x is a cluster even as a single node and keeps its identity inside the data (`_nodes.couch` plus the `_dbs` shard map, which records the owning Erlang node per shard range), so a duplicated data directory duplicates the cluster: the two instances find each other over epmd, form one cluster, and the copy - owning no shards - proxies every read and write to the source. A document written to the copy reads back on the original. It fails silently, because the copy starts, `/_up` returns 200, and reads look correct precisely because they are the parent's data. Unlike the port and `database_dir` (re-asserted on start since 0.62.7), this cannot be repaired by editing a config file: CouchDB has no supported in-place node rename. The isolated path is to create a fresh container and replicate into it (`POST /_replicate`), which is the direction tracked in #275. The refusal is raised before a running source is stopped, so an attempted branch no longer takes the database down on its way to failing.
