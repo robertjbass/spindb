@@ -54,6 +54,53 @@ export type DeleteOptions = {
   force?: boolean
 }
 
+/**
+ * Engines whose data directory cannot be duplicated into a second LIVE instance,
+ * with the reason surfaced to the user.
+ *
+ * CouchDB 3.x is a cluster even when it is a single node, and its identity lives
+ * INSIDE the data - `_nodes.couch` holds the node list and `_dbs.couch` holds the
+ * shard map, which records the owning Erlang node name per shard range. A copy
+ * therefore inherits the ORIGINAL's cluster: the two instances discover each
+ * other over epmd (they run on one host), form one cluster, and the copy owns no
+ * shards, so it proxies every read and write to the source. Observed directly:
+ * a document written to the copy reads back on the original.
+ *
+ * That is silent - the copy starts, `/_up` returns 200, and reads look correct
+ * because they are the parent's data - so refusing is safer than warning. Unlike
+ * the port and `database_dir` (which patchCouchDBConfig rewrites on start), this
+ * cannot be repaired by editing a config file: CouchDB has no supported in-place
+ * node rename. The isolated path is to create a fresh node and REPLICATE into it.
+ *
+ * See https://github.com/robertjbass/spindb/issues/275.
+ */
+const DATA_DIR_COPY_UNSAFE: Partial<Record<Engine, string>> = {
+  [Engine.CouchDB]:
+    'CouchDB stores its cluster identity inside the data directory (_nodes and ' +
+    'the _dbs shard map), so a copied instance joins the original cluster and ' +
+    'forwards its reads and writes to the source - the copy is NOT isolated, ' +
+    'and writing to it modifies the original. Create a new CouchDB container ' +
+    'and replicate into it instead (POST /_replicate). ' +
+    'Details: https://github.com/robertjbass/spindb/issues/275',
+}
+
+/**
+ * Throw when an engine's data directory must not be duplicated. Exported so the
+ * refusal is unit-testable without standing up a container.
+ */
+export function assertDataDirCopyable(engine: Engine, operation: string): void {
+  const reason = DATA_DIR_COPY_UNSAFE[engine]
+  if (!reason) return
+  // Compose the prefix explicitly: passing a custom message to
+  // UnsupportedOperationError REPLACES its default "<operation> is not supported
+  // for <engine>" line, and the user needs to see which operation was refused.
+  throw new UnsupportedOperationError(
+    operation,
+    engine,
+    `${operation} is not supported for ${engine}. ${reason}`,
+  )
+}
+
 export class ContainerManager {
   async create(name: string, options: CreateOptions): Promise<ContainerConfig> {
     const { engine, version, port, database, binaryPath, memoryBudgetMb } =
@@ -481,6 +528,9 @@ export class ContainerManager {
     }
 
     const { engine } = sourceConfig
+    // Both branch and clone land here, and both produce a second live instance
+    // off one data directory - which is exactly what CouchDB cannot survive.
+    assertDataDirCopyable(engine, 'Copying a data directory')
 
     // Check target doesn't exist (for this engine)
     if (await this.exists(targetName, { engine })) {

@@ -23,7 +23,7 @@ import { existsSync } from 'fs'
 import { mkdir, rm } from 'fs/promises'
 import { join, extname, dirname } from 'path'
 import { paths } from '../config/paths'
-import { containerManager } from './container-manager'
+import { containerManager, assertDataDirCopyable } from './container-manager'
 import { processManager } from './process-manager'
 import { startContainerWithRetry } from './start-with-retry'
 import { cloneDirectory, type CopyMethod } from './cow-copy'
@@ -114,6 +114,11 @@ class BranchManager {
     }
 
     const { engine } = sourceConfig
+    // Refuse here, not deeper in the copy: a live source is STOPPED before the
+    // data directory is duplicated, so a late failure would take the user's
+    // database down for nothing.
+    assertDataDirCopyable(engine, 'Branching')
+
     if (await containerManager.exists(name, { engine })) {
       throw new Error(`Container "${name}" already exists`)
     }
@@ -382,6 +387,8 @@ class BranchManager {
     }
 
     // Stop a running server branch before removing it.
+    assertDataDirCopyable(config.engine, 'Resetting a branch')
+
     if (!isFileBasedEngine(config.engine) && !isRemoteContainer(config)) {
       const running = await processManager.isRunning(name, {
         engine: config.engine,
