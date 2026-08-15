@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync, openSync, closeSync } from 'fs'
-import { chmod, mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
+import { chmod, mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
@@ -48,6 +48,57 @@ import { parseRESTAPIResult } from '../../core/query-parser'
 
 const ENGINE = 'weaviate'
 const engineDef = getEngineDefaults(ENGINE)
+
+/**
+ * Resolve the container's stable cluster node identity (CLUSTER_HOSTNAME /
+ * RAFT_JOIN), persisting it in `.cluster-node-name` at the container-dir level
+ * on first resolution.
+ *
+ * Why persisted instead of derived: Weaviate's raft store (which owns the
+ * schema and the shard-to-node assignments) is keyed by the node name. The old
+ * `node-${port}` derivation changed the name whenever the port changed, so any
+ * data-dir copy that lands on a new port - `spindb branch`, `spindb clone` -
+ * could not load the copied raft store and came up with an EMPTY schema, while
+ * the objects sat inaccessible on disk. The identity file rides along with the
+ * copied container dir, so a branch keeps its parent's node name, loads the
+ * parent's raft store, and serves the parent's data (each instance still
+ * gossips alone: CLUSTER_JOIN is empty and the gossip/raft bind ports derive
+ * from each instance's own HTTP port).
+ *
+ * Backward compatibility, first resolution on an existing container:
+ * - If raft state exists and `.last-cluster-identity` (the retired wipe
+ *   tracker) recorded the port the raft store was written under, persist
+ *   `node-<thatPort>` so the existing schema keeps loading even if the port
+ *   has since changed.
+ * - Otherwise persist `node-${port}` - identical to the old derivation.
+ */
+export async function resolveWeaviateNodeIdentity(options: {
+  containerDir: string
+  dataDir: string
+  port: number
+}): Promise<string> {
+  const { containerDir, dataDir, port } = options
+  const nodeNameFile = join(containerDir, '.cluster-node-name')
+  if (existsSync(nodeNameFile)) {
+    const persisted = (await readFile(nodeNameFile, 'utf-8')).trim()
+    if (persisted) return persisted
+  }
+
+  let nodeName = `node-${port}`
+  const legacyIdentityFile = join(containerDir, '.last-cluster-identity')
+  if (existsSync(join(dataDir, 'raft')) && existsSync(legacyIdentityFile)) {
+    try {
+      const lastIdentity = (await readFile(legacyIdentityFile, 'utf-8')).trim()
+      const match = lastIdentity.match(/:(\d+)$/)
+      if (match) nodeName = `node-${match[1]}`
+    } catch {
+      // Unreadable tracker: fall through to the port-derived name.
+    }
+  }
+
+  await writeFile(nodeNameFile, nodeName)
+  return nodeName
+}
 
 /**
  * Parse a Weaviate connection string
@@ -454,30 +505,15 @@ export class WeaviateEngine extends BaseEngine {
       return null
     }
 
-    // Clean up RAFT state if the cluster identity changed since last start.
-    // RAFT persists the cluster advertise address and node name; stale state
-    // causes Weaviate to hang trying to rejoin the old node on restart.
-    // Track both bind address and port since RAFT ports derive from the HTTP port.
-    const bindFile = join(containerDir, '.last-cluster-identity')
+    // Node identity is persisted (.cluster-node-name), so a port change no
+    // longer changes the raft identity and the old wipe-raft-on-identity-change
+    // guard is retired. The raft store holds the SCHEMA, so that wipe silently
+    // emptied a database whenever its port moved - and it is what broke
+    // `spindb branch` for Weaviate (a branch always lands on a new port).
+    // Address changes are handled by RAFT_ENABLE_ONE_NODE_RECOVERY below.
+    // `.last-cluster-identity` is no longer written; it is read once by
+    // resolveWeaviateNodeIdentity to migrate legacy containers.
     const currentBind = container.bindAddress ?? '127.0.0.1'
-    const currentIdentity = `${currentBind}:${port}`
-    try {
-      const lastIdentity = existsSync(bindFile)
-        ? (await readFile(bindFile, 'utf-8')).trim()
-        : null
-      if (lastIdentity && lastIdentity !== currentIdentity) {
-        const raftDir = join(dataDir, 'raft')
-        if (existsSync(raftDir)) {
-          logDebug(
-            `Cluster identity changed (${lastIdentity} → ${currentIdentity}), wiping RAFT state`,
-          )
-          await rm(raftDir, { recursive: true, force: true })
-        }
-      }
-      await writeFile(bindFile, currentIdentity)
-    } catch (error) {
-      logDebug(`RAFT identity check failed: ${error}`)
-    }
 
     // Weaviate uses environment variables for configuration
     const args = [
@@ -517,9 +553,13 @@ export class WeaviateEngine extends BaseEngine {
       }
     }
 
-    // Node identity must be consistent across all starts AND restores.
-    // Use port-based naming for uniqueness when multiple containers run.
-    const nodeHostname = `node-${port}`
+    // Node identity must be consistent across all starts, restores, AND
+    // data-dir copies (branch/clone) - see resolveWeaviateNodeIdentity.
+    const nodeHostname = await resolveWeaviateNodeIdentity({
+      containerDir,
+      dataDir,
+      port,
+    })
 
     // Weaviate's RAFT layer rejects wildcard bind addresses (0.0.0.0, ::)
     // as cluster advertise addresses — "local bind address is not advertisable"
@@ -542,6 +582,11 @@ export class WeaviateEngine extends BaseEngine {
       CLUSTER_JOIN: '',
       RAFT_JOIN: nodeHostname,
       RAFT_BOOTSTRAP_EXPECT: '1',
+      // Single-node recovery: lets a raft store written under a different
+      // advertise address (a branched/cloned data dir, or a moved container)
+      // load instead of hanging on the old peer address. Always single-node
+      // here (CLUSTER_JOIN is empty), so this can never mask a real quorum.
+      RAFT_ENABLE_ONE_NODE_RECOVERY: 'true',
       GRPC_PORT: String(grpcPort),
       CLUSTER_GOSSIP_BIND_PORT: String(gossipPort),
       CLUSTER_DATA_BIND_PORT: String(dataPort),
