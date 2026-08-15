@@ -95,6 +95,7 @@ describe('assertDataDirCopyable', () => {
       Engine.Qdrant,
       Engine.QuestDB,
       Engine.InfluxDB,
+      Engine.Weaviate,
     ]) {
       assert.doesNotThrow(() => assertDataDirCopyable(engine, 'Branching'))
     }
