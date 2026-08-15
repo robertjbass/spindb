@@ -4,6 +4,15 @@ This comprehensive document provides both the specification for adding a new dat
 
 **Reference Implementation:** Use [engines/cockroachdb/](engines/cockroachdb/) as a modern example.
 
+> **Before evaluating a new engine, read `~/dev/hostdb/PROSPECTS.md` first.** It is the
+> authoritative record of which engines we plan to add and which we have already
+> evaluated and rejected, with the reasoning and re-open criteria for each. Engines
+> cannot ship in spindb without a hostdb build, so that decision comes first.
+> Already decided against: ArangoDB, Chroma, Dgraph, DuckDB VSS, Kuzu, **Milvus**
+> (Docker-only, needs etcd + MinIO, would force multi-process supervision into
+> spindb), **TimescaleDB** (a PostgreSQL extension rather than a database; TSL
+> licensing blocks layerbase-cloud from serving the build users want).
+
 ---
 
 ## Table of Contents

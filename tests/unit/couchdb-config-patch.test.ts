@@ -97,3 +97,102 @@ describe('patchCouchDBConfig [admins] handling', () => {
     assert.match(patched, /^port = 11500$/m)
   })
 })
+
+/**
+ * Data-path re-pointing (Layerbase C-109, 2026-08-15).
+ *
+ * generateCouchDBConfig writes `database_dir` / `view_index_dir` as ABSOLUTE
+ * paths, and a branch is a byte copy of the container directory - so before this,
+ * a branched container's local.ini still named the PARENT's data dir and two
+ * CouchDB nodes ran against one set of files. It looked healthy (the branch
+ * starts, /_up returns 200) and only showed up as `read_beyond_eof` on the
+ * parent's `_dbs.couch` when reading a document through the branch.
+ */
+describe('patchCouchDBConfig data-path re-pointing', () => {
+  const parent = [
+    '; SpinDB generated CouchDB configuration',
+    '[couchdb]',
+    'database_dir = /data/containers/couchdb/parent/data',
+    'view_index_dir = /data/containers/couchdb/parent/data',
+    '',
+    '[chttpd]',
+    'port = 5984',
+    'bind_address = 127.0.0.1',
+    '',
+    '[log]',
+    'file = /data/containers/couchdb/parent/logs/couchdb.log',
+    'level = info',
+    '',
+    '[admins]',
+    'admin = -pbkdf2:sha256-deadbeef,salt,10',
+  ].join('\n')
+
+  const BRANCH = '/data/containers/couchdb/branch/data'
+
+  it('re-points both data keys at this container', () => {
+    const patched = patchCouchDBConfig(parent, {
+      port: 11500,
+      dataDir: BRANCH,
+    })
+    assert.match(patched, new RegExp(`^database_dir = ${BRANCH}$`, 'm'))
+    assert.match(patched, new RegExp(`^view_index_dir = ${BRANCH}$`, 'm'))
+    assert.doesNotMatch(
+      patched,
+      /couchdb\/parent\/data/,
+      'no key may still point at the parent',
+    )
+  })
+
+  it('re-points the log file when a logDir is given', () => {
+    const patched = patchCouchDBConfig(parent, {
+      port: 11500,
+      dataDir: BRANCH,
+      logDir: '/data/containers/couchdb/branch/logs',
+    })
+    assert.match(
+      patched,
+      /^file = \/data\/containers\/couchdb\/branch\/logs\/couchdb\.log$/m,
+    )
+  })
+
+  it('leaves paths alone when no dataDir is passed (unchanged callers)', () => {
+    const patched = patchCouchDBConfig(parent, { port: 11500 })
+    assert.match(
+      patched,
+      /^database_dir = \/data\/containers\/couchdb\/parent\/data$/m,
+    )
+    assert.match(patched, /^port = 11500$/m)
+  })
+
+  it('inserts the keys into a hand-written config that lacks them', () => {
+    const handWritten = ['[chttpd]', 'port = 5984'].join('\n')
+    const patched = patchCouchDBConfig(handWritten, {
+      port: 11500,
+      dataDir: BRANCH,
+    })
+    assert.match(patched, /^\[couchdb\]$/m)
+    assert.match(patched, new RegExp(`^database_dir = ${BRANCH}$`, 'm'))
+    assert.match(patched, new RegExp(`^view_index_dir = ${BRANCH}$`, 'm'))
+    assert.match(patched, /^port = 11500$/m, 'the port patch still applies')
+  })
+
+  it('still preserves the existing admin entry while re-pointing paths', () => {
+    // The two behaviours must not interfere: path re-pointing is new, admin
+    // preservation is the reason this function exists at all.
+    const patched = patchCouchDBConfig(parent, {
+      port: 11500,
+      dataDir: BRANCH,
+      adminUsername: 'admin',
+      adminPassword: 'a-different-password',
+    })
+    assert.equal(adminLines(patched).length, 1)
+    assert.match(patched, /-pbkdf2:sha256-deadbeef/)
+    assert.match(patched, new RegExp(`^database_dir = ${BRANCH}$`, 'm'))
+  })
+
+  it('is idempotent across repeated starts', () => {
+    const once = patchCouchDBConfig(parent, { port: 11500, dataDir: BRANCH })
+    const twice = patchCouchDBConfig(once, { port: 11500, dataDir: BRANCH })
+    assert.equal(once, twice)
+  })
+})
