@@ -386,9 +386,9 @@ class BranchManager {
       }
     }
 
-    // Stop a running server branch before removing it.
-    assertDataDirCopyable(config.engine, 'Resetting a branch')
-
+    // Stop a running server branch before removing it. NOTE: no copy guard here
+    // on purpose - deletion copies nothing, and a user who branched CouchDB
+    // before the refusal existed must still be able to clean that branch up.
     if (!isFileBasedEngine(config.engine) && !isRemoteContainer(config)) {
       const running = await processManager.isRunning(name, {
         engine: config.engine,
@@ -413,6 +413,12 @@ class BranchManager {
     if (!branchConfig) {
       throw new Error(`Container "${name}" not found`)
     }
+    // A reset re-copies the parent's data directory, so it carries the same
+    // hazard as creating the branch did. Refuse BEFORE anything is touched: the
+    // reset path stops BOTH the branch and the parent, and removes the branch's
+    // data dir, so a late failure would take the user's database down and delete
+    // data on its way to erroring.
+    assertDataDirCopyable(branchConfig.engine, 'Resetting a branch')
     if (!branchConfig.branchParent) {
       throw new Error(`"${name}" is not a branch (no parent to reset from).`)
     }
