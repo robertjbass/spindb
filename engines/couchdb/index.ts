@@ -112,6 +112,43 @@ ${adminUsername} = ${adminPassword}
 `
 }
 
+/**
+ * Re-point the absolute paths in an existing local.ini at THIS container.
+ *
+ * Replaces `database_dir` / `view_index_dir` (and the `[log] file`, matched on
+ * the couchdb.log filename so no unrelated `file =` key is touched). Keys that
+ * are missing - a hand-written config - are inserted under `[couchdb]`, adding
+ * the section if it is absent, so the result is always self-consistent.
+ */
+function repointCouchDBPaths(
+  config: string,
+  dataDir: string,
+  logDir?: string,
+): string {
+  let out = config
+  for (const key of ['database_dir', 'view_index_dir']) {
+    const line = `${key} = ${dataDir}`
+    const existing = new RegExp(`^${key} = .*$`, 'm')
+    if (existing.test(out)) {
+      out = out.replace(existing, line)
+    } else if (/^\[couchdb\]/m.test(out)) {
+      out = out.replace(
+        /^\[couchdb\][^\n]*\n?/m,
+        (header) => `${header}${line}\n`,
+      )
+    } else {
+      out = `[couchdb]\n${line}\n\n${out.trimStart()}`
+    }
+  }
+  if (logDir !== undefined) {
+    out = out.replace(
+      /^file = .*couchdb\.log$/m,
+      `file = ${logDir}/couchdb.log`,
+    )
+  }
+  return out
+}
+
 export function patchCouchDBConfig(
   existingConfig: string,
   options: {
@@ -119,10 +156,29 @@ export function patchCouchDBConfig(
     bindAddress?: string
     adminUsername?: string
     adminPassword?: string
+    /**
+     * This container's data directory. When given, `database_dir` and
+     * `view_index_dir` are re-asserted to it.
+     *
+     * REQUIRED for correctness on a BRANCH or a rename: generateCouchDBConfig
+     * writes those keys as ABSOLUTE paths, and a branch is a byte copy of the
+     * container dir - so without this the branch's local.ini still points at the
+     * PARENT's data dir and two CouchDB nodes run against one set of files. That
+     * surfaced as `read_beyond_eof` on the parent's `_dbs.couch` while querying
+     * the branch, with the branch otherwise looking healthy (it starts, and /_up
+     * returns 200). Re-asserting on every start also self-heals a container that
+     * was already branched before this fix.
+     */
+    dataDir?: string
+    /** This container's log directory; `[log] file` is re-pointed into it. */
+    logDir?: string
   },
 ): string {
   let config = existingConfig
   config = config.replace(/^port = \d+/m, `port = ${options.port}`)
+  if (options.dataDir !== undefined) {
+    config = repointCouchDBPaths(config, options.dataDir, options.logDir)
+  }
   if (options.bindAddress !== undefined) {
     config = config.replace(
       /^bind_address = .+/m,
@@ -642,6 +698,11 @@ export class CouchDBEngine extends BaseEngine {
         bindAddress,
         adminUsername: savedAdminAuth?.username,
         adminPassword: savedAdminAuth?.password,
+        // Always re-assert this container's own paths: a branched (or renamed)
+        // container inherits the SOURCE's absolute database_dir and would
+        // otherwise open the parent's files.
+        dataDir,
+        logDir,
       })
       await writeFile(configPath, patchedConfig)
     } else {
