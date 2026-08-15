@@ -92,6 +92,9 @@ describe('assertDataDirCopyable', () => {
       Engine.TypeDB,
       Engine.ClickHouse,
       Engine.Meilisearch,
+      Engine.Qdrant,
+      Engine.QuestDB,
+      Engine.InfluxDB,
     ]) {
       assert.doesNotThrow(() => assertDataDirCopyable(engine, 'Branching'))
     }
