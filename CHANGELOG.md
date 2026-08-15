@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.7] - 2026-08-15
+
 ### Fixed
 
 - **A branched CouchDB no longer opens the PARENT's data files.** `generateCouchDBConfig` writes `database_dir` and `view_index_dir` as ABSOLUTE paths, and a branch is a byte copy of the container directory, so a branched container's `local.ini` still named the source's data dir: two CouchDB nodes ran against one set of files. It looked healthy - the branch starts and `/_up` returns 200 - and only surfaced when reading a document through the branch, as `read_beyond_eof` on the parent's `_dbs.couch`. `patchCouchDBConfig` now takes `dataDir` (and optional `logDir`) and re-asserts those keys on every start, which also self-heals a container branched before this fix. Same class as the qdrant `storage_path` fix. Found while validating CouchDB for Layerbase Cloud's branching allowlist (tracker C-109); CouchDB stays off that allowlist until this ships and the validation is re-run.
