@@ -731,6 +731,11 @@ export class PostgreSQLEngine extends BaseEngine {
     })
   }
 
+  /**
+   * Drop a database using PostgreSQL's native DROP DATABASE.
+   * Terminates active connections first (PG refuses the drop with
+   * "database is being accessed by other users" while any session is attached).
+   */
   async dropDatabase(
     container: ContainerConfig,
     database: string,
@@ -738,6 +743,11 @@ export class PostgreSQLEngine extends BaseEngine {
     assertValidDatabaseName(database)
     const { port } = container
     const psqlPath = await this.getPsqlPath()
+
+    // PostgreSQL requires no active connections to the database being dropped.
+    // Doing this here (rather than only at call sites) means every caller -
+    // `spindb restore --force`, pull, the menu handlers - inherits it.
+    await this.terminateConnections(container, database)
 
     // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
     const sql = `DROP DATABASE IF EXISTS "${database}"`

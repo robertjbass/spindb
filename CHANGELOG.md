@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.10] - 2026-08-18
+
+### Fixed
+
+- **`spindb restore --force` no longer fails on a PostgreSQL database something is still connected to.** PostgreSQL refuses `DROP DATABASE` with `database "<name>" is being accessed by other users` while ANY session is attached, and the Postgres `dropDatabase` issued the drop without clearing sessions first. Anything the user left connected (a psql shell, a pooler holding an idle session, their own app) was enough to abort the restore, which is how a Neon import over a connected database died. `dropDatabase` now terminates the target's backends first (`pg_terminate_backend` over `pg_stat_activity` for that `datname`, excluding its own connection), the same call the sibling `renameDatabase` already made and that `core/pull-manager.ts` and the `databases` command already made at their own call sites. Putting it inside `dropDatabase` rather than at the one restore call site means every present and future caller inherits it; the existing call-site terminations stay (they also cover MySQL/MariaDB) and are harmless twice. Covered by a real-engine integration test that holds an open session against the target database and then drops it; the test was verified to fail against the previous implementation with the exact "being accessed by other users" error.
+
 ## [0.62.9] - 2026-08-15
 
 ### Fixed

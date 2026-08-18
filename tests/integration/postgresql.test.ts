@@ -533,6 +533,76 @@ describe('PostgreSQL Integration Tests', () => {
     }
   })
 
+  it('dropDatabase terminates attached sessions instead of failing on them', async () => {
+    console.log(`\n🔌 Testing drop of a database with an open session...`)
+
+    const { spawn } = await import('child_process')
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const busyDatabase = 'dropbusydb'
+    await engine.createDatabase(config!, busyDatabase)
+
+    // Hold a real session open against the target database. PostgreSQL refuses
+    // DROP DATABASE with "is being accessed by other users" while any session
+    // is attached, which is what `spindb restore --force` used to hit.
+    const psqlPath = await engine.getPsqlPath()
+    const holder = spawn(
+      psqlPath,
+      [
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String(testPorts[0]),
+        '-U',
+        'postgres',
+        '-d',
+        busyDatabase,
+        '-c',
+        'SELECT pg_sleep(120)',
+      ],
+      { stdio: 'ignore' },
+    )
+
+    try {
+      let attached = 0
+      for (let i = 0; i < 40; i++) {
+        const activity = await executeQuery(
+          containerName,
+          `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = '${busyDatabase}'`,
+          'postgres',
+        )
+        attached = activity.rows[0].n as number
+        if (attached > 0) break
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+      assert(
+        attached > 0,
+        'a session should be attached to the target database',
+      )
+
+      await engine.dropDatabase(config!, busyDatabase)
+
+      const remaining = await executeQuery(
+        containerName,
+        `SELECT count(*)::int AS n FROM pg_database WHERE datname = '${busyDatabase}'`,
+        'postgres',
+      )
+      assertEqual(
+        remaining.rows[0].n,
+        0,
+        'database should be gone after dropping it with an open session',
+      )
+
+      console.log(
+        `   ✓ Dropped "${busyDatabase}" with ${attached} session(s) attached`,
+      )
+    } finally {
+      holder.kill('SIGKILL')
+    }
+  })
+
   it('should restore from SQL format and verify data', async () => {
     console.log(`\n📥 Testing SQL format restore...`)
 
