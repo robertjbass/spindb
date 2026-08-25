@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-08-25
+
+### Added
+
+- **QuestDB 10.0.1 support** via the hostdb `0.40.0` pin (upstream patch of the 10.0 line, published 2026-08-24). All 5 platforms; the JRE-bundled platforms (darwin-arm64, darwin-x64, linux-arm64) carry Temurin JRE 25, and 10.0.1's launcher flags are the same set as 9.4.x, verified against that JRE. Real-binary integration tests now run QuestDB on the `10` line.
+
+### Changed
+
+- **QuestDB's default line is now `10`** (was `9`): `spindb create --engine questdb` without an explicit version resolves to 10.0.1. The 9 line (9.2.3, 9.4.3) remains fully supported and resolvable; existing 9.x containers are untouched. Minor bump because the recommended default changed.
+- **Pin `hostdb` to `0.40.0`** (was 0.39.0).
+
 ## [0.62.10] - 2026-08-18
 
 ### Fixed
