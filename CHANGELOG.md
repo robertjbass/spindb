@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-08-25
+
 ### Added
 
-- **`spindb pull --exclude-table <name>` and `--exclude-table-data <name>`** (both repeatable): skip tables/collections when pulling a remote database. `--exclude-table` omits the table entirely; `--exclude-table-data` (PostgreSQL only) keeps the table's schema but skips its rows — the right tool for cloning a production database whose analytics/event tables are most of the bytes but useless locally. Supported engines for `--exclude-table`: PostgreSQL (`pg_dump --exclude-table`), MySQL/MariaDB (`--ignore-table`, bare names are auto-qualified with the dumped database), MongoDB/FerretDB (`mongodump --excludeCollection`). Unsupported engines fail fast with a clear error before anything is dumped or dropped. Exclusion applies only to the remote dump — the local pre-pull backup remains complete. Pull results (including `--json`) now report `excludedTables` / `excludedTableData` when used.
+- **`spindb pull --exclude-table <name>` and `--exclude-table-data <name>`** (both repeatable): skip tables/collections when pulling a remote database. `--exclude-table` omits the table entirely; `--exclude-table-data` (PostgreSQL only) keeps the table's schema but skips its rows — the right tool for cloning a production database whose analytics/event tables are most of the bytes but useless locally. Supported engines for `--exclude-table`: PostgreSQL (`pg_dump --exclude-table`), MySQL/MariaDB (`--ignore-table`, bare names are auto-qualified with the dumped database), MongoDB/FerretDB (`mongodump --excludeCollection`). Unsupported engines fail fast with a clear error before anything is dumped or dropped. Exclusion applies only to the remote dump — the local pre-pull backup remains complete. Pull results (including `--json`) now report `excludedTables` / `excludedTableData` when used. Covered by unit tests for the engine allowlist validation and a real-engine PostgreSQL integration round trip proving the excluded table is absent and the schema-only table restores empty.
+
+### Documentation
+
+- **CLAUDE.md/AGENTS.md now record the layerbase-cli cross-repo dependency**: spindb CLI surface changes should trigger a docs review of `~/dev/layerbase-cli`, whose README/help present spindb's commands as their own and whose collision checker validates layerbase verbs against `spindb --help`.
 
 ## [0.63.0] - 2026-08-25
 
