@@ -49,6 +49,7 @@ import type {
   BackupResult,
   RestoreResult,
   DumpResult,
+  RemoteDumpOptions,
   StatusResult,
   QueryResult,
   QueryOptions,
@@ -860,6 +861,7 @@ export class PostgreSQLEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
     // Get compatible pg_dump path (may switch versions or use direct path)
     const { path: pgDumpPath, warnings } =
@@ -872,6 +874,13 @@ export class PostgreSQLEngine extends BaseEngine {
 
     return new Promise((resolve, reject) => {
       const args = [connectionString, '-Fc', '-f', outputPath]
+
+      for (const table of options?.excludeTables ?? []) {
+        args.push(`--exclude-table=${table}`)
+      }
+      for (const table of options?.excludeTableData ?? []) {
+        args.push(`--exclude-table-data=${table}`)
+      }
 
       const proc = spawn(pgDumpPath, args, spawnOptions)
 

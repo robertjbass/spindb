@@ -339,9 +339,17 @@ export type PullOptions = {
   asDatabase?: string // Clone mode: create new database with this name
   noBackup?: boolean // Skip backup (requires force)
   postScript?: string // Path to post-pull script
+  excludeTables?: string[] // Skip these tables/collections entirely (schema + data)
+  excludeTableData?: string[] // Keep schema but skip rows (PostgreSQL only)
   dryRun?: boolean
   force?: boolean
   json?: boolean
+}
+
+// Options for dumping a remote database (spindb pull / remote backup)
+export type RemoteDumpOptions = {
+  excludeTables?: string[] // Skip these tables/collections entirely (schema + data)
+  excludeTableData?: string[] // Keep schema but skip rows (PostgreSQL only)
 }
 
 export type PullResult = {
@@ -354,6 +362,8 @@ export type PullResult = {
   backupDatabase?: string // Backup database (replace mode only)
   backupUrl?: string // Connection URL for backup database (replace mode only)
   source: string // Redacted remote URL
+  excludedTables?: string[] // Tables/collections excluded entirely from the pull
+  excludedTableData?: string[] // Tables whose rows were excluded (schema kept)
   message: string
 }
 

@@ -50,6 +50,7 @@ import {
   type BackupResult,
   type RestoreResult,
   type DumpResult,
+  type RemoteDumpOptions,
   type StatusResult,
   type QueryResult,
   type QueryOptions,
@@ -879,6 +880,7 @@ export class MongoDBEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
     const mongodump = await getMongodumpPath()
     if (!mongodump) {
@@ -897,6 +899,9 @@ export class MongoDBEngine extends BaseEngine {
       parsed.database,
       '--archive=' + outputPath,
       '--gzip',
+      ...(options?.excludeTables ?? []).map(
+        (collection) => `--excludeCollection=${collection}`,
+      ),
     ]
 
     // Note: Don't use shell mode - spawn handles paths with spaces correctly
