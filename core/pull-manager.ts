@@ -9,7 +9,7 @@
 
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { unlink, writeFile } from 'fs/promises'
+import { rm, unlink, writeFile } from 'fs/promises'
 import { spawn } from 'child_process'
 import { withTransaction } from './transaction-manager'
 import { containerManager } from './container-manager'
@@ -45,6 +45,35 @@ export const EXCLUDE_TABLES_ENGINES: Engine[] = [
 export const EXCLUDE_TABLE_DATA_ENGINES: Engine[] = [Engine.PostgreSQL]
 
 /**
+ * Engines whose remote dump supports parallel workers (--jobs).
+ * pg_dump -Fd -j N; the dump becomes a directory instead of a single file.
+ */
+export const PARALLEL_PULL_ENGINES: Engine[] = [Engine.PostgreSQL]
+
+/** Parallel dump opens jobs+1 connections; keep a sane ceiling. */
+export const MAX_PULL_JOBS = 8
+
+/**
+ * Validate --jobs against the engine and range. Throws with an actionable
+ * message on unsupported combinations.
+ */
+export function validateJobsOption(engine: Engine, jobs?: number): void {
+  if (jobs === undefined) return
+  if (!Number.isInteger(jobs) || jobs < 1 || jobs > MAX_PULL_JOBS) {
+    throw new Error(
+      `--jobs must be an integer between 1 and ${MAX_PULL_JOBS} (got ${jobs}).\n` +
+        '  Parallel dump opens jobs+1 connections to the remote server.',
+    )
+  }
+  if (jobs > 1 && !PARALLEL_PULL_ENGINES.includes(engine)) {
+    throw new Error(
+      `--jobs is not supported for ${engine}.\n` +
+        `  Supported engines: ${PARALLEL_PULL_ENGINES.join(', ')}`,
+    )
+  }
+}
+
+/**
  * Validate --exclude-table / --exclude-table-data against the engine's
  * capabilities. Throws with an actionable message on unsupported combinations.
  */
@@ -70,6 +99,29 @@ export function validateExcludeOptions(
         `  Supported engines: ${EXCLUDE_TABLE_DATA_ENGINES.join(', ')}\n` +
         '  To skip a table entirely (schema and data), use --exclude-table.',
     )
+  }
+}
+
+/**
+ * Package the pull options that the engine's remote dump understands.
+ * Exported so tests can prove every option actually reaches the dump tool
+ * (a private version of this once silently dropped `jobs`).
+ */
+export function buildRemoteDumpOptions(
+  options: PullOptions,
+): RemoteDumpOptions | undefined {
+  const parallel = options.jobs !== undefined && options.jobs > 1
+  if (
+    !options.excludeTables?.length &&
+    !options.excludeTableData?.length &&
+    !parallel
+  ) {
+    return undefined
+  }
+  return {
+    excludeTables: options.excludeTables,
+    excludeTableData: options.excludeTableData,
+    jobs: parallel ? options.jobs : undefined,
   }
 }
 
@@ -111,8 +163,10 @@ export class PullManager {
     const engine = getEngine(config.engine)
     const timestamp = this.generateTimestamp()
 
-    // Fail fast if table exclusion was requested on an engine that can't do it
+    // Fail fast if table exclusion or parallel dump was requested on an
+    // engine that can't do it
     validateExcludeOptions(config.engine, options)
+    validateJobsOption(config.engine, options.jobs)
 
     // 2. Determine mode and target database
     const isCloneMode = !!options.asDatabase
@@ -229,13 +283,13 @@ export class PullManager {
       await engine.dumpFromConnectionString(
         options.fromUrl,
         tempRemoteDump,
-        this.remoteDumpOptions(options),
+        buildRemoteDumpOptions(options),
       )
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {
           try {
-            await unlink(tempRemoteDump)
+            await rm(tempRemoteDump, { recursive: true, force: true })
           } catch {
             // Ignore errors
           }
@@ -276,6 +330,7 @@ export class PullManager {
       await engine.restore(config, tempRemoteDump, {
         database: targetDatabase,
         createDatabase: false,
+        jobs: options.jobs,
       })
 
       // Step 9: Cleanup temp files
@@ -285,7 +340,7 @@ export class PullManager {
         // Ignore errors
       }
       try {
-        await unlink(tempRemoteDump)
+        await rm(tempRemoteDump, { recursive: true, force: true })
       } catch {
         // Ignore errors
       }
@@ -394,13 +449,13 @@ export class PullManager {
       await engine.dumpFromConnectionString(
         options.fromUrl,
         tempRemoteDump,
-        this.remoteDumpOptions(options),
+        buildRemoteDumpOptions(options),
       )
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {
           try {
-            await unlink(tempRemoteDump)
+            await rm(tempRemoteDump, { recursive: true, force: true })
           } catch {
             // Ignore errors
           }
@@ -412,11 +467,12 @@ export class PullManager {
       await engine.restore(config, tempRemoteDump, {
         database: targetDatabase,
         createDatabase: false,
+        jobs: options.jobs,
       })
 
       // Step 5: Cleanup
       try {
-        await unlink(tempRemoteDump)
+        await rm(tempRemoteDump, { recursive: true, force: true })
       } catch {
         // Ignore errors
       }
@@ -512,18 +568,6 @@ export class PullManager {
       } catch {
         // Ignore errors
       }
-    }
-  }
-
-  private remoteDumpOptions(
-    options: PullOptions,
-  ): RemoteDumpOptions | undefined {
-    if (!options.excludeTables?.length && !options.excludeTableData?.length) {
-      return undefined
-    }
-    return {
-      excludeTables: options.excludeTables,
-      excludeTableData: options.excludeTableData,
     }
   }
 

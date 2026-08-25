@@ -341,6 +341,7 @@ export type PullOptions = {
   postScript?: string // Path to post-pull script
   excludeTables?: string[] // Skip these tables/collections entirely (schema + data)
   excludeTableData?: string[] // Keep schema but skip rows (PostgreSQL only)
+  jobs?: number // Parallel dump/restore workers (PostgreSQL only, 1-8)
   dryRun?: boolean
   force?: boolean
   json?: boolean
@@ -350,6 +351,7 @@ export type PullOptions = {
 export type RemoteDumpOptions = {
   excludeTables?: string[] // Skip these tables/collections entirely (schema + data)
   excludeTableData?: string[] // Keep schema but skip rows (PostgreSQL only)
+  jobs?: number // Parallel dump workers; >1 switches pg_dump to directory format (-Fd)
 }
 
 export type PullResult = {
