@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-08-25
+
 ### Added
 
 - **`spindb pull --jobs <n>`** (PostgreSQL only, 1-8): parallel dump and restore. `--jobs 2+` switches the remote dump to `pg_dump -Fd -j N` (directory format, one connection per worker, tables split across workers) and the local load to `pg_restore -j N`. On latency-bound remotes (e.g. Neon cross-region) where a single connection is the bottleneck, aggregate throughput scales with workers. Requires a direct endpoint: parallel dump coordinates workers with synchronized snapshots, which connection poolers reject — pooler hostnames (Neon `-pooler`, pgbouncer) are detected up front with an actionable error. Composes with `--exclude-table` / `--exclude-table-data` (the combination is the fast path for large databases with excludable bulk tables). Non-PostgreSQL engines reject the flag with a clear error. PostgreSQL restore now also auto-detects directory-format (`-Fd`) dumps by their `toc.dat`.
