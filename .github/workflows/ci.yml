@@ -5,27 +5,54 @@ on:
     branches: [main]
   # push:
   #   branches: [dev]
+  schedule:
+    # Nightly full matrix on main. Two jobs: (1) keep the Actions binary caches
+    # warm - they have a 7-day last-access TTL and LRU-evict past the repo's
+    # 10 GB cap, and a cold cache adds 10+ min of re-download to the slowest
+    # Windows jobs on release PRs; (2) surface platform/registry breakage
+    # before release day instead of at the merge button.
+    - cron: '17 9 * * *'
   workflow_dispatch:
+
+# Nothing in this workflow uses GITHUB_TOKEN; least-privilege read-only.
+permissions:
+  contents: read
 
 # =============================================================================
 # OS Coverage Strategy (Tiered)
 # =============================================================================
 # Platform-arch combos we test (all 5 supported):
 #   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
-#   - linux-arm64:   Docker + QEMU smoke test (download, start, query, stop)
-#   - darwin-x64:    macos-15-intel (Intel, available until Aug 2027)
+#   - linux-arm64:   NOT in this workflow - the Docker + QEMU smoke job is
+#                    commented out below (too slow under emulation); run it
+#                    manually/periodically to verify arm64 binaries
+#   - darwin-x64:    macos-15-intel, SMOKE SET ONLY (see below)
 #   - darwin-arm64:  macos-14 (Apple Silicon)
 #   - win32-x64:     windows-latest
 #
 # Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
 # you must use macos-15-intel (or the deprecated macos-13).
 #
-# All engines (5 runners): ubuntu-22.04, ubuntu-24.04, macos-15-intel, macos-14,
-#   windows-latest
+# darwin-x64 (Intel Mac) is DEMOTED to a two-job smoke set: PostgreSQL (core
+# lifecycle + bundled client tools) and Redis (the canonical dyld-linked engine;
+# Intel Homebrew lives at /usr/local vs /opt/homebrew on ARM, which is the one
+# genuinely arch-specific macOS code path - see core/library-env.ts). Rationale:
+# Apple stopped selling Intel Macs in 2023 and macOS Tahoe is the last Intel
+# release; GitHub's macos-15-intel runners are available only until Aug 2027;
+# and macOS jobs share a 5-concurrent-runner pool, so the full Intel matrix
+# roughly doubled macOS queue time and its ~20 binary caches crowded the repo's
+# 10 GB cache cap. Full sunset when GitHub retires Intel runners or hostdb
+# stops shipping darwin-x64, whichever comes first - coordinate with hostdb
+# builds and layerbase-desktop's Intel build when that happens.
+#
+# All engines (4 runners): ubuntu-22.04, ubuntu-24.04, macos-14, windows-latest
+#   (+ macos-15-intel on the PostgreSQL and Redis smoke jobs only)
 #
 # Exceptions:
-#   - ClickHouse, FerretDB v2, LibSQL: No Windows (no hostdb binaries) → 4 runners
-#   - FerretDB v1: All platforms including Windows (plain PostgreSQL backend)
+#   - ClickHouse, LibSQL: No Windows (no hostdb binaries) → 3 runners
+#   - FerretDB v2: No Windows (its postgresql-documentdb BACKEND has no
+#     win32-x64 hostdb binary; the ferretdb binary itself has one) → 3 runners
+#   - FerretDB v1: all 4 matrix runners including Windows (plain PostgreSQL backend)
 #   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
@@ -212,9 +239,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -274,9 +298,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -354,9 +375,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -415,9 +433,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -476,9 +491,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -539,9 +551,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -639,9 +648,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -798,9 +804,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -861,9 +864,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -937,9 +937,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1016,9 +1013,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1092,9 +1086,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1262,9 +1253,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1352,9 +1340,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1447,9 +1432,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1536,9 +1518,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1624,9 +1603,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1712,9 +1688,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1805,9 +1778,6 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-15-intel
-            icon: 🍏
-            label: macOS x64
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1969,7 +1939,9 @@ jobs:
         id: pg-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-pg-18-v2-${{ runner.os }}-${{ runner.arch }}
+          # Same content as test-postgresql's cache (~/.spindb/bin with only
+          # pg 18 downloaded) - share one key instead of storing 285 MB twice
+          key: spindb-pg-18-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install PostgreSQL via SpinDB
         run: pnpm start engines download postgresql 18

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.64.1] - 2026-08-25
+
+No runtime changes — identical package code to 0.64.0. This release exists to activate the CI overhaul below (release-PR workflows and the nightly cron only take effect from `main`).
+
+### Changed
+
+- **CI: darwin-x64 (Intel Mac) demoted to a two-job smoke set** (PostgreSQL + Redis; Redis is the canonical dyld-linked engine covering the `/usr/local` Intel Homebrew path). Binaries remain fully built and supported — only the per-release test matrix shrank. Rationale and sunset plan in `TESTING_STRATEGY.md` and the `ci.yml` header.
+- **CI: nightly scheduled full-matrix run** keeps Actions binary caches warm (7-day TTL, 10 GB LRU cap) so release PRs stop re-downloading engines on the slowest Windows jobs, and surfaces platform/registry breakage before release day.
+- **CI: `test-rename-clone` shares `test-postgresql`'s binary cache** instead of storing a duplicate 285 MB PostgreSQL cache per platform.
+
 ## [0.64.0] - 2026-08-25
 
 ### Added
