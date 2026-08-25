@@ -79,6 +79,7 @@ import {
   type BackupResult,
   type RestoreResult,
   type DumpResult,
+  type RemoteDumpOptions,
   type StatusResult,
   type QueryResult,
   type QueryOptions,
@@ -1580,6 +1581,7 @@ export class FerretDBEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
     // Use mongodump if available
     const mongodump = await configManager.getBinaryPath('mongodump')
@@ -1596,6 +1598,26 @@ export class FerretDBEngine extends BaseEngine {
       '--archive=' + outputPath,
       '--gzip',
     ]
+
+    if (options?.excludeTables?.length) {
+      // mongodump only accepts --excludeCollection together with --db
+      let database = ''
+      try {
+        database = new URL(connectionString).pathname.replace(/^\//, '')
+      } catch {
+        // Fall through to the error below
+      }
+      if (!database) {
+        throw new Error(
+          'Excluding collections requires a database in the connection string.\n' +
+            '  Example: mongodb://user:pass@host:27017/mydb',
+        )
+      }
+      args.push('--db', database)
+      for (const collection of options.excludeTables) {
+        args.push(`--excludeCollection=${collection}`)
+      }
+    }
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],

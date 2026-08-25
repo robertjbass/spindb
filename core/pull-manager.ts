@@ -15,9 +15,63 @@ import { withTransaction } from './transaction-manager'
 import { containerManager } from './container-manager'
 import { getEngine } from '../engines'
 import { logDebug } from './error-handler'
-import type { ContainerConfig, PullOptions, PullResult, Engine } from '../types'
+import { Engine } from '../types'
+import type {
+  ContainerConfig,
+  PullOptions,
+  PullResult,
+  RemoteDumpOptions,
+} from '../types'
 import type { BaseEngine } from '../engines/base-engine'
 import { getDefaultFormat } from '../config/backup-formats'
+
+/**
+ * Engines whose remote dump tool can exclude tables/collections entirely
+ * (--exclude-table). pg_dump: --exclude-table, mysqldump/mariadb-dump:
+ * --ignore-table, mongodump: --excludeCollection.
+ */
+export const EXCLUDE_TABLES_ENGINES: Engine[] = [
+  Engine.PostgreSQL,
+  Engine.MySQL,
+  Engine.MariaDB,
+  Engine.MongoDB,
+  Engine.FerretDB,
+]
+
+/**
+ * Engines whose remote dump tool can keep a table's schema while skipping its
+ * rows (--exclude-table-data). Only pg_dump supports this natively.
+ */
+export const EXCLUDE_TABLE_DATA_ENGINES: Engine[] = [Engine.PostgreSQL]
+
+/**
+ * Validate --exclude-table / --exclude-table-data against the engine's
+ * capabilities. Throws with an actionable message on unsupported combinations.
+ */
+export function validateExcludeOptions(
+  engine: Engine,
+  options: Pick<PullOptions, 'excludeTables' | 'excludeTableData'>,
+): void {
+  if (
+    options.excludeTables?.length &&
+    !EXCLUDE_TABLES_ENGINES.includes(engine)
+  ) {
+    throw new Error(
+      `--exclude-table is not supported for ${engine}.\n` +
+        `  Supported engines: ${EXCLUDE_TABLES_ENGINES.join(', ')}`,
+    )
+  }
+  if (
+    options.excludeTableData?.length &&
+    !EXCLUDE_TABLE_DATA_ENGINES.includes(engine)
+  ) {
+    throw new Error(
+      `--exclude-table-data is not supported for ${engine}.\n` +
+        `  Supported engines: ${EXCLUDE_TABLE_DATA_ENGINES.join(', ')}\n` +
+        '  To skip a table entirely (schema and data), use --exclude-table.',
+    )
+  }
+}
 
 /**
  * Context passed to post-pull scripts via SPINDB_CONTEXT env var.
@@ -56,6 +110,9 @@ export class PullManager {
 
     const engine = getEngine(config.engine)
     const timestamp = this.generateTimestamp()
+
+    // Fail fast if table exclusion was requested on an engine that can't do it
+    validateExcludeOptions(config.engine, options)
 
     // 2. Determine mode and target database
     const isCloneMode = !!options.asDatabase
@@ -169,7 +226,11 @@ export class PullManager {
 
       // Step 4: Dump remote to temp file
       logDebug(`Dumping remote database to: ${tempRemoteDump}`)
-      await engine.dumpFromConnectionString(options.fromUrl, tempRemoteDump)
+      await engine.dumpFromConnectionString(
+        options.fromUrl,
+        tempRemoteDump,
+        this.remoteDumpOptions(options),
+      )
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {
@@ -268,6 +329,12 @@ export class PullManager {
           ? engine.getConnectionString(config, backupDatabase)
           : undefined,
         source: this.redactUrl(options.fromUrl),
+        excludedTables: options.excludeTables?.length
+          ? options.excludeTables
+          : undefined,
+        excludedTableData: options.excludeTableData?.length
+          ? options.excludeTableData
+          : undefined,
         message: keepBackup
           ? `Pulled remote data into "${targetDatabase}", backup at "${backupDatabase}"`
           : `Pulled remote data into "${targetDatabase}"`,
@@ -324,7 +391,11 @@ export class PullManager {
 
       // Step 3: Dump remote to temp file
       logDebug(`Dumping remote database to: ${tempRemoteDump}`)
-      await engine.dumpFromConnectionString(options.fromUrl, tempRemoteDump)
+      await engine.dumpFromConnectionString(
+        options.fromUrl,
+        tempRemoteDump,
+        this.remoteDumpOptions(options),
+      )
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {
@@ -383,6 +454,12 @@ export class PullManager {
         database: targetDatabase,
         databaseUrl: engine.getConnectionString(config, targetDatabase),
         source: this.redactUrl(options.fromUrl),
+        excludedTables: options.excludeTables?.length
+          ? options.excludeTables
+          : undefined,
+        excludedTableData: options.excludeTableData?.length
+          ? options.excludeTableData
+          : undefined,
         message: `Cloned remote data into new database "${targetDatabase}"`,
       }
     })
@@ -435,6 +512,18 @@ export class PullManager {
       } catch {
         // Ignore errors
       }
+    }
+  }
+
+  private remoteDumpOptions(
+    options: PullOptions,
+  ): RemoteDumpOptions | undefined {
+    if (!options.excludeTables?.length && !options.excludeTableData?.length) {
+      return undefined
+    }
+    return {
+      excludeTables: options.excludeTables,
+      excludeTableData: options.excludeTableData,
     }
   }
 
@@ -503,6 +592,12 @@ export class PullManager {
         ? engine.getConnectionString(config, backupDatabase!)
         : undefined,
       source: this.redactUrl(options.fromUrl),
+      excludedTables: options.excludeTables?.length
+        ? options.excludeTables
+        : undefined,
+      excludedTableData: options.excludeTableData?.length
+        ? options.excludeTableData
+        : undefined,
       message: '[DRY RUN] No changes made',
     }
   }

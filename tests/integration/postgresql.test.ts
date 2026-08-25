@@ -26,6 +26,7 @@ import {
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
+import { pullManager } from '../../core/pull-manager'
 import { getEngine } from '../../engines'
 import { Engine } from '../../types'
 import { paths } from '../../config/paths'
@@ -703,6 +704,120 @@ describe('PostgreSQL Integration Tests', () => {
     console.log(
       `   ✓ Row deleted using engine.runScript, now have ${rowCount} rows`,
     )
+  })
+
+  it('pull --exclude-table skips the table, --exclude-table-data keeps schema but drops rows', async () => {
+    console.log(`\n📥 Testing pull with table exclusions...`)
+
+    const pulledDatabase = 'pull_excl_target'
+
+    // Seed two extra tables in the source database: one to exclude entirely,
+    // one to pull schema-only. One single-line statement per call: on Windows,
+    // inline SQL is passed through a shell command string, and newlines or
+    // multi-statement strings get mangled by cmd.exe quoting.
+    const seedStatements = [
+      'CREATE TABLE excluded_entirely (id serial primary key, payload text)',
+      "INSERT INTO excluded_entirely (payload) SELECT 'event ' || g FROM generate_series(1, 20) g",
+      'CREATE TABLE schema_only (id serial primary key, blob text)',
+      "INSERT INTO schema_only (blob) SELECT 'data ' || g FROM generate_series(1, 10) g",
+    ]
+    for (const statement of seedStatements) {
+      await runScriptSQL(containerName, statement, DATABASE)
+    }
+
+    // Guard against silent partial seeding (the Windows failure mode): both
+    // tables must exist in the source before the pull proves anything
+    const seeded = await executeQuery(
+      containerName,
+      'SELECT count(*)::int AS n FROM (SELECT 1 FROM excluded_entirely LIMIT 1) a, (SELECT 1 FROM schema_only LIMIT 1) b',
+      DATABASE,
+    )
+    assertEqual(
+      Number(seeded.rows[0].n),
+      1,
+      'Seed tables should exist in source',
+    )
+
+    try {
+      const result = await pullManager.pull(containerName, {
+        fromUrl: getConnectionString(ENGINE, testPorts[0], DATABASE),
+        asDatabase: pulledDatabase,
+        excludeTables: ['excluded_entirely'],
+        excludeTableData: ['schema_only'],
+      })
+
+      assert(result.success, 'Pull should succeed')
+      assertDeepEqual(
+        result.excludedTables,
+        ['excluded_entirely'],
+        'Result should report the fully excluded table',
+      )
+      assertDeepEqual(
+        result.excludedTableData,
+        ['schema_only'],
+        'Result should report the schema-only table',
+      )
+
+      // Regular table came through with its data
+      const kept = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM test_user',
+        pulledDatabase,
+      )
+      assertEqual(
+        Number(kept.rows[0].n),
+        EXPECTED_ROW_COUNT - 1,
+        'Non-excluded table should keep all its rows',
+      )
+
+      // --exclude-table: the table must not exist at all
+      const excludedExists = await executeQuery(
+        containerName,
+        "SELECT to_regclass('public.excluded_entirely') IS NOT NULL AS present",
+        pulledDatabase,
+      )
+      assertEqual(
+        String(excludedExists.rows[0].present),
+        'false',
+        'Excluded table should not exist in the pulled database',
+      )
+
+      // --exclude-table-data: schema present, zero rows
+      const schemaOnly = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM schema_only',
+        pulledDatabase,
+      )
+      assertEqual(
+        Number(schemaOnly.rows[0].n),
+        0,
+        'Schema-only table should exist but have no rows',
+      )
+
+      console.log(`   ✓ Exclusions verified in "${pulledDatabase}"`)
+    } finally {
+      // Clean up so later tests (rename, persistence checks) see the
+      // container in its expected state
+      const config = await containerManager.getConfig(containerName)
+      if (config) {
+        const engine = getEngine(config.engine)
+        try {
+          await engine.dropDatabase(config, pulledDatabase)
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+      await runScriptSQL(
+        containerName,
+        'DROP TABLE IF EXISTS excluded_entirely',
+        DATABASE,
+      )
+      await runScriptSQL(
+        containerName,
+        'DROP TABLE IF EXISTS schema_only',
+        DATABASE,
+      )
+    }
   })
 
   it('should create a user and update password on re-create', async () => {

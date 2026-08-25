@@ -55,6 +55,7 @@ import {
   type BackupResult,
   type RestoreResult,
   type DumpResult,
+  type RemoteDumpOptions,
   type StatusResult,
   type QueryResult,
   type QueryOptions,
@@ -1050,6 +1051,7 @@ export class MySQLEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
     const dumpPath = await this.getDumpPath()
 
@@ -1065,6 +1067,12 @@ export class MySQLEngine extends BaseEngine {
       user,
       '--result-file',
       outputPath,
+      // mysqldump requires db-qualified names; qualify bare names with the
+      // database being dumped
+      ...(options?.excludeTables ?? []).map(
+        (table) =>
+          `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
+      ),
       database,
     ]
 

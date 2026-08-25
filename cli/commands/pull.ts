@@ -19,6 +19,10 @@ import { createSpinner } from '../ui/spinner'
 import { promptConfirm } from '../ui/prompts'
 import { uiError } from '../ui/theme'
 
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value]
+}
+
 export const pullCommand = new Command('pull')
   .description('Pull remote database data into local container')
   .argument('<container>', 'Container name')
@@ -27,6 +31,18 @@ export const pullCommand = new Command('pull')
   .option('-d, --database <name>', 'Target database (default: primary)')
   .option('--as <name>', 'Clone to new database instead of replacing')
   .option('--no-backup', 'Skip backup when replacing (dangerous)')
+  .option(
+    '--exclude-table <table>',
+    'Skip a table/collection entirely (repeatable)',
+    collectRepeatable,
+    [] as string[],
+  )
+  .option(
+    '--exclude-table-data <table>',
+    'Keep table schema but skip its rows (PostgreSQL only, repeatable)',
+    collectRepeatable,
+    [] as string[],
+  )
   .option('--post-script <path>', 'Run script after pull completes')
   .option('--dry-run', 'Preview changes without executing')
   .option('-f, --force', 'Skip confirmation prompts')
@@ -40,6 +56,8 @@ export const pullCommand = new Command('pull')
         database?: string
         as?: string
         backup: boolean // Commander inverts --no-backup to backup: false
+        excludeTable: string[]
+        excludeTableData: string[]
         postScript?: string
         dryRun?: boolean
         force?: boolean
@@ -145,6 +163,8 @@ export const pullCommand = new Command('pull')
           fromUrl: fromUrl,
           asDatabase: options.as,
           noBackup: !options.backup,
+          excludeTables: options.excludeTable,
+          excludeTableData: options.excludeTableData,
           postScript: options.postScript,
           dryRun: options.dryRun,
           force: options.force,
@@ -171,6 +191,16 @@ export const pullCommand = new Command('pull')
           console.log(
             `  ${chalk.dim('Source:')}    ${chalk.gray(result.source)}`,
           )
+          if (result.excludedTables?.length) {
+            console.log(
+              `  ${chalk.dim('Excluded:')}  ${result.excludedTables.join(', ')}`,
+            )
+          }
+          if (result.excludedTableData?.length) {
+            console.log(
+              `  ${chalk.dim('Schema-only:')} ${result.excludedTableData.join(', ')}`,
+            )
+          }
           console.log('')
 
           if (result.mode === 'replace') {
@@ -207,6 +237,16 @@ export const pullCommand = new Command('pull')
           console.log(
             `  ${chalk.dim('Source:')}    ${chalk.gray(result.source)}`,
           )
+          if (result.excludedTables?.length) {
+            console.log(
+              `  ${chalk.dim('Excluded:')}  ${result.excludedTables.join(', ')}`,
+            )
+          }
+          if (result.excludedTableData?.length) {
+            console.log(
+              `  ${chalk.dim('Schema-only:')} ${result.excludedTableData.join(', ')}`,
+            )
+          }
           console.log('')
         }
       } catch (error) {
