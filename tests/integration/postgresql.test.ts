@@ -712,14 +712,30 @@ describe('PostgreSQL Integration Tests', () => {
     const pulledDatabase = 'pull_excl_target'
 
     // Seed two extra tables in the source database: one to exclude entirely,
-    // one to pull schema-only
-    await runScriptSQL(
+    // one to pull schema-only. One single-line statement per call: on Windows,
+    // inline SQL is passed through a shell command string, and newlines or
+    // multi-statement strings get mangled by cmd.exe quoting.
+    const seedStatements = [
+      'CREATE TABLE excluded_entirely (id serial primary key, payload text)',
+      "INSERT INTO excluded_entirely (payload) SELECT 'event ' || g FROM generate_series(1, 20) g",
+      'CREATE TABLE schema_only (id serial primary key, blob text)',
+      "INSERT INTO schema_only (blob) SELECT 'data ' || g FROM generate_series(1, 10) g",
+    ]
+    for (const statement of seedStatements) {
+      await runScriptSQL(containerName, statement, DATABASE)
+    }
+
+    // Guard against silent partial seeding (the Windows failure mode): both
+    // tables must exist in the source before the pull proves anything
+    const seeded = await executeQuery(
       containerName,
-      `CREATE TABLE excluded_entirely (id serial primary key, payload text);
-       INSERT INTO excluded_entirely (payload) SELECT 'event ' || g FROM generate_series(1, 20) g;
-       CREATE TABLE schema_only (id serial primary key, blob text);
-       INSERT INTO schema_only (blob) SELECT 'data ' || g FROM generate_series(1, 10) g;`,
+      'SELECT count(*)::int AS n FROM (SELECT 1 FROM excluded_entirely LIMIT 1) a, (SELECT 1 FROM schema_only LIMIT 1) b',
       DATABASE,
+    )
+    assertEqual(
+      Number(seeded.rows[0].n),
+      1,
+      'Seed tables should exist in source',
     )
 
     try {
@@ -793,7 +809,12 @@ describe('PostgreSQL Integration Tests', () => {
       }
       await runScriptSQL(
         containerName,
-        'DROP TABLE IF EXISTS excluded_entirely; DROP TABLE IF EXISTS schema_only;',
+        'DROP TABLE IF EXISTS excluded_entirely',
+        DATABASE,
+      )
+      await runScriptSQL(
+        containerName,
+        'DROP TABLE IF EXISTS schema_only',
         DATABASE,
       )
     }
