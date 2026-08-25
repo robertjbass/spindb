@@ -85,7 +85,7 @@ export const TEST_PORTS = {
 export const TEST_VERSIONS = {
   cockroachdb: '25',
   surrealdb: '2',
-  questdb: '9',
+  questdb: '10',
   typedb: '3',
 }
 
