@@ -14,12 +14,18 @@ on:
     - cron: '17 9 * * *'
   workflow_dispatch:
 
+# Nothing in this workflow uses GITHUB_TOKEN; least-privilege read-only.
+permissions:
+  contents: read
+
 # =============================================================================
 # OS Coverage Strategy (Tiered)
 # =============================================================================
 # Platform-arch combos we test (all 5 supported):
 #   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
-#   - linux-arm64:   Docker + QEMU smoke test (download, start, query, stop)
+#   - linux-arm64:   NOT in this workflow - the Docker + QEMU smoke job is
+#                    commented out below (too slow under emulation); run it
+#                    manually/periodically to verify arm64 binaries
 #   - darwin-x64:    macos-15-intel, SMOKE SET ONLY (see below)
 #   - darwin-arm64:  macos-14 (Apple Silicon)
 #   - win32-x64:     windows-latest
@@ -43,7 +49,9 @@ on:
 #   (+ macos-15-intel on the PostgreSQL and Redis smoke jobs only)
 #
 # Exceptions:
-#   - ClickHouse, FerretDB v2, LibSQL: No Windows (no hostdb binaries) → 3 runners
+#   - ClickHouse, LibSQL: No Windows (no hostdb binaries) → 3 runners
+#   - FerretDB v2: No Windows (its postgresql-documentdb BACKEND has no
+#     win32-x64 hostdb binary; the ferretdb binary itself has one) → 3 runners
 #   - FerretDB v1: all 4 matrix runners including Windows (plain PostgreSQL backend)
 #   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
 #

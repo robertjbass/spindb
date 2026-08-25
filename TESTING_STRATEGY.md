@@ -20,7 +20,7 @@ Every engine runs on **5 runners**, with darwin-x64 reduced to a smoke set:
 |---------------|--------|-------|
 | linux-x64 | ubuntu-22.04 | Older glibc (2.35) — catches binary compatibility issues |
 | linux-x64 | ubuntu-24.04 | Newer glibc (2.39) — catches library renames (e.g., libaio) |
-| linux-arm64 | Docker + QEMU | Smoke test: download, start, one query, stop per engine |
+| linux-arm64 | Docker + QEMU | **Manual/periodic only** — the QEMU smoke job is commented out in ci.yml (too slow under emulation); no PR or nightly run covers linux-arm64 |
 | darwin-x64 | macos-15-intel | **Smoke set only**: PostgreSQL + Redis (see below) |
 | darwin-arm64 | macos-14 | Apple Silicon |
 | win32-x64 | windows-latest | |
@@ -45,7 +45,7 @@ runtime. Full sunset (hostdb builds, spindb support table, desktop Intel
 build) is a coordinated ecosystem decision for when GitHub retires Intel
 runners — see the OS Coverage Strategy header in `ci.yml`.
 
-The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`) and `run-e2e.sh` in smoke test mode. It's slow (~30-45 min under emulation) but runs in parallel with all other jobs.
+The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`) and `run-e2e.sh` in smoke test mode. It's slow (~30-45 min under emulation), so it is **commented out in ci.yml** — uncomment or run it manually to periodically verify arm64 binaries.
 
 ### Exceptions
 
