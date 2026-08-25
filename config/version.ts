@@ -1,2 +1,2 @@
 // Auto-generated — do not edit manually
-export const VERSION = '0.64.1'
+export const VERSION = '0.65.0'

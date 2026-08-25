@@ -3,8 +3,15 @@
  */
 
 import { describe, it } from 'node:test'
+import { mkdtemp, writeFile, rm } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
 import { assert } from '../utils/assertions'
-import { buildPgRestoreCommand } from '../../engines/postgresql/restore'
+import {
+  buildPgRestoreCommand,
+  detectBackupFormat,
+} from '../../engines/postgresql/restore'
+import { isPoolerHost } from '../../engines/postgresql'
 
 describe('PostgreSQL Restore Module', () => {
   describe('buildPgRestoreCommand', () => {
@@ -48,6 +55,73 @@ describe('PostgreSQL Restore Module', () => {
         cmd.indexOf('--clean --if-exists') < cmd.indexOf('-Fc'),
         'clean flags precede the format flag',
       )
+    })
+
+    it('adds -j N for parallel restore only when jobs > 1', () => {
+      const parallel = buildPgRestoreCommand({
+        ...base,
+        formatFlag: '-Fd',
+        jobs: 4,
+      })
+      assert(parallel.includes(' -j 4 '), 'includes -j 4')
+      assert(parallel.includes('-Fd'), 'keeps the directory format flag')
+      const single = buildPgRestoreCommand({ ...base, jobs: 1 })
+      assert(!single.includes(' -j '), 'jobs: 1 stays single-stream')
+      const unset = buildPgRestoreCommand(base)
+      assert(!unset.includes(' -j '), 'no jobs stays single-stream')
+    })
+  })
+
+  describe('detectBackupFormat (directory dumps)', () => {
+    it('detects a pg_dump -Fd directory via toc.dat', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'spindb-fd-test-'))
+      try {
+        await writeFile(join(dir, 'toc.dat'), 'PGDMP-toc-placeholder')
+        const format = await detectBackupFormat(dir)
+        assert(format.format === 'directory', 'detects directory format')
+        assert(
+          format.restoreCommand === 'pg_restore',
+          'restores with pg_restore',
+        )
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects a directory without toc.dat', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'spindb-notdump-test-'))
+      try {
+        let threw = false
+        try {
+          await detectBackupFormat(dir)
+        } catch {
+          threw = true
+        }
+        assert(threw, 'throws on a non-dump directory')
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('isPoolerHost', () => {
+    it('flags Neon pooler endpoints and pgbouncer hosts', () => {
+      assert(
+        isPoolerHost(
+          'ep-damp-frost-a5b3oyxr-pooler.c-2.us-east-2.aws.neon.tech',
+        ),
+        'Neon -pooler host',
+      )
+      assert(isPoolerHost('pgbouncer.internal.example.com'), 'pgbouncer host')
+    })
+
+    it('passes direct endpoints and local hosts', () => {
+      assert(
+        !isPoolerHost('ep-damp-frost-a5b3oyxr.c-2.us-east-2.aws.neon.tech'),
+        'Neon direct host',
+      )
+      assert(!isPoolerHost('127.0.0.1'), 'localhost IP')
+      assert(!isPoolerHost('db.example.com'), 'plain host')
     })
   })
 })

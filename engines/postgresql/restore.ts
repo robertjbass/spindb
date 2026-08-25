@@ -1,4 +1,4 @@
-import { open } from 'fs/promises'
+import { open, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -23,6 +23,26 @@ const execAsync = promisify(exec)
 export async function detectBackupFormat(
   filePath: string,
 ): Promise<BackupFormat> {
+  // Directory-format dump (pg_dump -Fd): a directory containing toc.dat
+  try {
+    const st = await stat(filePath)
+    if (st.isDirectory()) {
+      if (existsSync(join(filePath, 'toc.dat'))) {
+        return {
+          format: 'directory',
+          description: 'PostgreSQL directory format (pg_dump -Fd)',
+          restoreCommand: 'pg_restore',
+        }
+      }
+      throw new Error(
+        `"${filePath}" is a directory but not a PostgreSQL directory-format dump (no toc.dat)`,
+      )
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    // Fall through: missing paths get the normal open() error below
+  }
+
   // Read only the bytes needed for format detection (up to offset 262 for tar magic)
   const HEADER_SIZE = 263
   const buffer = Buffer.alloc(HEADER_SIZE)
@@ -141,12 +161,14 @@ export type RestoreOptions = {
    * as-is.
    */
   clean?: boolean
+  /** Parallel restore workers (pg_restore -j). Only for custom/tar/directory formats. */
+  jobs?: number
 }
 
 /**
- * Build the `pg_restore` command for a custom/tar dump. Pure (no I/O) so the
- * argument construction - especially the `--clean --if-exists` that makes
- * `--into-existing` a faithful replace - is unit-testable.
+ * Build the `pg_restore` command for a custom/tar/directory dump. Pure (no
+ * I/O) so the argument construction - especially the `--clean --if-exists`
+ * that makes `--into-existing` a faithful replace - is unit-testable.
  */
 export function buildPgRestoreCommand(args: {
   restorePath: string
@@ -156,9 +178,11 @@ export function buildPgRestoreCommand(args: {
   formatFlag: string
   backupPath: string
   clean?: boolean
+  jobs?: number
 }): string {
   const cleanFlags = args.clean ? ' --clean --if-exists' : ''
-  return `"${args.restorePath}" -h 127.0.0.1 -p ${args.port} -U ${args.user} -d ${args.database} --no-owner --no-privileges${cleanFlags} ${args.formatFlag} "${args.backupPath}"`
+  const jobsFlag = args.jobs && args.jobs > 1 ? ` -j ${args.jobs}` : ''
+  return `"${args.restorePath}" -h 127.0.0.1 -p ${args.port} -U ${args.user} -d ${args.database} --no-owner --no-privileges${cleanFlags}${jobsFlag} ${args.formatFlag} "${args.backupPath}"`
 }
 
 /**
@@ -304,6 +328,7 @@ export async function restoreBackup(
     pgRestorePath,
     containerVersion,
     clean,
+    jobs,
   } = options
   const execOptions = {
     maxBuffer: 50 * 1024 * 1024,
@@ -352,7 +377,9 @@ export async function restoreBackup(
           ? '-Fc'
           : detectedFormat === 'tar'
             ? '-Ft'
-            : ''
+            : detectedFormat === 'directory'
+              ? '-Fd'
+              : ''
       const result = await execAsync(
         buildPgRestoreCommand({
           restorePath,
@@ -362,6 +389,7 @@ export async function restoreBackup(
           formatFlag,
           backupPath,
           clean,
+          jobs,
         }),
         execOptions,
       )

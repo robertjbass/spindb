@@ -60,6 +60,16 @@ import type {
 const execAsync = promisify(exec)
 
 /**
+ * Detect connection-pooler hostnames (e.g. Neon's `ep-xxx-pooler.<region>...`).
+ * Parallel dump coordinates workers with synchronized snapshots
+ * (SET TRANSACTION SNAPSHOT), which transaction-pooling proxies like PgBouncer
+ * reject - so --jobs > 1 needs the direct endpoint. Exported for unit testing.
+ */
+export function isPoolerHost(hostname: string): boolean {
+  return /-pooler\./i.test(hostname) || /^pgbouncer\./i.test(hostname)
+}
+
+/**
  * Build a Windows-safe psql command string for either a file or inline SQL.
  * This is exported for unit testing.
  */
@@ -872,8 +882,33 @@ export class PostgreSQLEngine extends BaseEngine {
       ...getWindowsSpawnOptions(),
     }
 
+    const jobs = options?.jobs ?? 1
+    if (jobs > 1) {
+      // Parallel dump requires real server sessions for synchronized
+      // snapshots; transaction poolers (Neon -pooler endpoints, PgBouncer)
+      // break it. Fail with guidance instead of a cryptic pg_dump error.
+      let hostname = ''
+      try {
+        hostname = new URL(connectionString).hostname
+      } catch {
+        // Unparseable strings get pg_dump's own error below
+      }
+      if (isPoolerHost(hostname)) {
+        throw new Error(
+          `--jobs requires a direct (non-pooler) connection: "${hostname}" looks like a connection pooler.\n` +
+            '  Parallel pg_dump uses synchronized snapshots, which poolers reject.\n' +
+            '  Use the direct endpoint (for Neon, remove "-pooler" from the host).',
+        )
+      }
+    }
+
     return new Promise((resolve, reject) => {
-      const args = [connectionString, '-Fc', '-f', outputPath]
+      // jobs > 1 needs directory format (-Fd): pg_dump creates outputPath as a
+      // directory and splits tables across `jobs` connections
+      const args =
+        jobs > 1
+          ? [connectionString, '-Fd', '-j', String(jobs), '-f', outputPath]
+          : [connectionString, '-Fc', '-f', outputPath]
 
       for (const table of options?.excludeTables ?? []) {
         args.push(`--exclude-table=${table}`)

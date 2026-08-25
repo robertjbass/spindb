@@ -43,6 +43,13 @@ export const pullCommand = new Command('pull')
     collectRepeatable,
     [] as string[],
   )
+  .option(
+    '--jobs <n>',
+    'Parallel dump/restore workers (PostgreSQL only, 1-8; requires a direct non-pooler endpoint)',
+    // Number() rejects '2.5'/'4abc' as-is; parseInt would silently truncate
+    // them to legal integers before validateJobsOption could refuse them
+    (value: string) => Number(value),
+  )
   .option('--post-script <path>', 'Run script after pull completes')
   .option('--dry-run', 'Preview changes without executing')
   .option('-f, --force', 'Skip confirmation prompts')
@@ -58,6 +65,7 @@ export const pullCommand = new Command('pull')
         backup: boolean // Commander inverts --no-backup to backup: false
         excludeTable: string[]
         excludeTableData: string[]
+        jobs?: number
         postScript?: string
         dryRun?: boolean
         force?: boolean
@@ -165,6 +173,7 @@ export const pullCommand = new Command('pull')
           noBackup: !options.backup,
           excludeTables: options.excludeTable,
           excludeTableData: options.excludeTableData,
+          jobs: options.jobs,
           postScript: options.postScript,
           dryRun: options.dryRun,
           force: options.force,
