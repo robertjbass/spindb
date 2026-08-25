@@ -252,7 +252,7 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     maxConnections: 0, // Not applicable - managed internally
   },
   [Engine.QuestDB]: {
-    defaultVersion: '9',
+    defaultVersion: '10',
     defaultPort: 8812, // QuestDB PostgreSQL wire protocol port
     portRange: { start: 8812, end: 8912 },
     superuser: 'admin', // Default user with password 'quest'
