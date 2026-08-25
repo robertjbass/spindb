@@ -12,8 +12,12 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert'
 import {
   validateExcludeOptions,
+  validateJobsOption,
+  buildRemoteDumpOptions,
   EXCLUDE_TABLES_ENGINES,
   EXCLUDE_TABLE_DATA_ENGINES,
+  PARALLEL_PULL_ENGINES,
+  MAX_PULL_JOBS,
 } from '../../core/pull-manager'
 import { Engine } from '../../types'
 
@@ -61,6 +65,76 @@ describe('PullManager', () => {
           excludeTables: [],
           excludeTableData: [],
         }),
+      )
+    })
+  })
+
+  describe('validateJobsOption', () => {
+    it('allows jobs within range for PostgreSQL', () => {
+      assert.deepStrictEqual(PARALLEL_PULL_ENGINES, [Engine.PostgreSQL])
+      for (const jobs of [1, 2, 4, MAX_PULL_JOBS]) {
+        assert.doesNotThrow(() => validateJobsOption(Engine.PostgreSQL, jobs))
+      }
+    })
+
+    it('allows undefined jobs for any engine', () => {
+      assert.doesNotThrow(() => validateJobsOption(Engine.Redis, undefined))
+      assert.doesNotThrow(() => validateJobsOption(Engine.MySQL, undefined))
+    })
+
+    it('allows jobs: 1 (single-stream) on any engine', () => {
+      assert.doesNotThrow(() => validateJobsOption(Engine.MySQL, 1))
+    })
+
+    it('rejects jobs > 1 for non-PostgreSQL engines', () => {
+      for (const engine of [Engine.MySQL, Engine.MongoDB, Engine.Redis]) {
+        assert.throws(
+          () => validateJobsOption(engine, 2),
+          /--jobs is not supported/,
+        )
+      }
+    })
+
+    it('rejects out-of-range and non-integer values', () => {
+      for (const jobs of [0, -1, MAX_PULL_JOBS + 1, 2.5, NaN]) {
+        assert.throws(
+          () => validateJobsOption(Engine.PostgreSQL, jobs),
+          /--jobs must be an integer between/,
+        )
+      }
+    })
+  })
+
+  describe('buildRemoteDumpOptions', () => {
+    const fromUrl = 'postgresql://localhost/db'
+
+    it('forwards jobs to the engine dump (regression: jobs was once dropped)', () => {
+      const opts = buildRemoteDumpOptions({ fromUrl, jobs: 4 })
+      assert.strictEqual(opts?.jobs, 4)
+    })
+
+    it('forwards jobs alongside exclusions', () => {
+      const opts = buildRemoteDumpOptions({
+        fromUrl,
+        jobs: 2,
+        excludeTableData: ['big_table'],
+      })
+      assert.strictEqual(opts?.jobs, 2)
+      assert.deepStrictEqual(opts?.excludeTableData, ['big_table'])
+    })
+
+    it('treats jobs: 1 as default single-stream (no options object needed)', () => {
+      assert.strictEqual(
+        buildRemoteDumpOptions({ fromUrl, jobs: 1 }),
+        undefined,
+      )
+    })
+
+    it('returns undefined when nothing needs forwarding', () => {
+      assert.strictEqual(buildRemoteDumpOptions({ fromUrl }), undefined)
+      assert.strictEqual(
+        buildRemoteDumpOptions({ fromUrl, excludeTables: [] }),
+        undefined,
       )
     })
   })

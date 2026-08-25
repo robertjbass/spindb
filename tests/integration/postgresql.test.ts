@@ -6,6 +6,9 @@
 
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
+import { tmpdir } from 'os'
+import { existsSync } from 'fs'
+import { stat, rm as rmAsync } from 'fs/promises'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -815,6 +818,95 @@ describe('PostgreSQL Integration Tests', () => {
       await runScriptSQL(
         containerName,
         'DROP TABLE IF EXISTS schema_only',
+        DATABASE,
+      )
+    }
+  })
+
+  it('pull --jobs runs a parallel dump/restore round trip (with exclusions)', async () => {
+    console.log(`\n📥 Testing parallel pull (--jobs 2)...`)
+
+    const pulledDatabase = 'pull_jobs_target'
+
+    await runScriptSQL(
+      containerName,
+      'CREATE TABLE jobs_skip_rows (id serial primary key, blob text)',
+      DATABASE,
+    )
+    await runScriptSQL(
+      containerName,
+      "INSERT INTO jobs_skip_rows (blob) SELECT 'data ' || g FROM generate_series(1, 10) g",
+      DATABASE,
+    )
+
+    try {
+      // First prove jobs > 1 actually engages parallel directory-format dump
+      // at the engine level (pg_dump -Fd creates a directory with toc.dat)
+      const engineForDump = getEngine(ENGINE)
+      const fdDumpPath = join(tmpdir(), `spindb-test-fd-${Date.now()}`)
+      try {
+        await engineForDump.dumpFromConnectionString(
+          getConnectionString(ENGINE, testPorts[0], DATABASE),
+          fdDumpPath,
+          { jobs: 2 },
+        )
+        const st = await stat(fdDumpPath)
+        assert(st.isDirectory(), '--jobs dump should produce a directory (-Fd)')
+        assert(
+          existsSync(join(fdDumpPath, 'toc.dat')),
+          'directory dump should contain toc.dat',
+        )
+      } finally {
+        await rmAsync(fdDumpPath, { recursive: true, force: true })
+      }
+
+      const result = await pullManager.pull(containerName, {
+        fromUrl: getConnectionString(ENGINE, testPorts[0], DATABASE),
+        asDatabase: pulledDatabase,
+        jobs: 2,
+        excludeTableData: ['jobs_skip_rows'],
+      })
+
+      assert(result.success, 'Parallel pull should succeed')
+
+      // Data came through the -Fd directory dump intact
+      const kept = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM test_user',
+        pulledDatabase,
+      )
+      assertEqual(
+        Number(kept.rows[0].n),
+        EXPECTED_ROW_COUNT - 1,
+        'Parallel pull should carry table data',
+      )
+
+      // --exclude-table-data still works alongside --jobs
+      const schemaOnly = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM jobs_skip_rows',
+        pulledDatabase,
+      )
+      assertEqual(
+        Number(schemaOnly.rows[0].n),
+        0,
+        'Excluded-data table should exist but be empty in parallel mode',
+      )
+
+      console.log(`   ✓ Parallel dump/restore verified in "${pulledDatabase}"`)
+    } finally {
+      const config = await containerManager.getConfig(containerName)
+      if (config) {
+        const engine = getEngine(config.engine)
+        try {
+          await engine.dropDatabase(config, pulledDatabase)
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+      await runScriptSQL(
+        containerName,
+        'DROP TABLE IF EXISTS jobs_skip_rows',
         DATABASE,
       )
     }
