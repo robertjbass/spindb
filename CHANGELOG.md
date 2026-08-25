@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: the linux-arm64 QEMU smoke job is enabled, gated to manual dispatch only.** It was fully written but commented out, leaving linux-arm64 with zero automated coverage. It now runs when CI is triggered from the Actions tab — the intended cadence is per hostdb bump (the moment arm64 binaries actually change; spindb's own code paths are arch-validated by macOS ARM64 in every PR). Never runs on PRs or the nightly cron, and is not part of the `CI Success` gate, so it can neither slow nor block a release.
+
 ### Documentation
 
 - **CHEATSHEET.md's Pull section now covers the 0.64/0.65 flags**: `--exclude-table`, `--exclude-table-data` (with wildcard patterns), `--jobs` (with the direct-endpoint/pooler requirement), the combined fast path for large production databases, per-engine support notes, and the `excludedTables`/`excludedTableData` JSON fields. CLAUDE.md's "After Adding Any Feature" checklist now names CHEATSHEET.md so CLI surface changes can't silently skip it again.

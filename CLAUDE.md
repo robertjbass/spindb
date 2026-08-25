@@ -108,6 +108,7 @@ The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the author
 5. `pnpm test:unit` passes (version maps auto-rebuild from new snapshot).
 6. Commit: `chore(deps): bump hostdb 0.31.0 → 0.32.0` describing new versions / deprecations.
 7. Standard feature → dev → main PR flow.
+8. Trigger the CI workflow manually (Actions tab → CI → Run workflow) on the bump branch: the `Docker Linux ARM64 (QEMU)` smoke job runs ONLY on manual dispatch and is the sole automated linux-arm64 coverage. hostdb bumps are exactly when arm64 binaries change, so this is the moment to run it.
 
 ### Container version pinning (eager resolution + auto-migrate)
 

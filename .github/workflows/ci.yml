@@ -2710,52 +2710,54 @@ jobs:
         timeout-minutes: 30
 
   # ============================================
-  # Docker Linux ARM64 (QEMU) - COMMENTED OUT
+  # Docker Linux ARM64 (QEMU) - MANUAL DISPATCH ONLY
   # ============================================
-  # This job takes ~30-45 min under QEMU emulation (3x longer than all other
-  # tests combined). Uncomment periodically to verify arm64 binaries still
-  # work, or run manually via workflow_dispatch. macOS ARM64 runners validate
-  # ARM code paths in every PR.
-  #
-  # test-docker-linux-arm64:
-  #   name: Docker Linux ARM64 (QEMU)
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v6
-  #
-  #     - name: Set up QEMU for ARM64 emulation
-  #       uses: docker/setup-qemu-action@v4
-  #       with:
-  #         platforms: arm64
-  #
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v4
-  #
-  #     - name: Build ARM64 Docker test image
-  #       run: |
-  #         docker buildx build \
-  #           --platform linux/arm64 \
-  #           -t spindb-e2e-arm64 \
-  #           -f tests/docker/Dockerfile \
-  #           --load .
-  #       timeout-minutes: 30
-  #
-  #     - name: Run ARM64 smoke tests
-  #       # QEMU emulation is ~5-10x slower than native; increase timeouts so
-  #       # engines with 30-90s internal waitForReady don't get killed.
-  #       # SurrealDB is skipped: its large Rust binary hangs during --version
-  #       # verification under QEMU user-mode emulation.
-  #       # ClickHouse is skipped: its heavy binary consistently exceeds startup
-  #       # timeouts under QEMU (~120s+ native, far longer emulated). Tested
-  #       # natively on macOS/Linux CI runners instead.
-  #       run: |
-  #         docker run --rm --platform linux/arm64 \
-  #           -e START_TIMEOUT=600 \
-  #           -e STARTUP_TIMEOUT=180 \
-  #           -e "SKIP_ENGINES=surrealdb clickhouse" \
-  #           spindb-e2e-arm64
-  #       timeout-minutes: 90
+  # Gated to workflow_dispatch: ~30-45 min under QEMU emulation, and the
+  # linux-arm64 risk lives in hostdb BINARIES, not spindb code (macOS ARM64
+  # runners validate ARM code paths in every PR). Run this via the Actions
+  # tab when bumping hostdb - that is the moment arm64 binaries change.
+  # Deliberately NOT in ci-success needs and never on PRs or the nightly
+  # cron, so it can never block or noise a release.
+  test-docker-linux-arm64:
+    name: Docker Linux ARM64 (QEMU)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build ARM64 Docker test image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t spindb-e2e-arm64 \
+            -f tests/docker/Dockerfile \
+            --load .
+        timeout-minutes: 30
+
+      - name: Run ARM64 smoke tests
+        # QEMU emulation is ~5-10x slower than native; increase timeouts so
+        # engines with 30-90s internal waitForReady don't get killed.
+        # SurrealDB is skipped: its large Rust binary hangs during --version
+        # verification under QEMU user-mode emulation.
+        # ClickHouse is skipped: its heavy binary consistently exceeds startup
+        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
+        # natively on macOS/Linux CI runners instead.
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e START_TIMEOUT=600 \
+            -e STARTUP_TIMEOUT=180 \
+            -e "SKIP_ENGINES=surrealdb clickhouse" \
+            spindb-e2e-arm64
+        timeout-minutes: 90
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
