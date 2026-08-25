@@ -297,9 +297,25 @@ spindb pull mydb --from-env PROD_DB_URL --dry-run
 # Run script after pull (e.g., sync credentials)
 spindb pull mydb --from-env PROD_DB_URL --post-script ./sync-creds.ts
 
+# Skip tables/collections (repeatable). --exclude-table omits the table
+# entirely; --exclude-table-data keeps its schema but skips the rows
+# (PostgreSQL only) — ideal for analytics/event tables that dominate the bytes
+spindb pull mydb --from-env PROD_DB_URL --exclude-table debug_log
+spindb pull mydb --from-env PROD_DB_URL --exclude-table-data 'traffic_*'
+
+# Parallel dump/restore (PostgreSQL only, 1-8 workers). Splits tables across
+# N connections — big speedup on latency-bound remotes. Requires the DIRECT
+# endpoint: connection poolers (Neon -pooler hosts, pgbouncer) are refused
+spindb pull mydb --from-env PROD_DB_URL --jobs 4
+
+# The fast path for large production databases: exclude the bulk, parallelize the rest
+spindb pull mydb --from-env PROD_DB_URL --exclude-table-data 'traffic_*' --jobs 4
+
 # JSON output for scripting (includes connection URLs)
 spindb pull mydb --from-env PROD_DB_URL --json
 ```
+
+**Table exclusion engine support:** `--exclude-table` works on PostgreSQL, MySQL, MariaDB (bare names auto-qualified as `db.table`), MongoDB, and FerretDB (collections). `--exclude-table-data` and `--jobs` are PostgreSQL only. Unsupported engines fail with a clear error before anything is dumped or dropped. Exclusions apply only to the remote dump — the local pre-pull backup stays complete. `--jobs` parallelizes across tables (one large table still rides a single connection), so it pairs best with exclusions.
 
 **JSON output includes connection URLs for scripting:**
 ```json
@@ -315,6 +331,8 @@ spindb pull mydb --from-env PROD_DB_URL --json
   "source": "postgresql://user:***@prod.example.com/db"
 }
 ```
+
+When exclusions are used, the JSON also carries `excludedTables` / `excludedTableData` arrays (omitted otherwise).
 
 > **vs restore --from-url:** `restore` directly overwrites without backup. `pull` automatically creates a timestamped backup (e.g., `mydb_20260129_143052`) before replacing, so you can always revert.
 

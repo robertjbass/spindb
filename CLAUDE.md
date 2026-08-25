@@ -165,7 +165,7 @@ If modifying an engine, also run `pnpm test:engine <engine>`.
 
 ### After Adding Any Feature
 
-Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests.
+Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests. If the CLI surface changed (new command, flag, or output field), also update CHEATSHEET.md — it is the complete command reference the README defers to, and it silently goes stale otherwise.
 
 ## Development Gotchas
 

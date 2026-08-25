@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **CHEATSHEET.md's Pull section now covers the 0.64/0.65 flags**: `--exclude-table`, `--exclude-table-data` (with wildcard patterns), `--jobs` (with the direct-endpoint/pooler requirement), the combined fast path for large production databases, per-engine support notes, and the `excludedTables`/`excludedTableData` JSON fields. CLAUDE.md's "After Adding Any Feature" checklist now names CHEATSHEET.md so CLI surface changes can't silently skip it again.
+
 ## [0.65.0] - 2026-08-25
 
 ### Added
 
 - **`spindb pull --jobs <n>`** (PostgreSQL only, 1-8): parallel dump and restore. `--jobs 2+` switches the remote dump to `pg_dump -Fd -j N` (directory format, one connection per worker, tables split across workers) and the local load to `pg_restore -j N`. On latency-bound remotes (e.g. Neon cross-region) where a single connection is the bottleneck, aggregate throughput scales with workers. Requires a direct endpoint: parallel dump coordinates workers with synchronized snapshots, which connection poolers reject — pooler hostnames (Neon `-pooler`, pgbouncer) are detected up front with an actionable error. Composes with `--exclude-table` / `--exclude-table-data` (the combination is the fast path for large databases with excludable bulk tables). Non-PostgreSQL engines reject the flag with a clear error. PostgreSQL restore now also auto-detects directory-format (`-Fd`) dumps by their `toc.dat`.
+
+### Fixed
+
+- **`spindb pull` no longer reports success when the restore actually failed.** PostgreSQL's restore layer signals failure by resolving with a non-zero exit code (pg_restore can exit non-zero on partial success), and pull discarded that result — a completely failed pg_restore produced "Pull complete!" over an empty database, and a failed backup-side restore produced an empty "backup". All three pull restore steps (remote data into the target in both modes, and the original into the backup database) now check the exit code and abort with pg_restore's stderr, triggering the existing transaction rollback that preserves the original data. Real-engine integration confirms pg_restore exits 0 on normal pulls, so the happy path is unaffected. This bug predated the new pull flags.
+- **Malformed `--jobs` values are rejected instead of silently truncated.** The CLI parsed `--jobs` with `parseInt`, so `2.5` became 2 and `4abc` became 4 before validation could refuse them; the parser now uses `Number()` and hands invalid input to validation as-is.
 
 ## [0.64.1] - 2026-08-25
 
