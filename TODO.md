@@ -268,6 +268,7 @@ SQL seed files are passed via command-line argument (`-e` or `-c`), which could 
 The `spindb pull` command is implemented but needs comprehensive testing across all engines. See `plans/CLONE_FEATURE.md` for detailed status.
 
 - [ ] **End-to-end pull tests** - Test full `spindb pull` workflow for each engine (replace mode, clone mode)
+- [ ] **`--exclude-table` integration tests for MySQL/MariaDB/MongoDB/FerretDB** - Real-engine round trips proving excluded tables/collections are absent. PostgreSQL is covered (`tests/integration/postgresql.test.ts` verifies both `--exclude-table` and `--exclude-table-data`); unit coverage of the allowlist validation exists in `tests/unit/pull-manager.test.ts`
 - [ ] **Post-script integration** - Verify `SPINDB_CONTEXT` JSON and legacy env vars work correctly
 - [ ] **Error handling** - Test network timeouts, invalid credentials, disk space, transaction rollback
 - [ ] **terminateConnections audit** - Verify engines that need connection termination have proper implementations

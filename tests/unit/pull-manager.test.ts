@@ -10,8 +10,61 @@
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
+import {
+  validateExcludeOptions,
+  EXCLUDE_TABLES_ENGINES,
+  EXCLUDE_TABLE_DATA_ENGINES,
+} from '../../core/pull-manager'
+import { Engine } from '../../types'
 
 describe('PullManager', () => {
+  describe('validateExcludeOptions', () => {
+    it('allows --exclude-table for every allowlisted engine', () => {
+      for (const engine of EXCLUDE_TABLES_ENGINES) {
+        assert.doesNotThrow(() =>
+          validateExcludeOptions(engine, { excludeTables: ['traffic_event'] }),
+        )
+      }
+    })
+
+    it('allows --exclude-table-data for PostgreSQL', () => {
+      assert.doesNotThrow(() =>
+        validateExcludeOptions(Engine.PostgreSQL, {
+          excludeTableData: ['traffic_event'],
+        }),
+      )
+      assert.deepStrictEqual(EXCLUDE_TABLE_DATA_ENGINES, [Engine.PostgreSQL])
+    })
+
+    it('rejects --exclude-table for unsupported engines', () => {
+      for (const engine of [Engine.Redis, Engine.SQLite, Engine.ClickHouse]) {
+        assert.throws(
+          () => validateExcludeOptions(engine, { excludeTables: ['t'] }),
+          /--exclude-table is not supported/,
+        )
+      }
+    })
+
+    it('rejects --exclude-table-data for non-PostgreSQL engines', () => {
+      for (const engine of [Engine.MySQL, Engine.MongoDB, Engine.MariaDB]) {
+        assert.throws(
+          () => validateExcludeOptions(engine, { excludeTableData: ['t'] }),
+          /--exclude-table-data is not supported/,
+        )
+      }
+    })
+
+    it('accepts empty or missing exclusion lists for any engine', () => {
+      assert.doesNotThrow(() => validateExcludeOptions(Engine.Redis, {}))
+      assert.doesNotThrow(() =>
+        validateExcludeOptions(Engine.Redis, {
+          excludeTables: [],
+          excludeTableData: [],
+        }),
+      )
+    })
+  })
+
   describe('generateTimestamp', () => {
     it('should generate timestamp in YYYYMMDD_HHMMSS format', () => {
       // Access private method via prototype manipulation for testing

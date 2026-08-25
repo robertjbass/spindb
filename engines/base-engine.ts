@@ -6,6 +6,7 @@ import type {
   BackupResult,
   RestoreResult,
   DumpResult,
+  RemoteDumpOptions,
   StatusResult,
   QueryResult,
   QueryOptions,
@@ -276,10 +277,14 @@ export abstract class BaseEngine {
     return new Map()
   }
 
-  // Create a dump from a remote database using a connection string
+  // Create a dump from a remote database using a connection string.
+  // Engines that support table exclusion honor options.excludeTables /
+  // options.excludeTableData; support is gated by the allowlists in
+  // core/pull-manager.ts, so unsupported engines never receive them.
   abstract dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult>
 
   /**

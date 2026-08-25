@@ -13,7 +13,9 @@
 
 ## Ecosystem
 
-SpinDB is the backbone of the Layerbase platform. **hostdb** builds database binaries and publishes them to `registry.layerbase.host` — spindb downloads them. **layerbase-cloud** (`~/dev/layerbase-cloud`) runs spindb inside Docker containers on Hetzner to provide managed databases with connection strings. **layerbase-desktop** (`~/dev/layerbase-desktop`) is an Electron GUI that calls spindb via IPC — it must never contain database logic that isn't in spindb. **layerbase** (`~/dev/layerbase`) is the Next.js web app at layerbase.com for billing, licensing, and the cloud dashboard. Changes to spindb's CLI output or flags are breaking changes for layerbase-desktop.
+SpinDB is the backbone of the Layerbase platform. **hostdb** builds database binaries and publishes them to `registry.layerbase.host` — spindb downloads them. **layerbase-cloud** (`~/dev/layerbase-cloud`) runs spindb inside Docker containers on Hetzner to provide managed databases with connection strings. **layerbase-desktop** (`~/dev/layerbase-desktop`) is an Electron GUI that calls spindb via IPC — it must never contain database logic that isn't in spindb. **layerbase** (`~/dev/layerbase`) is the Next.js web app at layerbase.com for billing, licensing, and the cloud dashboard. **layerbase-cli** (`~/dev/layerbase-cli`) is the branded `layerbase`/`lbase` npm CLI that forwards every non-layerbase command verbatim to the local spindb install. Changes to spindb's CLI output or flags are breaking changes for layerbase-desktop.
+
+**When updating spindb, check whether `~/dev/layerbase-cli` needs a matching docs update.** layerbase-cli's README/help present spindb's command surface as their own (`lbase create / ls / start / backup / branch ...`), and `scripts/check-spindb-collisions.ts` there validates layerbase's registered verbs against `spindb --help`. New spindb flags forward transparently, but a NEW top-level spindb command (or renamed/removed one) can collide with a layerbase verb or make its docs stale — review layerbase-cli's CLAUDE.md/README after any spindb CLI surface change.
 
 ## Overview
 

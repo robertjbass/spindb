@@ -47,6 +47,7 @@ import {
   type BackupResult,
   type RestoreResult,
   type DumpResult,
+  type RemoteDumpOptions,
   type StatusResult,
   type QueryResult,
   type QueryOptions,
@@ -966,6 +967,7 @@ export class MariaDBEngine extends BaseEngine {
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
+    options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
     const dumpPath = await this.getDumpPath()
 
@@ -981,6 +983,12 @@ export class MariaDBEngine extends BaseEngine {
       user,
       '--result-file',
       outputPath,
+      // mariadb-dump requires db-qualified names; qualify bare names with the
+      // database being dumped
+      ...(options?.excludeTables ?? []).map(
+        (table) =>
+          `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
+      ),
       database,
     ]
 
