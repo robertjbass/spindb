@@ -21,6 +21,7 @@ import type {
   PullOptions,
   PullResult,
   RemoteDumpOptions,
+  RestoreResult,
 } from '../types'
 import type { BaseEngine } from '../engines/base-engine'
 import { getDefaultFormat } from '../config/backup-formats'
@@ -122,6 +123,23 @@ export function buildRemoteDumpOptions(
     excludeTables: options.excludeTables,
     excludeTableData: options.excludeTableData,
     jobs: parallel ? options.jobs : undefined,
+  }
+}
+
+/**
+ * Restore implementations (notably PostgreSQL's) report failure by RESOLVING
+ * with a non-zero code instead of throwing, because pg_restore can exit
+ * non-zero on partial success. Inside pull that leniency is wrong: a failed
+ * restore must abort and roll back, never report success over incomplete data.
+ */
+function assertRestoreSucceeded(result: RestoreResult, context: string): void {
+  if (typeof result.code === 'number' && result.code !== 0) {
+    const detail = result.stderr
+      ? `\n  ${result.stderr.trim().split('\n').slice(-15).join('\n  ')}`
+      : ''
+    throw new Error(
+      `Restore failed while ${context} (exit code ${result.code}).${detail}`,
+    )
   }
 }
 
@@ -270,10 +288,14 @@ export class PullManager {
 
         // Step 3: Restore original into backup
         logDebug(`Restoring original into backup database: ${backupDatabase}`)
-        await engine.restore(config, tempOriginalDump, {
+        const backupRestore = await engine.restore(config, tempOriginalDump, {
           database: backupDatabase,
           createDatabase: false,
         })
+        assertRestoreSucceeded(
+          backupRestore,
+          `copying the original into backup database "${backupDatabase}"`,
+        )
       }
 
       // --- PULL REMOTE ---
@@ -327,11 +349,15 @@ export class PullManager {
 
       // Step 8: Restore remote into original
       logDebug(`Restoring remote data into: ${targetDatabase}`)
-      await engine.restore(config, tempRemoteDump, {
+      const remoteRestore = await engine.restore(config, tempRemoteDump, {
         database: targetDatabase,
         createDatabase: false,
         jobs: options.jobs,
       })
+      assertRestoreSucceeded(
+        remoteRestore,
+        `loading remote data into "${targetDatabase}"`,
+      )
 
       // Step 9: Cleanup temp files
       try {
@@ -464,11 +490,15 @@ export class PullManager {
 
       // Step 4: Restore remote into target
       logDebug(`Restoring remote data into: ${targetDatabase}`)
-      await engine.restore(config, tempRemoteDump, {
+      const remoteRestore = await engine.restore(config, tempRemoteDump, {
         database: targetDatabase,
         createDatabase: false,
         jobs: options.jobs,
       })
+      assertRestoreSucceeded(
+        remoteRestore,
+        `loading remote data into "${targetDatabase}"`,
+      )
 
       // Step 5: Cleanup
       try {
