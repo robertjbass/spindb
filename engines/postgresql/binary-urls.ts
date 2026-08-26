@@ -1,6 +1,7 @@
 import { POSTGRESQL_VERSION_MAP } from './version-maps'
 import { buildHostdbUrl } from '../../core/hostdb-client'
 import { validateSemverLikeVersion } from '../../core/version-utils'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { Engine, Platform, type Arch } from '../../types'
 
 // Supported platform/arch combinations for PostgreSQL hostdb binaries
@@ -78,6 +79,13 @@ function normalizeVersion(
   // Check if it's a major version in the map
   if (versionMap[version]) {
     return versionMap[version]
+  }
+
+  // Any prefix the registry can resolve ('18.6' -> '18.6.0') wins over the
+  // legacy "X.Y means X.Y.0" assumption below, which is only a guess.
+  const resolved = resolveEngineVersion(Engine.PostgreSQL, version)
+  if (resolved) {
+    return resolved
   }
 
   // Validate version format: must be numeric semver-like (X, X.Y, or X.Y.Z)

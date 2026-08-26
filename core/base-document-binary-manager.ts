@@ -25,6 +25,7 @@ import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
 import { logDebug } from './error-handler'
+import { binariesNotFoundMessage } from './version-resolver'
 import { fetchWithRegistryFallback } from './hostdb-client'
 import {
   type Engine,
@@ -211,9 +212,11 @@ export abstract class BaseDocumentBinaryManager {
         if (!response.ok) {
           if (response.status === 404) {
             throw new Error(
-              `${this.config.displayName} ${fullVersion} binaries not found (404). ` +
-                `This version may have been removed from hostdb. ` +
-                `Try a different version or check https://registry.layerbase.host`,
+              binariesNotFoundMessage({
+                engine: this.config.engineName,
+                displayName: this.config.displayName,
+                version: fullVersion,
+              }),
             )
           }
           throw new Error(

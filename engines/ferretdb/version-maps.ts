@@ -11,10 +11,8 @@
  * v2.x uses postgresql-documentdb as backend (macOS/Linux only)
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -30,7 +28,7 @@ export const DOCUMENTDB_VERSION_MAP: Record<string, string> =
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
 export const DEFAULT_DOCUMENTDB_VERSION =
-  hostdbResolveVersion(DOCUMENTDB_ENGINE, '17') ?? '17-0.107.0'
+  resolveEngineVersion(DOCUMENTDB_ENGINE, '17') ?? '17-0.107.0'
 
 export const DEFAULT_V1_POSTGRESQL_VERSION = '17'
 
@@ -44,11 +42,11 @@ export function isV1(version: string): boolean {
 }
 
 export function getFullVersion(version: string): string | null {
-  return hostdbResolveVersion(ENGINE, version)
+  return resolveEngineVersion(ENGINE, version)
 }
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
   logDebug(
     `FerretDB version '${version}' not in hostdb, may not be available for download`,
@@ -57,5 +55,5 @@ export function normalizeVersion(version: string): string {
 }
 
 export function normalizeDocumentDBVersion(version: string): string {
-  return hostdbResolveVersion(DOCUMENTDB_ENGINE, version) ?? version
+  return resolveEngineVersion(DOCUMENTDB_ENGINE, version) ?? version
 }
