@@ -5,10 +5,8 @@
  * for the architecture rationale — hostdb is the single source of truth.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -19,11 +17,11 @@ export const REDIS_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
 export function getFullVersion(majorVersion: string): string | null {
-  return hostdbResolveVersion(ENGINE, majorVersion)
+  return resolveEngineVersion(ENGINE, majorVersion)
 }
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
 
   const parts = version.split('.')

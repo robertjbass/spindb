@@ -38,6 +38,7 @@ import {
   fetchDeprecatedVersions,
 } from './hostdb-releases'
 import { SUPPORTED_MAJOR_VERSIONS, FALLBACK_VERSION_MAP } from './version-maps'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -229,22 +230,19 @@ export class MySQLEngine extends BaseEngine {
     }
   }
 
+  // Resolves a full version, major, or any version prefix ('8' -> '8.4.11',
+  // '8.0' -> '8.0.40'). Delegates to the shared resolver so create/start and
+  // the binary download agree on what a version string means.
   resolveFullVersion(version: string): string {
-    // Check if already a full version (has at least two dots)
-    if (/^\d+\.\d+\.\d+/.test(version)) {
-      return version
-    }
-    // It's a major version, resolve using fallback map
-    const resolved = FALLBACK_VERSION_MAP[version]
-    if (!resolved) {
-      const availableVersions = Object.keys(FALLBACK_VERSION_MAP).join(', ')
-      logWarning(
-        `Unknown MySQL major version "${version}". Available versions: ${availableVersions}. ` +
-          `Falling back to ${version}.0.0 which may not exist.`,
-      )
-      return `${version}.0.0`
-    }
-    return resolved
+    const resolved = resolveEngineVersion(this.name, version)
+    if (resolved) return resolved
+
+    const availableVersions = Object.keys(FALLBACK_VERSION_MAP).join(', ')
+    logWarning(
+      `Unknown MySQL version "${version}". Available versions: ${availableVersions}. ` +
+        `Using it as-is, which may not exist.`,
+    )
+    return version
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {

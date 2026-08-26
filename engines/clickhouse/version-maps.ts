@@ -9,7 +9,8 @@
  * is 2-part to preserve that convention; '25' still resolves via the MAP.
  */
 
-import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
+import { listVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap as buildBaseVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -27,7 +28,7 @@ function buildVersionMap(): Record<string, string> {
     const parts = full.split('.')
     if (parts.length === 4) {
       const threePartPrefix = `${parts[0]}.${parts[1]}.${parts[2]}`
-      const r = hostdbResolveVersion(ENGINE, threePartPrefix)
+      const r = resolveEngineVersion(ENGINE, threePartPrefix)
       if (r) map[threePartPrefix] = r
     }
   }
@@ -41,11 +42,11 @@ export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
 })
 
 export function getFullVersion(version: string): string | null {
-  return hostdbResolveVersion(ENGINE, version)
+  return resolveEngineVersion(ENGINE, version)
 }
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
 
   const parts = version.split('.')

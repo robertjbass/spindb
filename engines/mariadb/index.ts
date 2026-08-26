@@ -28,7 +28,7 @@ import {
 import { mariadbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
-import { SUPPORTED_MAJOR_VERSIONS, MARIADB_VERSION_MAP } from './version-maps'
+import { SUPPORTED_MAJOR_VERSIONS, normalizeVersion } from './version-maps'
 import {
   detectBackupFormat as detectBackupFormatImpl,
   restoreBackup,
@@ -165,13 +165,11 @@ export class MariaDBEngine extends BaseEngine {
     }
   }
 
+  // Resolves a full version, major, or any version prefix ('11.8' ->
+  // '11.8.8', '11' -> newest 11.x). Delegates to the shared resolver so
+  // create/start and the binary download agree on what a version string means.
   resolveFullVersion(version: string): string {
-    // Check if already a full version (has at least two dots)
-    if (/^\d+\.\d+\.\d+/.test(version)) {
-      return version
-    }
-    // It's a major version, resolve using fallback map
-    return MARIADB_VERSION_MAP[version] || `${version}.0`
+    return normalizeVersion(version)
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {

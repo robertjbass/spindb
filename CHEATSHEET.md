@@ -29,7 +29,7 @@ spindb create mydb -e influxdb          # Create InfluxDB
 spindb create mydb -e weaviate          # Create Weaviate
 spindb create mydb -e tigerbeetle       # Create TigerBeetle
 spindb create mydb -e libsql            # Create LibSQL (macOS/Linux only)
-spindb create mydb --db-version 17      # Specific version
+spindb create mydb --db-version 17      # Specific version (any prefix works)
 spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
 spindb create mydb --show-deprecated    # Show deprecated versions in picker
@@ -50,6 +50,30 @@ spindb ports mydb                       # Show ports for one container
 spindb ports --running                  # Only running containers
 spindb ports --json                     # JSON output
 ```
+
+### Version selection (`--db-version`)
+
+`--db-version` accepts a full version or any prefix of one, for every engine.
+A prefix resolves to the newest available release that matches it, and the
+container stores the resolved full version so later spindb upgrades never move
+it onto a different binary.
+
+```bash
+spindb create mydb -e postgresql --db-version 18       # newest 18.x  -> 18.6.0
+spindb create mydb -e postgresql --db-version 18.6     # newest 18.6.x -> 18.6.0
+spindb create mydb -e postgresql --db-version 18.4.0   # exact version, pinned as-is
+spindb create mydb -e influxdb --db-version 3.10       # newest 3.10.x -> 3.10.5
+spindb create mydb -e clickhouse --db-version 25.12    # 4-part scheme -> 25.12.3.21
+```
+
+Matching happens on version-segment boundaries, never as a substring: `3.1`
+does not match `3.10.5`, it is simply an unknown version. Prereleases stay
+opt-in, so `19` never resolves to `19.0.0-beta.3`; ask for the channel
+(`--db-version 19.0.0-beta`) or the exact token to get one. A prefix that
+matches nothing reports the versions that do exist.
+
+Run `spindb engines download <engine>` with no version to browse the versions
+an engine offers.
 
 ## Connect & Query
 

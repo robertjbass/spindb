@@ -5,10 +5,8 @@
  * for the architecture rationale — hostdb is the single source of truth.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -22,7 +20,7 @@ export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 export const DEFAULT_VERSION = SUPPORTED_MAJOR_VERSIONS[0] ?? '3'
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
   logDebug(
     `TypeDB version "${version}" not in hostdb (available majors: ${SUPPORTED_MAJOR_VERSIONS.join(', ')}), using as-is`,

@@ -5,10 +5,8 @@
  * for the architecture rationale — hostdb is the single source of truth.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 
 const ENGINE = 'questdb'
@@ -21,5 +19,5 @@ export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 export const FALLBACK_VERSION_MAP = QUESTDB_VERSION_MAP
 
 export function normalizeVersion(version: string): string {
-  return hostdbResolveVersion(ENGINE, version) ?? version
+  return resolveEngineVersion(ENGINE, version) ?? version
 }

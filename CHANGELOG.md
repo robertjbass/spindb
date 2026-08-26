@@ -5,6 +5,21 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.67.0] - 2026-08-26
+
+### Fixed
+
+- **`--db-version` now accepts a version prefix on every engine, and resolves it the same way the default version path does.** An explicit `--db-version 3.10` (InfluxDB) or `--db-version 18.6` (PostgreSQL) could resolve differently from - or fail where - the same engine's default version succeeded, because the two paths did not share a resolver. PostgreSQL was the worst case at HEAD: `resolveFullVersion()` short-circuited on `/^\d+\.\d+/` and returned `18.6` verbatim, so `spindb create -e postgresql --db-version 18.6 --start` downloaded `postgresql-18.6.0` (the download path resolved the prefix) and then looked for binaries under `postgresql-18.6`, failing with `spawn .../postgresql-18.6-darwin-arm64/bin/initdb ENOENT` after the container had already been created. On an older hostdb pin the same divergence surfaced as the reported InfluxDB 404: the bundled registry could not resolve `3.10`, so the literal string went into the download URL. Every engine now resolves versions through one shared ladder (`core/version-resolver.ts`): exact match first, then newest release matching the request as a version prefix, then a real "not found" that lists what IS available. Matching is on version-segment boundaries, so `3.1` still does not match `3.10.5`, and 4-part ClickHouse versions (`25.12` -> `25.12.3.21`) work like everything else. Prereleases stay opt-in: a prefix only considers them when the request names a channel, so `19` never silently resolves to `19.0.0-beta.3`.
+- **A 404 on a binary download now lists the versions that exist.** All four base binary managers shared a message that said the version "may have been removed from hostdb" and left the user to go look up what was still there.
+
+### Changed
+
+- **PostgreSQL, MySQL, and MariaDB version resolution now goes through the shared resolver** instead of their own regex short-circuits and per-engine fallbacks (`${version}.0.0` for PostgreSQL, `${version}.0` for MariaDB). An unresolvable version is passed through unchanged, as on every other engine, instead of being reshaped into a guess that cannot exist. PostgreSQL's binary-URL builder keeps its legacy "X.Y means X.Y.0" fallback, but only after the registry has had a chance to resolve the prefix properly.
+
+### Documentation
+
+- **CHEATSHEET.md documents `--db-version` prefix resolution** in a new "Version selection" subsection: what a prefix resolves to, the segment-boundary rule, the prerelease opt-in, and how to browse an engine's versions.
+
 ## [0.66.0] - 2026-08-25
 
 ### Added

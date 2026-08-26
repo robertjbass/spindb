@@ -5,10 +5,8 @@
  * for the architecture rationale — hostdb is the single source of truth.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 
 const ENGINE = 'surrealdb'
@@ -21,7 +19,7 @@ export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 export const DEFAULT_VERSION = SUPPORTED_MAJOR_VERSIONS[0] ?? '2'
 
 export function normalizeVersion(version: string): string {
-  return hostdbResolveVersion(ENGINE, version) ?? version
+  return resolveEngineVersion(ENGINE, version) ?? version
 }
 
 export function isVersionSupported(version: string): boolean {
