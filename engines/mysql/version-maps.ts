@@ -13,10 +13,7 @@
  * the available-versions list; only `enabled: false` removes a version entirely.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  listVersions,
-} from 'hostdb'
+import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 

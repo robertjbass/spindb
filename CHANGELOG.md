@@ -5,10 +5,16 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.66.0] - 2026-08-25
+
+### Added
+
+- **PostgreSQL 18.6.0 and 19.0.0-beta.3 support** via the hostdb `0.41.0` pin - the upstream 2026-08-13 security release fixing 28 CVEs (~12 at CVSS 8.8 arbitrary-code-execution, including CVE-2026-14664 regexp heap overflow, CVE-2026-16239 cursor type confusion, CVE-2026-19385 pg_dump heap overflow, CVE-2026-15741 EXTRACT deparse SQLi). 18.5 was skipped upstream due to a regression. 18.6.0 ships all 5 platforms; 19.0.0-beta.3 ships 4 (no win32 until EDB publishes RC binaries) and resolves only by exact version token, like beta.1. Note: beta.3 is NOT binary-compatible with beta.1 data dirs (catalog version can change between betas) - beta.1 containers need dump/restore, never a binary swap.
 
 ### Changed
 
+- **PostgreSQL's `18` line now resolves to `18.6.0`** (was 18.4.0): `spindb create --engine postgresql` and explicit `18`/`18.6` requests get the patched build. 18.1.0 and 18.4.0 remain resolvable; existing containers self-pin their stored full version, so nothing running is disturbed. Minor bump because the resolved default changed.
+- **Pin `hostdb` to `0.41.0`** (was 0.40.0).
 - **CI: the linux-arm64 QEMU smoke job is enabled, gated to manual dispatch only.** It was fully written but commented out, leaving linux-arm64 with zero automated coverage. It now runs when CI is triggered from the Actions tab — the intended cadence is per hostdb bump (the moment arm64 binaries actually change; spindb's own code paths are arch-validated by macOS ARM64 in every PR). Never runs on PRs or the nightly cron, and is not part of the `CI Success` gate, so it can neither slow nor block a release.
 
 ### Documentation

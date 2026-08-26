@@ -13,7 +13,8 @@ import { buildVersionMap } from '../version-map-builder'
 
 const ENGINE = 'cockroachdb'
 
-export const COCKROACHDB_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const COCKROACHDB_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 

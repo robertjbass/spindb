@@ -14,7 +14,8 @@ import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'duckdb'
 
-export const DUCKDB_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const DUCKDB_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 

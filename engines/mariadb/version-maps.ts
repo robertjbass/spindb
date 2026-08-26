@@ -10,16 +10,14 @@
  * '10' and '11' are still resolvable via the MAP (LTS-pick).
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  listVersions,
-} from 'hostdb'
+import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'mariadb'
 
-export const MARIADB_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const MARIADB_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
   format: 'major-minor',

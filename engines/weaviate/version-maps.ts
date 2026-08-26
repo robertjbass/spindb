@@ -14,7 +14,8 @@ import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'weaviate'
 
-export const WEAVIATE_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const WEAVIATE_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
