@@ -22,6 +22,8 @@ Where the filesystem can't do CoW, SpinDB transparently falls back to a full cop
 
 To take a consistent snapshot, a **running** source is briefly stopped, its data directory is cloned, and it is **restarted automatically** — minimizing downtime. This works uniformly across every engine and OS. File-based engines (SQLite/DuckDB) have no server, so there's no stop/restart.
 
+File-based engines have a different consistency hazard instead: SQLite in WAL mode and DuckDB both keep committed-but-not-yet-checkpointed writes in a sibling file (`<db>-wal`, `<db>.wal`), so cloning the backing file alone can produce a branch that opens cleanly and is missing the parent's most recent data. When a source has a pending write-ahead log, SQLite is snapshotted through the online `.backup` API and DuckDB is CHECKPOINTed before the clone. If DuckDB cannot be checkpointed because another process holds its exclusive lock, its WAL is copied alongside the database and the branch result carries a `warning`. A source with nothing outstanding still takes the instant reflink path.
+
 ## `branch` vs `clone`
 
 Both fork a container, but they're different tools:

@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.1] - 2026-08-26
+
+### Fixed
+
+- **Branching a file-based database (SQLite, DuckDB) no longer silently drops everything still in the write-ahead log.** `spindb branch` cloned only the backing file. SQLite in WAL mode and DuckDB both keep committed-but-not-checkpointed writes in a sibling file (`<db>-wal`, `<db>.wal`), so whenever a writer holds the database open - which is the normal state for a proxy serving it, and any live `spindb query` session - the clone was a database that opened cleanly, answered queries, and contained none of the recent data. A two-row SQLite table lived entirely in its WAL: the clone's main file was a bare 4KB header and the branch answered `no such table`. DuckDB gave `Catalog Error: Table with name ... does not exist` for the same reason. Nothing failed, so nothing surfaced. The copy is now WAL-complete: SQLite is snapshotted through the online `.backup` API (consistent even against a live writer), and DuckDB is CHECKPOINTed before the clone. When DuckDB cannot be checkpointed because another process holds its exclusive file lock, its WAL is copied alongside the database and the result carries a warning saying the source could not be quiesced. A database with no pending WAL still takes the instant reflink path, unchanged.
+- **Resetting a file-based branch no longer leaves the branch's own WAL beside the fresh copy.** `spindb branch reset` removed the branch's backing file but not its `-wal`/`.wal` siblings, so the next open replayed the branch's discarded writes over the parent's data it had just been reset to.
+
 ## [0.68.0] - 2026-08-26
 
 ### Added
