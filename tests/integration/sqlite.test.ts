@@ -527,6 +527,14 @@ describe('SQLite branch with an open WAL (C-142)', () => {
       writer.kill('SIGKILL')
       writer = null
     }
+    // Delete by name: these containers are `sqlite-wal-src_<id>` /
+    // `sqlite-wal-branch_<id>`, which do NOT match cleanupTestContainers'
+    // `-test` pattern, so it would leave them (and their registry entries)
+    // behind for every later run to trip over.
+    for (const name of [containerName, branchName]) {
+      if (!name) continue
+      await containerManager.delete(name, { force: true }).catch(() => {})
+    }
     await cleanupTestContainers()
     await rm(walDir, { recursive: true, force: true }).catch(() => {})
   })

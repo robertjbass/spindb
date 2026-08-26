@@ -1,7 +1,7 @@
 import { describe, it, afterEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { containerManager } from '../../core/container-manager'
-import { branchManager } from '../../core/branch-manager'
+import { branchManager, isFileLockedError } from '../../core/branch-manager'
 import { processManager } from '../../core/process-manager'
 import { Engine, type ContainerConfig } from '../../types'
 
@@ -216,5 +216,81 @@ describe('branchManager CouchDB copy refusal', () => {
 
     assert.deepEqual(result.deleted, ['couch-branch'])
     assert.deepEqual(removed, ['couch-branch'])
+  })
+})
+
+/**
+ * C-142 follow-up: the classifier that decides whether a failed database-file
+ * copy means "a writer holds this file" (retry, then fail with an actionable
+ * message) or something else (surface it unchanged).
+ *
+ * The asymmetry is the load-bearing part. Windows reports a locked file as
+ * EBUSY and sometimes EPERM/EACCES, so those have to count there. On POSIX the
+ * same codes mean a genuine permission problem and files are not locked this
+ * way at all - reinterpreting them would tell a user to "close every
+ * connection" when the real answer is to fix the file's mode.
+ */
+describe('branch-manager: isFileLockedError', () => {
+  const platform = process.platform
+  const setPlatform = (value: NodeJS.Platform) =>
+    Object.defineProperty(process, 'platform', { value, configurable: true })
+  afterEach(() => setPlatform(platform))
+
+  function errno(code: string, message = ''): NodeJS.ErrnoException {
+    const error = new Error(
+      message || `${code}: failed`,
+    ) as NodeJS.ErrnoException
+    error.code = code
+    return error
+  }
+
+  it('treats EBUSY as locked on every platform', () => {
+    for (const value of ['win32', 'darwin', 'linux'] as NodeJS.Platform[]) {
+      setPlatform(value)
+      assert.equal(isFileLockedError(errno('EBUSY')), true, value)
+    }
+  })
+
+  it('treats EPERM and EACCES as locked ONLY on Windows', () => {
+    setPlatform('win32')
+    assert.equal(isFileLockedError(errno('EPERM')), true)
+    assert.equal(isFileLockedError(errno('EACCES')), true)
+
+    for (const value of ['darwin', 'linux'] as NodeJS.Platform[]) {
+      setPlatform(value)
+      assert.equal(
+        isFileLockedError(errno('EPERM')),
+        false,
+        `${value}: EPERM is a permission problem, not a lock`,
+      )
+      assert.equal(isFileLockedError(errno('EACCES')), false, value)
+    }
+  })
+
+  it('recognises a lock reported only in the message', () => {
+    setPlatform('linux')
+    assert.equal(
+      isFileLockedError(
+        new Error("EBUSY: resource busy or locked, copyfile 'a' -> 'b'"),
+      ),
+      true,
+    )
+    assert.equal(
+      isFileLockedError(
+        new Error(
+          'The process cannot access the file because it is being used by another process.',
+        ),
+      ),
+      true,
+    )
+  })
+
+  it('leaves unrelated failures alone', () => {
+    setPlatform('linux')
+    assert.equal(isFileLockedError(errno('ENOENT')), false)
+    assert.equal(isFileLockedError(errno('ENOSPC')), false)
+    assert.equal(isFileLockedError(new Error('something else')), false)
+    assert.equal(isFileLockedError(null), false)
+    assert.equal(isFileLockedError(undefined), false)
   })
 })
