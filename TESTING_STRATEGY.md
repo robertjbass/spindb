@@ -54,6 +54,22 @@ The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`)
 | ClickHouse | 3 (no Windows) | No hostdb binary for Windows |
 | FerretDB | 3 (no Windows) | postgresql-documentdb has startup issues on Windows |
 | Meilisearch | 4 (backup/restore skipped on Windows) | Upstream page size alignment bug |
+| QuestDB | 3 blocking + Windows weekly | Slowest job in the matrix (JVM cold start per test on the slowest runner class) |
+| FerretDB v1 | 3 blocking + Windows weekly | Second slowest (full PostgreSQL backend behind the proxy) |
+
+QuestDB and FerretDB v1 are the **only** two engines whose Windows leg is off
+the blocking path. It runs weekly instead, from
+`.github/workflows/weekly-windows-engines.yml` (Mondays 07:23 UTC plus manual
+dispatch), because those two dominated PR wall-clock time and neither has ever
+failed Windows-specifically. Every other Windows engine job stays blocking, and
+that is not a formality: the DuckDB Windows job caught a real data-correctness
+bug the day before the split (C-142 - an open DuckDB file is locked exclusively
+on Windows, so the branch copy failed with EBUSY where POSIX succeeded). Widen
+the split only for a job that is both slow and has never found anything.
+
+Because scheduled workflows run only from the default branch, the weekly run
+tests `main`, not `dev`. A failure shows red in the Actions tab; there is no
+alerting wiring.
 
 **Unit tests** run on 3 runners in ci.yml (ubuntu-24.04, macos-14, windows-latest).
 

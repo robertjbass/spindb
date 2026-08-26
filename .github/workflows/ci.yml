@@ -52,8 +52,19 @@ permissions:
 #   - ClickHouse, LibSQL: No Windows (no hostdb binaries) → 3 runners
 #   - FerretDB v2: No Windows (its postgresql-documentdb BACKEND has no
 #     win32-x64 hostdb binary; the ferretdb binary itself has one) → 3 runners
-#   - FerretDB v1: all 4 matrix runners including Windows (plain PostgreSQL backend)
+#   - FerretDB v1: plain PostgreSQL backend, so it CAN run on Windows - but its
+#     Windows leg runs weekly instead of per-PR (see below) → 3 runners here
+#   - QuestDB: Windows leg runs weekly instead of per-PR (see below) → 3 runners
 #   - Meilisearch on Windows: backup/restore skipped (upstream page size bug)
+#
+# Windows legs that are NOT on the blocking path (decision 2026-08-26): QuestDB
+# and FerretDB v1 only. They were the two slowest jobs in this matrix - a JVM
+# cold start per test and a full PostgreSQL backend behind a proxy, both on the
+# slowest runner class - and neither has ever failed Windows-specifically, so
+# they moved to .github/workflows/weekly-windows-engines.yml (Mondays + manual
+# dispatch). EVERY OTHER Windows engine job stays blocking: DuckDB Win x64
+# caught a real data-correctness bug the day before this split (C-142), which
+# is precisely what the blocking Windows lane is for. Do not widen the split.
 #
 # Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
 #
@@ -642,6 +653,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # No windows-latest leg: it moved to weekly-windows-engines.yml
+          # (2026-08-26). It and QuestDB's were the two slowest jobs in this
+          # matrix and neither has ever failed Windows-specifically. The
+          # Windows-only log steps below stay for when this job runs there.
           - os: ubuntu-22.04
             icon: 🐧
             label: Linux x64 22.04
@@ -651,9 +666,6 @@ jobs:
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
-          - os: windows-latest
-            icon: 🪟
-            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -1334,6 +1346,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # No windows-latest leg: it moved to weekly-windows-engines.yml
+          # (2026-08-26). QuestDB pays a JVM cold start per test and Windows is
+          # the slowest runner class, which made this the long pole on every PR
+          # to main. The Windows-only log steps below stay for when this job
+          # runs there.
           - os: ubuntu-22.04
             icon: 🐧
             label: Linux x64 22.04
@@ -1343,9 +1360,6 @@ jobs:
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
-          - os: windows-latest
-            icon: 🪟
-            label: Win x64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
