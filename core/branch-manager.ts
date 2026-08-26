@@ -19,9 +19,12 @@
  * register a new entry rather than copying a server data dir).
  */
 
-import { existsSync } from 'fs'
-import { mkdir, rm } from 'fs/promises'
-import { join, extname, dirname } from 'path'
+import { existsSync, statSync } from 'fs'
+import { copyFile, mkdir, rename, rm } from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { randomBytes } from 'crypto'
+import { basename, join, extname, dirname } from 'path'
 import { paths } from '../config/paths'
 import { containerManager, assertDataDirCopyable } from './container-manager'
 import { processManager } from './process-manager'
@@ -33,6 +36,29 @@ import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
 import type { ContainerConfig } from '../types'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../types'
+
+const execFileAsync = promisify(execFile)
+
+/**
+ * Write-ahead-log siblings of a file-based database's backing file. SQLite in
+ * WAL mode keeps un-checkpointed writes in `<file>-wal` (with `<file>-shm` as
+ * the shared-memory index); DuckDB keeps them in `<file>.wal`.
+ */
+function walSiblings(engine: FileBasedEngine, filePath: string): string[] {
+  return engine === Engine.SQLite
+    ? [`${filePath}-wal`, `${filePath}-shm`]
+    : [`${filePath}.wal`]
+}
+
+/** Does this database have un-checkpointed writes sitting outside its main file? */
+function hasPendingWal(engine: FileBasedEngine, filePath: string): boolean {
+  const wal = engine === Engine.SQLite ? `${filePath}-wal` : `${filePath}.wal`
+  try {
+    return statSync(wal).size > 0
+  } catch {
+    return false
+  }
+}
 
 export type CreateBranchResult = {
   config: ContainerConfig
@@ -233,6 +259,96 @@ class BranchManager {
     }
   }
 
+  /**
+   * Copy a file-based database's backing file, WRITE-AHEAD LOG INCLUDED.
+   *
+   * A bare file clone is not a copy of the DATABASE whenever a writer has the
+   * file open. SQLite in WAL mode parks every un-checkpointed write in a `-wal`
+   * sibling and DuckDB parks them in a `.wal` sibling, so cloning the main file
+   * alone produces a database that is valid, opens cleanly, answers queries -
+   * and is missing everything written since the last checkpoint. For a table
+   * created moments ago that is the whole table: a two-row SQLite table lived
+   * entirely in the WAL, the clone's main file was a bare 4KB header, and the
+   * branch answered "no such table". That is C-142, and it is silent: nothing
+   * fails, the branch just has none of the parent's data.
+   *
+   * So the clone is only used when there is nothing outstanding. With a
+   * non-empty WAL:
+   *
+   *   SQLite - `.backup`, the online backup API. It reads through the WAL and
+   *     produces a consistent snapshot while the writer keeps serving, so it is
+   *     correct even against a live database (the same reason the cloud's SQLite
+   *     backup uses it instead of `cp`).
+   *
+   *   DuckDB - CHECKPOINT the source to fold its WAL into the file, then clone.
+   *     DuckDB takes an exclusive lock on an open database, so this fails when
+   *     another process holds it (a proxy serving the file). It is not fatal:
+   *     the `.wal` sibling is copied alongside the main file so the data still
+   *     travels, and the caller gets a warning saying the copy was taken from a
+   *     database it could not quiesce.
+   */
+  private async copyDatabaseFile(opts: {
+    engine: FileBasedEngine
+    sourceFile: string
+    targetFile: string
+  }): Promise<{ method: CopyMethod; warning?: string }> {
+    const { engine, sourceFile, targetFile } = opts
+
+    if (!hasPendingWal(engine, sourceFile)) {
+      return { method: (await cloneDirectory(sourceFile, targetFile)).method }
+    }
+
+    if (engine === Engine.SQLite) {
+      const sqlite3 = await getEngine(Engine.SQLite).getSqlite3Path()
+      if (!sqlite3) {
+        throw new Error(
+          'Cannot branch this SQLite database: it has un-checkpointed WAL data and no sqlite3 binary is available to copy it safely. Run "spindb engines download sqlite" and try again.',
+        )
+      }
+      // `.backup` is a dot-command, so its argument is parsed by the sqlite3
+      // shell, not by us: a path containing a quote cannot be expressed. Write
+      // to a generated, quote-free name relative to the target directory (passed
+      // as cwd) and rename into place - which also means a failed backup never
+      // leaves a half-written file at the target path.
+      const targetDir = dirname(targetFile)
+      const scratch = `.spindb-branch-${randomBytes(6).toString('hex')}.tmp`
+      try {
+        await execFileAsync(sqlite3, [sourceFile, `.backup '${scratch}'`], {
+          cwd: targetDir,
+        })
+        await rename(join(targetDir, scratch), targetFile)
+      } catch (error) {
+        await rm(join(targetDir, scratch), { force: true }).catch(() => {})
+        throw error
+      }
+      return { method: 'copy' }
+    }
+
+    const duckdb = await getEngine(Engine.DuckDB).getDuckDBPath()
+    let checkpointed = false
+    if (duckdb) {
+      try {
+        await execFileAsync(duckdb, [sourceFile, '-c', 'CHECKPOINT;'])
+        checkpointed = true
+      } catch (error) {
+        logDebug(`CHECKPOINT before branching ${sourceFile} failed: ${error}`)
+      }
+    }
+
+    const { method } = await cloneDirectory(sourceFile, targetFile)
+    if (checkpointed && !hasPendingWal(engine, sourceFile)) {
+      return { method }
+    }
+
+    // Could not quiesce the source (another process holds it, or no duckdb
+    // binary): carry the WAL across so the recent writes are not dropped.
+    await copyFile(`${sourceFile}.wal`, `${targetFile}.wal`)
+    return {
+      method,
+      warning: `Source "${basename(sourceFile)}" could not be checkpointed before branching (it is open elsewhere); its write-ahead log was copied alongside the database.`,
+    }
+  }
+
   private async createFileBasedBranch(opts: {
     source: string
     name: string
@@ -273,8 +389,13 @@ class BranchManager {
     await mkdir(targetDir, { recursive: true })
 
     let method: CopyMethod
+    let warning: string | undefined
     try {
-      method = (await cloneDirectory(sourceEntry.filePath, targetFile)).method
+      ;({ method, warning } = await this.copyDatabaseFile({
+        engine,
+        sourceFile: sourceEntry.filePath,
+        targetFile,
+      }))
       const now = new Date().toISOString()
       await this.addFileEntry(engine, {
         name,
@@ -291,7 +412,9 @@ class BranchManager {
       // we wrote — never the directory. The default container dir is dedicated
       // to this branch, so it's safe to remove whole.
       if (path) {
-        await rm(targetFile, { force: true }).catch(() => {})
+        for (const stale of [targetFile, ...walSiblings(engine, targetFile)]) {
+          await rm(stale, { force: true }).catch(() => {})
+        }
       } else {
         await rm(targetDir, { recursive: true, force: true }).catch(() => {})
       }
@@ -303,7 +426,7 @@ class BranchManager {
       throw new Error('Failed to read branched container config')
     }
     const connectionString = getEngine(engine).getConnectionString(config)
-    return { config, method, started: true, connectionString }
+    return { config, method, started: true, connectionString, warning }
   }
 
   /**
@@ -525,11 +648,20 @@ class BranchManager {
       throw new Error(`Parent database file not found: ${parentEntry.filePath}`)
     }
 
-    await rm(branchEntry.filePath, { force: true }).catch(() => {})
-    const { method } = await cloneDirectory(
-      parentEntry.filePath,
+    // Drop the branch's WAL siblings along with its file. A `-wal`/`.wal` left
+    // beside the fresh copy is replayed on the next open, folding the branch's
+    // OWN discarded writes back over the parent's data (C-142).
+    for (const stale of [
       branchEntry.filePath,
-    )
+      ...walSiblings(engine, branchEntry.filePath),
+    ]) {
+      await rm(stale, { force: true }).catch(() => {})
+    }
+    const { method, warning } = await this.copyDatabaseFile({
+      engine,
+      sourceFile: parentEntry.filePath,
+      targetFile: branchEntry.filePath,
+    })
     const now = new Date().toISOString()
     await this.updateFileEntry(engine, branchConfig.name, {
       branchedAt: now,
@@ -543,7 +675,7 @@ class BranchManager {
       throw new Error('Failed to read reset container config')
     }
     const connectionString = getEngine(engine).getConnectionString(config)
-    return { config, method, started: true, connectionString }
+    return { config, method, started: true, connectionString, warning }
   }
 
   /** Rename a branch and repoint any children's `branchParent` to the new name. */

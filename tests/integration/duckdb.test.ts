@@ -8,13 +8,15 @@
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { existsSync, renameSync } from 'fs'
+import { existsSync, renameSync, statSync } from 'fs'
 import { rm, mkdir } from 'fs/promises'
+import { spawn } from 'child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 import { generateTestName, cleanupTestContainers } from './helpers'
 import { assert, assertEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
+import { branchManager } from '../../core/branch-manager'
 import { getEngine } from '../../engines'
 import { duckdbRegistry } from '../../engines/duckdb/registry'
 import { configManager } from '../../core/config-manager'
@@ -398,5 +400,123 @@ describe('DuckDB Integration Tests', () => {
     assertEqual(testContainers.length, 0, 'No test containers should remain')
 
     console.log('   All test containers cleaned up')
+  })
+})
+
+/**
+ * C-142 regression: branching a DuckDB database whose recent writes are still
+ * in the WAL.
+ *
+ * DuckDB parks committed-but-not-checkpointed writes in `<file>.wal`, so a
+ * clone of the main file alone opens cleanly and answers
+ * "Catalog Error: Table with name ... does not exist" - a working, empty
+ * branch with no error anywhere. Reproduced on prod 2026-08-26 with a
+ * 50,000-row table.
+ *
+ * Two shapes, and they take different code paths:
+ *  - nobody holds the file: the branch CHECKPOINTs the source first, so the
+ *    clone is complete on its own.
+ *  - a writer holds it (a proxy serving the database, which is the cloud's
+ *    normal state): DuckDB refuses the cross-process open with a lock error, so
+ *    the WAL is copied alongside the file and the caller gets a warning.
+ */
+describe('DuckDB branch with a pending WAL (C-142)', () => {
+  const walDir = join(TEST_DIR_BASE, 'wal-branch')
+  let writer: ReturnType<typeof spawn> | null = null
+  const created: string[] = []
+
+  before(async () => {
+    await mkdir(walDir, { recursive: true })
+  })
+
+  after(async () => {
+    if (writer && !writer.killed) {
+      writer.kill('SIGKILL')
+      writer = null
+    }
+    for (const name of created) {
+      await containerManager.delete(name, { force: true }).catch(() => {})
+    }
+    await cleanupTestContainers()
+    await rm(walDir, { recursive: true, force: true }).catch(() => {})
+  })
+
+  it('checkpoints a quiesced source so the clone is complete', async () => {
+    const sourceName = generateTestName('duckdb-wal-src')
+    const branchName = generateTestName('duckdb-wal-branch')
+    created.push(sourceName, branchName)
+    const sourcePath = join(walDir, `${sourceName}.duckdb`)
+    const branchPath = join(walDir, `${branchName}.duckdb`)
+
+    await getEngine(ENGINE).initDataDir(sourceName, '1', { path: sourcePath })
+    const duckdb = await getDuckDBPath()
+    const { execFile } = await import('child_process')
+    const { promisify } = await import('util')
+    const execFileAsync = promisify(execFile)
+    await execFileAsync(duckdb, [
+      sourcePath,
+      '-c',
+      'CREATE TABLE probe AS SELECT i AS id FROM range(1,100) t(i);',
+    ])
+
+    const result = await branchManager.createBranch({
+      source: sourceName,
+      name: branchName,
+      path: branchPath,
+    })
+    assertEqual(result.warning, undefined, 'a quiesced source needs no warning')
+    assertEqual(
+      await queryDuckDB(branchPath, 'SELECT count(*) FROM probe;'),
+      '99',
+      'branch of a quiesced source must carry every row',
+    )
+  })
+
+  it('carries rows that are still only in the write-ahead log', async () => {
+    const sourceName = generateTestName('duckdb-wal-live-src')
+    const branchName = generateTestName('duckdb-wal-live-branch')
+    created.push(sourceName, branchName)
+    const sourcePath = join(walDir, `${sourceName}.duckdb`)
+    const branchPath = join(walDir, `${branchName}.duckdb`)
+
+    await getEngine(ENGINE).initDataDir(sourceName, '1', { path: sourcePath })
+    const duckdb = await getDuckDBPath()
+
+    // A writer that stays connected, so the WAL is never folded into the file
+    // and DuckDB's exclusive lock blocks any out-of-process CHECKPOINT.
+    writer = spawn(duckdb, [sourcePath])
+    writer.stdin!.write(
+      'CREATE TABLE probe AS SELECT i AS id FROM range(1,100) t(i);\n',
+    )
+    writer.stdin!.write('SELECT count(*) FROM probe;\n')
+
+    const walPath = `${sourcePath}.wal`
+    const deadline = Date.now() + 20000
+    while (Date.now() < deadline) {
+      if (existsSync(walPath) && statSync(walPath).size > 0) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    assert(
+      existsSync(walPath) && statSync(walPath).size > 0,
+      'the source must have a pending WAL for this regression to mean anything',
+    )
+
+    const result = await branchManager.createBranch({
+      source: sourceName,
+      name: branchName,
+      path: branchPath,
+    })
+    assert(
+      typeof result.warning === 'string' && result.warning.length > 0,
+      'a source that could not be checkpointed must say so',
+    )
+    assertEqual(
+      await queryDuckDB(branchPath, 'SELECT count(*) FROM probe;'),
+      '99',
+      'branch must contain the rows the parent had at branch time, WAL included',
+    )
+
+    writer.kill('SIGKILL')
+    writer = null
   })
 })

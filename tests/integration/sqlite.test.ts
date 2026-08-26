@@ -8,8 +8,9 @@
 import { describe, it, before, after } from 'node:test'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { existsSync, renameSync } from 'fs'
-import { rm, mkdir } from 'fs/promises'
+import { existsSync, renameSync, statSync } from 'fs'
+import { rm, mkdir, copyFile } from 'fs/promises'
+import { spawn } from 'child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 import {
@@ -487,5 +488,104 @@ describe('SQLite Integration Tests', () => {
     assertEqual(testContainers.length, 0, 'No test containers should remain')
 
     console.log('   ✓ All test containers cleaned up')
+  })
+})
+
+/**
+ * C-142 regression: branching a SQLite database whose recent writes are still
+ * in the WAL.
+ *
+ * pgsqlite (and any other long-lived writer) serves SQLite in WAL mode and
+ * holds the file open, so `<file>-wal` always exists and un-checkpointed writes
+ * live there rather than in the main file. Branching used to clone only the
+ * main file, which yields a database that opens cleanly and has NONE of the
+ * data - `no such table`, no error anywhere. Reproduced on prod 2026-08-26 with
+ * a two-row table.
+ *
+ * Every other branch test in this file writes with the sqlite3 CLI, which
+ * checkpoints and removes the WAL on exit, so none of them could ever see this.
+ * The open writer below is the whole point of the test.
+ */
+describe('SQLite branch with an open WAL (C-142)', () => {
+  let containerName: string
+  let branchName: string
+  let dbPath: string
+  let branchPath: string
+  let writer: ReturnType<typeof spawn> | null = null
+  const walDir = join(TEST_DIR, 'wal-branch')
+
+  before(async () => {
+    await mkdir(walDir, { recursive: true })
+    containerName = generateTestName('sqlite-wal-src')
+    branchName = generateTestName('sqlite-wal-branch')
+    dbPath = join(walDir, `${containerName}.sqlite`)
+    branchPath = join(walDir, `${branchName}.sqlite`)
+  })
+
+  after(async () => {
+    if (writer && !writer.killed) {
+      writer.kill('SIGKILL')
+      writer = null
+    }
+    await cleanupTestContainers()
+    await rm(walDir, { recursive: true, force: true }).catch(() => {})
+  })
+
+  it('carries rows that are still only in the write-ahead log', async () => {
+    const sqlite3 = await getSqlite3Path()
+    await getEngine(Engine.SQLite).initDataDir(containerName, '3', {
+      path: dbPath,
+    })
+
+    // A writer that stays connected, so the WAL is never checkpointed away.
+    writer = spawn(sqlite3, [dbPath])
+    writer.stdin!.write('PRAGMA journal_mode=WAL;\n')
+    writer.stdin!.write('CREATE TABLE probe (id INTEGER, label TEXT);\n')
+    writer.stdin!.write("INSERT INTO probe VALUES (1,'a'),(2,'b');\n")
+    writer.stdin!.write('SELECT count(*) FROM probe;\n')
+
+    const walPath = `${dbPath}-wal`
+    const deadline = Date.now() + 15000
+    while (Date.now() < deadline) {
+      if (existsSync(walPath) && statSync(walPath).size > 0) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    // The hazardous state must actually exist, or this test proves nothing.
+    assert(
+      existsSync(walPath) && statSync(walPath).size > 0,
+      'the source must have un-checkpointed WAL data for this regression to mean anything',
+    )
+    const mainOnly = join(walDir, 'main-file-only.sqlite')
+    await copyFile(dbPath, mainOnly)
+    const { execFile } = await import('child_process')
+    const { promisify } = await import('util')
+    const execFileAsync = promisify(execFile)
+    let mainFileHasTable = true
+    try {
+      await execFileAsync(sqlite3, [mainOnly, 'SELECT count(*) FROM probe;'])
+    } catch {
+      mainFileHasTable = false
+    }
+    assert(
+      !mainFileHasTable,
+      'the main file alone must NOT contain the table - otherwise the WAL is not where the data is',
+    )
+
+    await branchManager.createBranch({
+      source: containerName,
+      name: branchName,
+      path: branchPath,
+    })
+
+    const { stdout } = await execFileAsync(sqlite3, [
+      branchPath,
+      'SELECT count(*) FROM probe;',
+    ])
+    assertEqual(
+      parseInt(stdout.trim(), 10),
+      2,
+      'the branch must contain the rows the parent had at branch time, WAL included',
+    )
   })
 })
