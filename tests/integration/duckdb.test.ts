@@ -501,6 +501,64 @@ describe('DuckDB branch with a pending WAL (C-142)', () => {
       'the source must have a pending WAL for this regression to mean anything',
     )
 
+    if (process.platform === 'win32') {
+      // Windows locks an open DuckDB file exclusively, so the copy that carries
+      // the WAL across cannot run at all (EBUSY) - POSIX allows copying an open
+      // file, which is why the assertions below it are the real ones there. The
+      // contract on Windows is a LOUD, actionable failure with nothing left
+      // behind: an empty or half-made branch is the one outcome C-142 exists to
+      // prevent, and it must not come back through the platform door.
+      let failure: Error | null = null
+      try {
+        await branchManager.createBranch({
+          source: sourceName,
+          name: branchName,
+          path: branchPath,
+        })
+      } catch (error) {
+        failure = error as Error
+      }
+      assert(
+        failure !== null,
+        'branching a DuckDB database a writer still holds must fail on Windows, not produce an empty branch',
+      )
+      assert(
+        /another process has/i.test(failure!.message) &&
+          /Close every connection/i.test(failure!.message),
+        `the failure must tell the user what to do, got: ${failure!.message}`,
+      )
+      assert(
+        !existsSync(branchPath),
+        'a failed branch must leave no partial database file behind',
+      )
+      assert(
+        !existsSync(`${branchPath}.wal`),
+        'a failed branch must leave no partial WAL behind',
+      )
+      assertEqual(
+        await duckdbRegistry.get(branchName),
+        null,
+        'a failed branch must not be registered',
+      )
+
+      // ...and once the writer lets go, the very same branch succeeds and
+      // carries the rows, so the failure above is a lock, not a dead end.
+      writer.kill('SIGKILL')
+      writer = null
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await branchManager.createBranch({
+        source: sourceName,
+        name: branchName,
+        path: branchPath,
+      })
+      assertEqual(
+        await queryDuckDB(branchPath, 'SELECT count(*) FROM probe;'),
+        '99',
+        'once unlocked, the branch must carry the rows that were only in the WAL',
+      )
+      return
+    }
+
     const result = await branchManager.createBranch({
       source: sourceName,
       name: branchName,

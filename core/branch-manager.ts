@@ -50,14 +50,85 @@ function walSiblings(engine: FileBasedEngine, filePath: string): string[] {
     : [`${filePath}.wal`]
 }
 
+/** Bytes in a database's write-ahead log, or null when it is absent or empty. */
+function walSize(walPath: string): number | null {
+  try {
+    const { size } = statSync(walPath)
+    return size > 0 ? size : null
+  } catch {
+    return null
+  }
+}
+
 /** Does this database have un-checkpointed writes sitting outside its main file? */
 function hasPendingWal(engine: FileBasedEngine, filePath: string): boolean {
   const wal = engine === Engine.SQLite ? `${filePath}-wal` : `${filePath}.wal`
-  try {
-    return statSync(wal).size > 0
-  } catch {
-    return false
+  return walSize(wal) !== null
+}
+
+/**
+ * Does this error mean "another process has the file open"?
+ *
+ * Windows locks an open database file exclusively, so `fs.copyFile` on a DuckDB
+ * file a writer still holds fails with EBUSY. POSIX has no such restriction,
+ * which is why the same branch succeeds on macOS and Linux. EPERM/EACCES are
+ * only read as a lock ON WINDOWS: on POSIX they mean a genuine permission
+ * problem and must keep surfacing as one.
+ */
+export function isFileLockedError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  if (code === 'EBUSY') return true
+  if (process.platform === 'win32' && (code === 'EPERM' || code === 'EACCES')) {
+    return true
   }
+  const message = error instanceof Error ? error.message : String(error)
+  return /\bEBUSY\b|resource busy or locked|being used by another process/i.test(
+    message,
+  )
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+}
+
+/**
+ * The error a user can act on when the OS refuses to copy a database file
+ * because a writer still holds it.
+ */
+function lockedSourceError(sourceName: string, sourceFile: string): Error {
+  const platformNote =
+    process.platform === 'win32'
+      ? ' Windows locks an open database file exclusively, so it cannot be copied while a writer is connected (macOS and Linux allow it).'
+      : ''
+  return new Error(
+    `Cannot branch "${sourceName}": another process has "${basename(
+      sourceFile,
+    )}" open, so its database file could not be copied.${platformNote} Close every connection to "${sourceName}" - or run CHECKPOINT in the session that holds it - then run the branch again.`,
+  )
+}
+
+/**
+ * A copy the OS refuses because a writer holds the file is retried a few times
+ * before it is reported. The point is NOT to outwait a real connection (a
+ * connected app holds its file for its whole session, and no bounded wait wins
+ * that race) - it is to absorb the momentary holds a virus scanner or an
+ * indexer takes on a file that was just written, which are the common spurious
+ * cause on Windows. Three quick attempts cost half a second on the way to a
+ * genuine failure.
+ */
+const LOCKED_COPY_ATTEMPTS = 3
+const LOCKED_COPY_RETRY_MS = 300
+
+/**
+ * How many times a DuckDB file+WAL pair is re-taken when the holder checkpoints
+ * midway through. The window is milliseconds wide and a second pass normally
+ * finds nothing outstanding at all, so a small budget converts the race into a
+ * clean copy instead of a failure.
+ */
+const WAL_PAIR_ATTEMPTS = 3
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export type CreateBranchResult = {
@@ -285,17 +356,34 @@ class BranchManager {
    *     another process holds it (a proxy serving the file). It is not fatal:
    *     the `.wal` sibling is copied alongside the main file so the data still
    *     travels, and the caller gets a warning saying the copy was taken from a
-   *     database it could not quiesce.
+   *     database it could not quiesce. Two hazards live in that fallback and are
+   *     handled below rather than hoped away:
+   *
+   *       - The copy itself can be REFUSED. On Windows an open DuckDB file is
+   *         locked exclusively, so `fs.copyFile` fails with EBUSY where POSIX
+   *         would have copied it happily. There is no correct way to invent the
+   *         missing bytes, so this fails loudly with an actionable message and
+   *         leaves nothing behind - never a half-made or empty branch.
+   *
+   *       - The holder can CHECKPOINT between the clone and the WAL copy. The
+   *         writes that moved are then in neither half of what we took: not in
+   *         the clone (taken before) and not in the WAL (truncated after). The
+   *         WAL is therefore measured on both sides of the copy, and a WAL that
+   *         shrank or vanished means a checkpoint ran, so the pair is thrown
+   *         away and re-taken. A WAL that only GREW is safe: DuckDB writes the
+   *         main file at checkpoint time only, so nothing moved behind the
+   *         clone, and a prefix of an append-only WAL replays correctly.
    */
   private async copyDatabaseFile(opts: {
     engine: FileBasedEngine
+    sourceName: string
     sourceFile: string
     targetFile: string
   }): Promise<{ method: CopyMethod; warning?: string }> {
-    const { engine, sourceFile, targetFile } = opts
+    const { engine, sourceName, sourceFile, targetFile } = opts
 
     if (!hasPendingWal(engine, sourceFile)) {
-      return { method: (await cloneDirectory(sourceFile, targetFile)).method }
+      return { method: await this.cloneOrExplainLock(opts) }
     }
 
     if (engine === Engine.SQLite) {
@@ -325,28 +413,102 @@ class BranchManager {
     }
 
     const duckdb = await getEngine(Engine.DuckDB).getDuckDBPath()
-    let checkpointed = false
-    if (duckdb) {
+    const walPath = `${sourceFile}.wal`
+    const targetWal = `${targetFile}.wal`
+
+    for (let attempt = 1; attempt <= WAL_PAIR_ATTEMPTS; attempt++) {
+      if (duckdb) {
+        try {
+          await execFileAsync(duckdb, [sourceFile, '-c', 'CHECKPOINT;'])
+        } catch (error) {
+          logDebug(`CHECKPOINT before branching ${sourceFile} failed: ${error}`)
+        }
+      }
+
+      // Measured AFTER the checkpoint attempt: nothing outstanding means the
+      // main file is complete on its own, whether our CHECKPOINT landed or the
+      // holder's did.
+      const walBefore = walSize(walPath)
+      if (walBefore === null) {
+        return { method: await this.cloneOrExplainLock(opts) }
+      }
+
+      const method = await this.cloneOrExplainLock(opts)
+      let walCopied = true
       try {
-        await execFileAsync(duckdb, [sourceFile, '-c', 'CHECKPOINT;'])
-        checkpointed = true
+        await copyFile(walPath, targetWal)
       } catch (error) {
-        logDebug(`CHECKPOINT before branching ${sourceFile} failed: ${error}`)
+        if (!isMissingFileError(error)) {
+          await this.discardPartialCopy(engine, targetFile)
+          if (isFileLockedError(error)) {
+            throw lockedSourceError(sourceName, walPath)
+          }
+          throw error
+        }
+        // The WAL vanished mid-copy, which only happens when a checkpoint ran.
+        walCopied = false
+      }
+
+      const walAfter = walSize(walPath)
+      if (walCopied && walAfter !== null && walAfter >= walBefore) {
+        return {
+          method,
+          warning: `Source "${basename(sourceFile)}" could not be checkpointed before branching (it is open elsewhere); its write-ahead log was copied alongside the database.`,
+        }
+      }
+
+      // A checkpoint ran under us, so the file and the WAL we just took may not
+      // describe the same state. Throw the pair away and take it again.
+      await this.discardPartialCopy(engine, targetFile)
+      logDebug(
+        `Source "${sourceFile}" checkpointed while it was being branched; retaking the copy (attempt ${attempt} of ${WAL_PAIR_ATTEMPTS}).`,
+      )
+    }
+
+    throw new Error(
+      `Cannot branch "${sourceName}": "${basename(
+        sourceFile,
+      )}" kept checkpointing while it was being copied, so no consistent snapshot could be taken. Retry, or close the connections writing to it first.`,
+    )
+  }
+
+  /** Remove a copy we are abandoning, WAL siblings included. */
+  private async discardPartialCopy(
+    engine: FileBasedEngine,
+    targetFile: string,
+  ): Promise<void> {
+    for (const stale of [targetFile, ...walSiblings(engine, targetFile)]) {
+      await rm(stale, { recursive: true, force: true }).catch(() => {})
+    }
+  }
+
+  /**
+   * Clone a database file, turning "the OS will not let me copy this because a
+   * writer holds it" into an error the user can act on. Retries a few times
+   * first (see LOCKED_COPY_ATTEMPTS) and never leaves a partial target behind,
+   * on the failing path or between attempts.
+   */
+  private async cloneOrExplainLock(opts: {
+    sourceName: string
+    sourceFile: string
+    targetFile: string
+  }): Promise<CopyMethod> {
+    const { sourceName, sourceFile, targetFile } = opts
+    let lastError: unknown
+    for (let attempt = 1; attempt <= LOCKED_COPY_ATTEMPTS; attempt++) {
+      try {
+        return (await cloneDirectory(sourceFile, targetFile)).method
+      } catch (error) {
+        lastError = error
+        await rm(targetFile, { recursive: true, force: true }).catch(() => {})
+        if (!isFileLockedError(error) || attempt === LOCKED_COPY_ATTEMPTS) break
+        await delay(LOCKED_COPY_RETRY_MS)
       }
     }
-
-    const { method } = await cloneDirectory(sourceFile, targetFile)
-    if (checkpointed && !hasPendingWal(engine, sourceFile)) {
-      return { method }
+    if (isFileLockedError(lastError)) {
+      throw lockedSourceError(sourceName, sourceFile)
     }
-
-    // Could not quiesce the source (another process holds it, or no duckdb
-    // binary): carry the WAL across so the recent writes are not dropped.
-    await copyFile(`${sourceFile}.wal`, `${targetFile}.wal`)
-    return {
-      method,
-      warning: `Source "${basename(sourceFile)}" could not be checkpointed before branching (it is open elsewhere); its write-ahead log was copied alongside the database.`,
-    }
+    throw lastError
   }
 
   private async createFileBasedBranch(opts: {
@@ -393,6 +555,7 @@ class BranchManager {
     try {
       ;({ method, warning } = await this.copyDatabaseFile({
         engine,
+        sourceName: source,
         sourceFile: sourceEntry.filePath,
         targetFile,
       }))
@@ -648,6 +811,28 @@ class BranchManager {
       throw new Error(`Parent database file not found: ${parentEntry.filePath}`)
     }
 
+    // Take the replacement copy FIRST, into a scratch file beside the branch.
+    // A reset that cannot copy the parent (it is locked by a writer on Windows,
+    // or it keeps checkpointing) must leave the branch exactly as it was - the
+    // old order dropped the branch's file before the copy, so a failure left it
+    // with no data at all.
+    const scratchFile = `${branchEntry.filePath}.spindb-reset-${randomBytes(
+      6,
+    ).toString('hex')}`
+    let method: CopyMethod
+    let warning: string | undefined
+    try {
+      ;({ method, warning } = await this.copyDatabaseFile({
+        engine,
+        sourceName: parentConfig.name,
+        sourceFile: parentEntry.filePath,
+        targetFile: scratchFile,
+      }))
+    } catch (error) {
+      await this.discardPartialCopy(engine, scratchFile)
+      throw error
+    }
+
     // Drop the branch's WAL siblings along with its file. A `-wal`/`.wal` left
     // beside the fresh copy is replayed on the next open, folding the branch's
     // OWN discarded writes back over the parent's data (C-142).
@@ -657,11 +842,14 @@ class BranchManager {
     ]) {
       await rm(stale, { force: true }).catch(() => {})
     }
-    const { method, warning } = await this.copyDatabaseFile({
-      engine,
-      sourceFile: parentEntry.filePath,
-      targetFile: branchEntry.filePath,
-    })
+    await rename(scratchFile, branchEntry.filePath)
+    for (const sibling of walSiblings(engine, scratchFile)) {
+      if (!existsSync(sibling)) continue
+      await rename(
+        sibling,
+        `${branchEntry.filePath}${sibling.slice(scratchFile.length)}`,
+      )
+    }
     const now = new Date().toISOString()
     await this.updateFileEntry(engine, branchConfig.name, {
       branchedAt: now,
