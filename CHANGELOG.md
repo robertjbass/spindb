@@ -5,6 +5,17 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.0] - 2026-08-26
+
+### Added
+
+- **PostgreSQL 17.11.0, 16.15.0, and 15.19.0 support** via the hostdb `0.42.0` pin - the old-major half of the upstream 2026-08-13 security release, the same 28-CVE batch 18.6.0 carried in spindb 0.66.0 (CVE-2026-14664 regexp heap overflow, CVE-2026-16239 cursor type confusion, CVE-2026-19385 pg_dump heap overflow, CVE-2026-15741 EXTRACT deparse SQLi, among others). The 15/16/17 lines were deferred out of that wave and were still resolving to the pre-CVE May 2026 patches. All three ship on all 5 platforms.
+
+### Changed
+
+- **PostgreSQL's `15`, `16`, and `17` lines now resolve to `15.19.0`, `16.15.0`, and `17.11.0`** (were 15.18.0, 16.14.0, 17.10.0): `spindb create -e postgresql --db-version 17` and explicit prefixes like `17.11` get the patched build. The `18` line is unchanged at 18.6.0. 15.15.0, 15.18.0, 16.11.0, 16.14.0, 17.7.0, and 17.10.0 remain resolvable; existing containers self-pin their stored full version, so nothing running is disturbed. Minor bump because the resolved defaults changed.
+- **Pin `hostdb` to `0.42.0`** (was 0.41.0).
+
 ## [0.67.0] - 2026-08-26
 
 ### Fixed
