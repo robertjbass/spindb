@@ -5,6 +5,25 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.2] - 2026-08-26
+
+### Fixed
+
+- **Branching a DuckDB database a writer still holds now fails loudly on Windows instead of crashing with a raw `EBUSY`.** Windows locks an open DuckDB file exclusively, so the copy that carries the write-ahead log across cannot run at all; POSIX allows copying an open file, which is why 0.68.1 passed everywhere except Windows. There is no way to invent the bytes the OS will not hand over, so the branch now reports what is wrong and what to do about it ("another process has `<file>` open ... close every connection, or run CHECKPOINT in the session that holds it") and leaves nothing behind - never a half-made or empty branch, which is the outcome the whole C-142 fix exists to prevent. The copy is retried three times 300ms apart first, which absorbs the momentary holds a virus scanner or indexer takes on a freshly written file without pretending a bounded wait can outlast a real connection.
+- **A DuckDB source that checkpoints midway through being branched no longer yields a file and a WAL that describe different states.** When the source cannot be quiesced, the branch takes its main file and then its WAL; a checkpoint landing between those two steps moves writes into neither copy (not in the clone, taken before; not in the WAL, truncated after). The WAL is now measured on both sides of the copy, and a WAL that shrank or vanished means the pair is discarded and re-taken (up to three times, after which the branch fails rather than shipping an unprovable copy). A WAL that only grew is safe and is accepted: DuckDB writes the main file at checkpoint time only, so nothing moved behind the clone.
+- **Resetting a file-based branch no longer destroys the branch's data before it knows the replacement copy can be made.** The reset dropped the branch's file and then copied the parent's, so a copy that failed (a locked parent on Windows, a source that kept checkpointing) left the branch with nothing at all. The copy now lands in a scratch file beside the branch and is swapped in only once it is complete on disk.
+
+### Changed
+
+- **A locked or unreadable database file is now reported as a branch-level error naming the container**, rather than surfacing the underlying `fs` error. `isFileLockedError` reads EPERM/EACCES as a lock only on Windows: on POSIX those still mean a genuine permission problem and are surfaced unchanged.
+
+## [0.68.1] - 2026-08-26
+
+### Fixed
+
+- **Branching a file-based database (SQLite, DuckDB) no longer silently drops everything still in the write-ahead log.** `spindb branch` cloned only the backing file. SQLite in WAL mode and DuckDB both keep committed-but-not-checkpointed writes in a sibling file (`<db>-wal`, `<db>.wal`), so whenever a writer holds the database open - which is the normal state for a proxy serving it, and any live `spindb query` session - the clone was a database that opened cleanly, answered queries, and contained none of the recent data. A two-row SQLite table lived entirely in its WAL: the clone's main file was a bare 4KB header and the branch answered `no such table`. DuckDB gave `Catalog Error: Table with name ... does not exist` for the same reason. Nothing failed, so nothing surfaced. The copy is now WAL-complete: SQLite is snapshotted through the online `.backup` API (consistent even against a live writer, and requiring the sqlite3 binary - a source with pending WAL data that has none fails with a `spindb engines download sqlite` message rather than falling back to a lossy raw copy), and DuckDB is CHECKPOINTed before the clone. When DuckDB cannot be checkpointed because another process holds its exclusive file lock, its WAL is copied alongside the database and the result carries a warning saying the source could not be quiesced. A database with no pending WAL still takes the instant reflink path, unchanged.
+- **Resetting a file-based branch no longer leaves the branch's own WAL beside the fresh copy.** `spindb branch reset` removed the branch's backing file but not its `-wal`/`.wal` siblings, so the next open replayed the branch's discarded writes over the parent's data it had just been reset to.
+
 ## [0.68.0] - 2026-08-26
 
 ### Added
