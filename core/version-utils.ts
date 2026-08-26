@@ -76,6 +76,59 @@ export function isNewerVersion(versionA: string, versionB: string): boolean {
   return compareVersions(versionA, versionB) > 0
 }
 
+/**
+ * Return true when `prefix` is a prefix of `version` on version-segment
+ * boundaries (segments are the parts between dots).
+ *
+ * Segment boundaries are what makes this safe for every engine's numbering
+ * scheme: '3.10' matches '3.10.5' but NOT '3.1' or '3.100.0', because the
+ * comparison is segment-by-segment string equality, never a substring test.
+ *
+ * Examples:
+ *   ('3', '3.10.5')            -> true
+ *   ('3.10', '3.10.5')         -> true
+ *   ('3.1', '3.10.5')          -> false
+ *   ('25.12.3', '25.12.3.21')  -> true  (ClickHouse 4-part)
+ *   ('19.0.0-beta', '19.0.0-beta.3') -> true
+ */
+export function isVersionPrefixOf(prefix: string, version: string): boolean {
+  if (!prefix || !version) return false
+  if (prefix === version) return true
+
+  const prefixParts = prefix.split('.')
+  const versionParts = version.split('.')
+  if (prefixParts.length > versionParts.length) return false
+
+  return prefixParts.every((part, i) => part === versionParts[i])
+}
+
+/**
+ * Resolve a version prefix to the newest available version that matches it on
+ * version-segment boundaries.
+ *
+ * Engine-agnostic on purpose: it knows nothing about engines, only about the
+ * candidate list it is handed and the ordering `compareVersions` already
+ * defines for every version scheme spindb supports (2-part, 3-part, 4-part
+ * ClickHouse, and prerelease suffixes).
+ *
+ * Returns null when nothing matches, so callers can keep their own error path.
+ */
+export function resolveVersionPrefix(
+  prefix: string,
+  available: readonly string[],
+): string | null {
+  if (!prefix) return null
+
+  let best: string | null = null
+  for (const candidate of available) {
+    if (!isVersionPrefixOf(prefix, candidate)) continue
+    if (best === null || compareVersions(candidate, best) > 0) {
+      best = candidate
+    }
+  }
+  return best
+}
+
 export type PrereleaseType = 'alpha' | 'beta' | 'rc'
 
 /**

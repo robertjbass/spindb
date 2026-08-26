@@ -13,7 +13,8 @@
  * the available-versions list; only `enabled: false` removes a version entirely.
  */
 
-import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
+import { listVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -28,11 +29,11 @@ export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
 export const FALLBACK_VERSION_MAP: Record<string, string> = MYSQL_VERSION_MAP
 
 export function getFullVersion(majorVersion: string): string | null {
-  return hostdbResolveVersion(ENGINE, majorVersion)
+  return resolveEngineVersion(ENGINE, majorVersion)
 }
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
 
   const parts = version.split('.')

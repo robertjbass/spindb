@@ -10,10 +10,8 @@
  * The exports below preserve the legacy shape so call sites don't change.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  getSupportedMajorVersions,
-} from 'hostdb'
+import { getSupportedMajorVersions } from 'hostdb'
+import { resolveEngineVersion } from '../../core/version-resolver'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
@@ -25,11 +23,11 @@ export const SQLITE_VERSION_MAP: Record<string, string> =
 export const SUPPORTED_MAJOR_VERSIONS = getSupportedMajorVersions(ENGINE)
 
 export function getFullVersion(majorVersion: string): string | null {
-  return hostdbResolveVersion(ENGINE, majorVersion)
+  return resolveEngineVersion(ENGINE, majorVersion)
 }
 
 export function normalizeVersion(version: string): string {
-  const resolved = hostdbResolveVersion(ENGINE, version)
+  const resolved = resolveEngineVersion(ENGINE, version)
   if (resolved) return resolved
   logDebug(
     `SQLite version '${version}' not in hostdb, may not be available for download`,

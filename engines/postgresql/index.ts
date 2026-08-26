@@ -20,6 +20,7 @@ import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   POSTGRESQL_VERSION_MAP,
+  normalizeVersion,
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import { createBackup } from './backup'
@@ -115,14 +116,12 @@ export class PostgreSQLEngine extends BaseEngine {
     }
   }
 
-  // Resolves version string to full version (e.g., '17' -> '17.7.0').
+  // Resolves version string to full version (e.g., '17' -> '17.10.0',
+  // '18.6' -> '18.6.0'). Delegates to the shared resolver so create/start and
+  // the binary download agree on what a version string means; a prefix that
+  // resolves to nothing is returned unchanged so the download layer reports it.
   resolveFullVersion(version: string): string {
-    // Check if already a full version (has at least one dot with numbers after)
-    if (/^\d+\.\d+/.test(version)) {
-      return version
-    }
-    // It's a major version, resolve using fallback map (sync, no network)
-    return POSTGRESQL_VERSION_MAP[version] || `${version}.0.0`
+    return normalizeVersion(version)
   }
 
   async resolveFullVersionAsync(version: string): Promise<string> {
