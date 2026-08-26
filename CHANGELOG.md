@@ -5,13 +5,32 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.66.0] - 2026-08-25
+
+### Added
+
+- **PostgreSQL 18.6.0 and 19.0.0-beta.3 support** via the hostdb `0.41.0` pin - the upstream 2026-08-13 security release fixing 28 CVEs (~12 at CVSS 8.8 arbitrary-code-execution, including CVE-2026-14664 regexp heap overflow, CVE-2026-16239 cursor type confusion, CVE-2026-19385 pg_dump heap overflow, CVE-2026-15741 EXTRACT deparse SQLi). 18.5 was skipped upstream due to a regression. 18.6.0 ships all 5 platforms; 19.0.0-beta.3 ships 4 (no win32 until EDB publishes RC binaries) and resolves only by exact version token, like beta.1. Note: beta.3 is NOT binary-compatible with beta.1 data dirs (catalog version can change between betas) - beta.1 containers need dump/restore, never a binary swap.
+
+### Changed
+
+- **PostgreSQL's `18` line now resolves to `18.6.0`** (was 18.4.0): `spindb create --engine postgresql` and explicit `18`/`18.6` requests get the patched build. 18.1.0 and 18.4.0 remain resolvable; existing containers self-pin their stored full version, so nothing running is disturbed. Minor bump because the resolved default changed.
+- **Pin `hostdb` to `0.41.0`** (was 0.40.0).
+- **CI: the linux-arm64 QEMU smoke job is enabled, gated to manual dispatch only.** It was fully written but commented out, leaving linux-arm64 with zero automated coverage. It now runs when CI is triggered from the Actions tab — the intended cadence is per hostdb bump (the moment arm64 binaries actually change; spindb's own code paths are arch-validated by macOS ARM64 in every PR). Never runs on PRs or the nightly cron, and is not part of the `CI Success` gate, so it can neither slow nor block a release.
+
+### Documentation
+
+- **CHEATSHEET.md's Pull section now covers the 0.64/0.65 flags**: `--exclude-table`, `--exclude-table-data` (with wildcard patterns), `--jobs` (with the direct-endpoint/pooler requirement), the combined fast path for large production databases, per-engine support notes, and the `excludedTables`/`excludedTableData` JSON fields. CLAUDE.md's "After Adding Any Feature" checklist now names CHEATSHEET.md so CLI surface changes can't silently skip it again.
 
 ## [0.65.0] - 2026-08-25
 
 ### Added
 
 - **`spindb pull --jobs <n>`** (PostgreSQL only, 1-8): parallel dump and restore. `--jobs 2+` switches the remote dump to `pg_dump -Fd -j N` (directory format, one connection per worker, tables split across workers) and the local load to `pg_restore -j N`. On latency-bound remotes (e.g. Neon cross-region) where a single connection is the bottleneck, aggregate throughput scales with workers. Requires a direct endpoint: parallel dump coordinates workers with synchronized snapshots, which connection poolers reject — pooler hostnames (Neon `-pooler`, pgbouncer) are detected up front with an actionable error. Composes with `--exclude-table` / `--exclude-table-data` (the combination is the fast path for large databases with excludable bulk tables). Non-PostgreSQL engines reject the flag with a clear error. PostgreSQL restore now also auto-detects directory-format (`-Fd`) dumps by their `toc.dat`.
+
+### Fixed
+
+- **`spindb pull` no longer reports success when the restore actually failed.** PostgreSQL's restore layer signals failure by resolving with a non-zero exit code (pg_restore can exit non-zero on partial success), and pull discarded that result — a completely failed pg_restore produced "Pull complete!" over an empty database, and a failed backup-side restore produced an empty "backup". All three pull restore steps (remote data into the target in both modes, and the original into the backup database) now check the exit code and abort with pg_restore's stderr, triggering the existing transaction rollback that preserves the original data. Real-engine integration confirms pg_restore exits 0 on normal pulls, so the happy path is unaffected. This bug predated the new pull flags.
+- **Malformed `--jobs` values are rejected instead of silently truncated.** The CLI parsed `--jobs` with `parseInt`, so `2.5` became 2 and `4abc` became 4 before validation could refuse them; the parser now uses `Number()` and hands invalid input to validation as-is.
 
 ## [0.64.1] - 2026-08-25
 

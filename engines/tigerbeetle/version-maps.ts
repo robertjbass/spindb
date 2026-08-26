@@ -8,16 +8,14 @@
  * spindb convention. The 1-part key '0' still resolves via the MAP.
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  listVersions,
-} from 'hostdb'
+import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'tigerbeetle'
 
-export const TIGERBEETLE_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const TIGERBEETLE_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
   format: 'major-minor',

@@ -9,16 +9,14 @@
  * keys '7' and '8' still resolve via the MAP (LTS-pick: '8' → 8.0.23, not 8.2.9).
  */
 
-import {
-  resolveVersion as hostdbResolveVersion,
-  listVersions,
-} from 'hostdb'
+import { resolveVersion as hostdbResolveVersion, listVersions } from 'hostdb'
 import { buildVersionMap } from '../version-map-builder'
 import { logDebug } from '../../core/error-handler'
 
 const ENGINE = 'mongodb'
 
-export const MONGODB_VERSION_MAP: Record<string, string> = buildVersionMap(ENGINE)
+export const MONGODB_VERSION_MAP: Record<string, string> =
+  buildVersionMap(ENGINE)
 
 export const SUPPORTED_MAJOR_VERSIONS = listVersions(ENGINE, {
   format: 'major-minor',

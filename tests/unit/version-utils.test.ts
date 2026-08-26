@@ -113,8 +113,14 @@ describe('parsePrereleaseVersion', () => {
 
   it('returns null for GA versions', () => {
     assert(parsePrereleaseVersion('18.4.0') === null, 'GA is not a prerelease')
-    assert(parsePrereleaseVersion('19') === null, 'bare major is not prerelease')
-    assert(parsePrereleaseVersion('') === null, 'empty string is not prerelease')
+    assert(
+      parsePrereleaseVersion('19') === null,
+      'bare major is not prerelease',
+    )
+    assert(
+      parsePrereleaseVersion('') === null,
+      'empty string is not prerelease',
+    )
   })
 })
 
