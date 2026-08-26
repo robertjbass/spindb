@@ -1,0 +1,197 @@
+name: Weekly Windows Engine Tests
+
+# The Windows halves of the two SLOWEST engine jobs, moved off the blocking
+# path (decision 2026-08-26). QuestDB and FerretDB v1 on windows-latest were
+# the long pole on every PR to main: QuestDB pays a JVM cold start per test and
+# FerretDB v1 boots a full PostgreSQL backend behind its proxy, and Windows is
+# the slowest runner class for both. Weekly is enough for them - neither has
+# ever failed Windows-specifically - while the fast-moving Windows coverage
+# stays where it earns its place.
+#
+# DELIBERATELY NARROW: every other Windows engine job stays in ci.yml's
+# blocking matrix. DuckDB Win x64 caught a real data-correctness bug the day
+# before this split (C-142: an open DuckDB file is locked exclusively on
+# Windows, so the branch copy EBUSY'd where POSIX succeeded), which is exactly
+# the kind of platform-specific defect the blocking Windows lane exists to
+# catch. Do not widen this file without a reason of that weight.
+#
+# Scheduled workflows only run from the DEFAULT branch, so this fires from
+# `main` (released code) and never from `dev`. A failure here shows red in the
+# Actions tab like any other run; there is no alerting wiring by design.
+#
+# The steps below are copies of the `test-questdb` and `test-ferretdb-v1` jobs
+# in ci.yml, pinned to windows-latest. KEEP THEM IN SYNC: when you change how
+# either engine is cached, downloaded, or tested in ci.yml, change it here too.
+
+on:
+  schedule:
+    # Mondays 07:23 UTC. Early in the week so a Windows-only regression is
+    # known before the week's release traffic, and off the hour to avoid the
+    # Actions scheduling stampede.
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+
+# Nothing here uses GITHUB_TOKEN; least-privilege read-only.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================
+  # QuestDB Integration Tests (Windows only)
+  # Mirror of ci.yml's `test-questdb`, windows-latest leg.
+  # ============================================
+  test-questdb-windows:
+    name: QuestDB 🪟 Win x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache QuestDB binaries - these are downloaded from hostdb
+      # Cache key v2: bust cache after fixing extraction logic
+      - name: Cache QuestDB binaries
+        uses: actions/cache@v5
+        id: questdb-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-questdb-9-${{ runner.os }}-${{ runner.arch }}-v2
+
+      # Use SpinDB to download QuestDB binaries
+      - name: Install QuestDB via SpinDB
+        run: pnpm start engines download questdb 9
+
+      # Download PostgreSQL for psql (used for QuestDB connectivity)
+      - name: Install PostgreSQL via SpinDB (for psql)
+        run: pnpm start engines download postgresql 17
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run QuestDB integration tests
+        run: pnpm test:engine questdb
+        timeout-minutes: 15
+
+      - name: Show QuestDB logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== QuestDB container directories ==="
+          ls -la ~/.spindb/containers/questdb/ 2>/dev/null || echo "No QuestDB containers directory"
+          echo ""
+          echo "=== QuestDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -i quest || echo "No QuestDB binaries found"
+          echo ""
+          echo "=== QuestDB log files ==="
+          find ~/.spindb/containers/questdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+
+      - name: Show QuestDB logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== QuestDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'quest' } | Format-Table -AutoSize
+          Write-Host ""
+          Write-Host "=== QuestDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\questdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }
+
+  # ============================================
+  # FerretDB v1 Integration Tests (Windows only)
+  # Mirror of ci.yml's `test-ferretdb-v1`, windows-latest leg.
+  # v1 uses a plain PostgreSQL backend (no DocumentDB), which is why it has a
+  # Windows leg at all - FerretDB v2's postgresql-documentdb backend has no
+  # win32-x64 hostdb binary.
+  # ============================================
+  test-ferretdb-v1-windows:
+    name: FerretDB v1 🪟 Win x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache FerretDB v1 binaries - ferretdb proxy + plain PostgreSQL
+      - name: Cache FerretDB v1 binaries
+        uses: actions/cache@v5
+        id: ferretdb-v1-cache
+        with:
+          path: ~/.spindb/bin
+          key: spindb-ferretdb-1-pg-17-${{ runner.os }}-${{ runner.arch }}
+
+      # Download FerretDB v1 binaries (proxy only, backend is plain PostgreSQL)
+      - name: Download FerretDB v1 binaries
+        run: pnpm start engines download ferretdb 1
+
+      # FerretDB uses mongosh (MongoDB shell) for connect/run commands
+      # Download MongoDB binaries to get bundled mongosh
+      - name: Download MongoDB binaries (for mongosh)
+        run: pnpm start engines download mongodb 8.0
+
+      - name: Show installed engines
+        run: pnpm start engines list
+
+      - name: Run FerretDB v1 integration tests
+        run: pnpm test:engine ferretdb-v1
+        timeout-minutes: 20
+
+      - name: Show FerretDB v1 logs on failure (Unix)
+        if: failure() && runner.os != 'Windows'
+        run: |
+          echo "=== FerretDB container directories ==="
+          ls -la ~/.spindb/containers/ferretdb/ 2>/dev/null || echo "No FerretDB containers directory"
+          echo ""
+          echo "=== FerretDB binary directory ==="
+          ls -la ~/.spindb/bin/ 2>/dev/null | grep -iE "(ferret|postgresql)" || echo "No FerretDB binaries found"
+          echo ""
+          echo "=== FerretDB log files ==="
+          find ~/.spindb/containers/ferretdb -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No log files found"
+          echo ""
+          echo "=== PostgreSQL backend log files ==="
+          find ~/.spindb/containers/ferretdb -name "postgresql*.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No PostgreSQL log files found"
+
+      - name: Show FerretDB v1 logs on failure (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== FerretDB container directories ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB binary directory ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\bin" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*ferret*" -or $_.Name -like "*postgresql*" } | Select-Object FullName
+          Write-Host ""
+          Write-Host "=== FerretDB log files ==="
+          Get-ChildItem -Path "$env:USERPROFILE\.spindb\containers\ferretdb" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "--- $($_.FullName) ---"
+            Get-Content $_.FullName -ErrorAction SilentlyContinue
+          }

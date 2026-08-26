@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.3] - 2026-08-26
+
+### Changed
+
+- **CI: the QuestDB and FerretDB v1 Windows jobs moved off the blocking matrix to a weekly schedule.** They were the two slowest jobs on every PR to main - QuestDB pays a JVM cold start per test, FerretDB v1 boots a full PostgreSQL backend behind its proxy, and Windows is the slowest runner class for both - and neither has ever failed Windows-specifically. They now run from `.github/workflows/weekly-windows-engines.yml` on Mondays at 07:23 UTC plus manual dispatch, and a failure shows red in the Actions tab. Their Linux and macOS legs are untouched and still blocking, so the `CI Success` gate still waits on both jobs; it just no longer waits on their Windows halves. **Deliberately narrow:** every other Windows engine job stays blocking. The DuckDB Windows job caught a real data-correctness bug the day before this split (0.68.2, C-142), which is exactly what that lane is for. No product code changed.
+
 ## [0.68.2] - 2026-08-26
 
 ### Fixed
