@@ -1,5 +1,6 @@
 import { basename, dirname } from 'path'
 import { getLibraryEnv } from '../../core/library-env'
+import { IMPLICIT_RESP_USERNAMES } from './resp-client'
 
 type RedisCliAuth = {
   username?: string
@@ -10,10 +11,22 @@ function getRedisCliErrorMarkers(): RegExp[] {
   return [/^ERR\b/m, /\bNOAUTH\b/, /\bWRONGPASS\b/, /\bNOPERM\b/, /\bACL\b/]
 }
 
+// Decide whether a resolved username is a real ACL user worth passing to
+// `redis-cli --user`. The placeholder usernames come from the same
+// `IMPLICIT_RESP_USERNAMES` set the RESP client's `buildRespAuthArgs()` uses,
+// so both auth paths stay aligned: `default` is Redis's implicit user and `h`
+// is Heroku's legacy URL placeholder. That set is matched exactly, never
+// trimmed or lowercased, so a real ACL user like `hasura` still gets `--user`.
+// The extra trim-and-lowercase check below is the older, more forgiving
+// `default` handling, kept so a stored ` DEFAULT ` keeps behaving as before.
 export function shouldPassRedisCliUsername(
   username?: string,
 ): username is string {
   if (!username) {
+    return false
+  }
+
+  if (IMPLICIT_RESP_USERNAMES.has(username)) {
     return false
   }
 

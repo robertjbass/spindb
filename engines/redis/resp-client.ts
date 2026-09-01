@@ -111,7 +111,11 @@ export type RespConnectOptions = {
 //   like `rediss://h:<password>@host:port` where `h` is a dummy placeholder,
 //   not an account. (Modern Heroku Key-Value URLs leave the username empty.)
 //   Sending `AUTH h <password>` to those servers fails with WRONGPASS.
-const IMPLICIT_RESP_USERNAMES = new Set(['default', 'h'])
+//
+// Matching is exact, never trimmed or lowercased, so a real ACL user whose
+// name merely starts with `h` (`hasura`) is untouched. The redis-cli paths
+// share this set through `shouldPassRedisCliUsername()` in `cli-common.ts`.
+export const IMPLICIT_RESP_USERNAMES = new Set(['default', 'h'])
 
 // Build the AUTH command for a connection. Exported for unit testing.
 export function buildRespAuthArgs(

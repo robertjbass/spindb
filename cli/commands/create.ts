@@ -6,6 +6,7 @@ import { containerManager } from '../../core/container-manager'
 import { portManager } from '../../core/port-manager'
 import { getEngine } from '../../engines'
 import { getEngineDefaults } from '../../config/defaults'
+import { getDumpToolName } from '../../config/engines-registry'
 import {
   promptCreateOptions,
   promptInstallDependencies,
@@ -1113,6 +1114,11 @@ export const createCommand = new Command('create')
             let attempts = 0
             const maxAttempts = 2
 
+            // Name the dump tool this engine actually runs. Every message
+            // below used to say "pg_dump" regardless of engine, so a failing
+            // mariadb-dump surfaced as a pg_dump error on a MariaDB create.
+            const dumpTool = await getDumpToolName(engine)
+
             while (!dumpSuccess && attempts < maxAttempts) {
               attempts++
               const dumpSpinner = createSpinner(
@@ -1138,20 +1144,24 @@ export const createCommand = new Command('create')
                 dumpSpinner.fail('Failed to create dump')
 
                 if (
+                  e.message.includes(`${dumpTool} not found`) ||
                   e.message.includes('pg_dump not found') ||
                   e.message.includes('ENOENT')
                 ) {
                   // In JSON mode, don't prompt - just exit with error
                   if (options.json) {
                     return exitWithError({
-                      message: 'pg_dump not installed',
+                      message: `${dumpTool} not installed`,
                       json: true,
                     })
                   }
-                  const installed = await promptInstallDependencies('pg_dump')
+                  const installed = await promptInstallDependencies(
+                    dumpTool,
+                    engine,
+                  )
                   if (!installed) {
                     return exitWithError({
-                      message: 'pg_dump not installed',
+                      message: `${dumpTool} not installed`,
                       json: options.json,
                     })
                   }
@@ -1159,7 +1169,7 @@ export const createCommand = new Command('create')
                 }
 
                 return exitWithError({
-                  message: `pg_dump error: ${e.message}`,
+                  message: `${dumpTool} error: ${e.message}`,
                   json: options.json,
                 })
               }
@@ -1278,6 +1288,11 @@ export const createCommand = new Command('create')
           'mysql not found',
           'mysqldump not found',
           'mysqld not found',
+          // MariaDB ships its own client tool names, so a missing
+          // mariadb-dump used to fall through this list unnamed.
+          'mariadb not found',
+          'mariadb-dump not found',
+          'mariadbd not found',
         ]
 
         const matchingPattern = missingToolPatterns.find((p) =>
