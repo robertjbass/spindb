@@ -97,6 +97,29 @@ export async function getEngineConfig(engine: Engine): Promise<EngineConfig> {
   return data.engines[engine]
 }
 
+// Pick the dump utility out of an engine's declared client tools, so a
+// user-facing dump failure can name the tool that actually ran. Engines with
+// no dump utility of their own (REST-API engines, embedded files) fall back to
+// the neutral `dump`, which reads correctly in `<tool> error: ...` messages.
+export const NEUTRAL_DUMP_TOOL_NAME = 'dump'
+
+export function pickDumpToolName(clientTools: string[]): string {
+  return (
+    clientTools.find((tool) => tool.includes('dump')) ?? NEUTRAL_DUMP_TOOL_NAME
+  )
+}
+
+// Never throws: an unreadable or unknown engine entry degrades to the neutral
+// label rather than replacing a real dump error with a lookup error.
+export async function getDumpToolName(engine: Engine): Promise<string> {
+  try {
+    const config = await getEngineConfig(engine)
+    return pickDumpToolName(config?.clientTools ?? [])
+  } catch {
+    return NEUTRAL_DUMP_TOOL_NAME
+  }
+}
+
 export function getAllEngines(): Engine[] {
   return [...ALL_ENGINES]
 }
