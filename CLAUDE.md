@@ -218,6 +218,8 @@ The focused March 28, 2026 auth sweep passed sequentially for all of the engines
 - remote connection-string query path (`dumpFromConnectionString`)
 - local/linked query execution path (`executeQuery`)
 
+**Heroku's legacy `h` username is not an ACL user:** the classic Redis add-on minted URLs shaped like `rediss://h:<password>@host:port`, where `h` is a dummy placeholder (modern Heroku Key-Value URLs leave the username empty). `AUTH h <password>` fails with `WRONGPASS` on those servers, so `buildRespAuthArgs()` in `engines/redis/resp-client.ts` treats a lone `h` like an absent username and sends the one-argument `AUTH`. The redis-cli paths (`shouldPassRedisCliUsername()`) still only special-case `default`; if a Heroku URL ever fails auth through `redis-cli` rather than the RESP client, that helper is the place to look.
+
 **When debugging Redis/Valkey query auth, test both paths:** a change can fix remote URL queries and still break local container queries, or vice versa. The cloud incident on March 26-27, 2026 only became clear after checking both the cloud-managed local container path and the remote URL path.
 
 **Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 19 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).

@@ -102,6 +102,27 @@ export type RespConnectOptions = {
   connectTimeoutMs?: number
 }
 
+// Usernames that name no real ACL user, so AUTH must be sent in its
+// one-argument form (`AUTH <password>`) instead of `AUTH <user> <password>`.
+//
+// - `default` is Redis's implicit ACL user, which `requirepass`-only servers
+//   reject when it is passed explicitly.
+// - `h` is Heroku's legacy convention: the classic Redis add-on minted URLs
+//   like `rediss://h:<password>@host:port` where `h` is a dummy placeholder,
+//   not an account. (Modern Heroku Key-Value URLs leave the username empty.)
+//   Sending `AUTH h <password>` to those servers fails with WRONGPASS.
+const IMPLICIT_RESP_USERNAMES = new Set(['default', 'h'])
+
+// Build the AUTH command for a connection. Exported for unit testing.
+export function buildRespAuthArgs(
+  password: string,
+  username?: string,
+): string[] {
+  return username && !IMPLICIT_RESP_USERNAMES.has(username)
+    ? ['AUTH', username, password]
+    : ['AUTH', password]
+}
+
 export class RespClient {
   private socket: Socket
   private inbox: Buffer = Buffer.alloc(0)
@@ -198,11 +219,7 @@ export class RespClient {
 
     const client = new RespClient(socket)
     if (opts.password) {
-      const authArgs =
-        opts.username && opts.username !== 'default'
-          ? ['AUTH', opts.username, opts.password]
-          : ['AUTH', opts.password]
-      await client.command(authArgs)
+      await client.command(buildRespAuthArgs(opts.password, opts.username))
     }
     if (opts.database && opts.database > 0) {
       await client.command(['SELECT', String(opts.database)])
