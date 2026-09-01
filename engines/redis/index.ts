@@ -32,6 +32,7 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import { getRedisCliPath, REDIS_CLI_NOT_FOUND_ERROR } from './cli-utils'
+import { shouldPassRedisCliUsername } from './cli-common'
 import { Engine } from '../../types'
 import {
   type Platform,
@@ -104,16 +105,10 @@ function validateCommand(command: string): void {
   }
 }
 
-export function shouldPassRedisCliUsername(
-  username?: string,
-): username is string {
-  if (!username) {
-    return false
-  }
-
-  const trimmed = username.trim()
-  return trimmed.length > 0 && trimmed.toLowerCase() !== 'default'
-}
+// Re-exported so the redis-cli call sites in this file and every existing
+// importer keep one implementation. It lives in `cli-common.ts`, which shares
+// the placeholder-username set with the RESP client.
+export { shouldPassRedisCliUsername }
 
 /**
  * Convert a Windows path to Cygwin path format.
