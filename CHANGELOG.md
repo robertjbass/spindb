@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.5] - 2026-09-01
+
+### Fixed
+
+- **A Heroku Redis URL with the legacy `h` username now authenticates through the `redis-cli` paths too, not just the RESP client.** 0.68.4 taught the RESP client that Heroku's classic `rediss://h:<password>@host:port` carries a placeholder rather than an ACL user, but the `redis-cli` call sites still passed `--user h`, which those servers reject with `WRONGPASS` even though the password is correct. So a Heroku URL migrated fine and then failed on a query, which is a confusing place to hit the same bug twice. Both paths now read the same list of placeholder usernames, `default` and `h`, so a query, a remote connection-string dump, and a migration all authenticate the same way. Matching is exact, so a real ACL user whose name merely starts with `h`, such as `hasura`, still gets `--user` as before.
+
 ## [0.68.4] - 2026-09-01
 
 ### Fixed
