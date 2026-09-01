@@ -140,6 +140,55 @@ export function buildMysqlInlineCommand(
   }
 }
 
+/**
+ * Build the mysqldump argument list for a dump taken from a remote connection
+ * string. Exported for unit testing: the flags are the whole contract here, so
+ * the test asserts the built array rather than running mysqldump.
+ *
+ * Two flags matter beyond the connection details, and both match what the
+ * local backup path in `backup.ts` already passes:
+ * - `--set-gtid-purged=OFF` keeps `SET @@GLOBAL.GTID_PURGED` out of the dump.
+ *   A GTID-enabled source (Aiven documents requiring this flag; managed MySQL
+ *   generally) otherwise writes a statement only a superuser can replay, so
+ *   the restore fails on the target.
+ * - `--single-transaction` takes the dump inside one consistent InnoDB
+ *   snapshot instead of locking the source tables while it reads them.
+ *
+ * `--set-gtid-purged` is mysqldump-only: mariadb-dump rejects it outright, so
+ * MariaDB builds its own arguments in `engines/mariadb/index.ts` and must
+ * never reuse this builder.
+ */
+export function buildMysqlRemoteDumpArgs(options: {
+  host: string
+  port: string
+  user: string
+  database: string
+  outputPath: string
+  excludeTables?: string[]
+}): string[] {
+  const { host, port, user, database, outputPath, excludeTables } = options
+
+  return [
+    '-h',
+    host,
+    '-P',
+    port,
+    '-u',
+    user,
+    '--single-transaction', // Consistent snapshot without locking the source
+    '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
+    '--result-file',
+    outputPath,
+    // mysqldump requires db-qualified names; qualify bare names with the
+    // database being dumped
+    ...(excludeTables ?? []).map(
+      (table) =>
+        `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
+    ),
+    database,
+  ]
+}
+
 export class MySQLEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MySQL'
@@ -1056,23 +1105,14 @@ export class MySQLEngine extends BaseEngine {
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
 
-    const args = [
-      '-h',
+    const args = buildMysqlRemoteDumpArgs({
       host,
-      '-P',
       port,
-      '-u',
       user,
-      '--result-file',
-      outputPath,
-      // mysqldump requires db-qualified names; qualify bare names with the
-      // database being dumped
-      ...(options?.excludeTables ?? []).map(
-        (table) =>
-          `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
-      ),
       database,
-    ]
+      outputPath,
+      excludeTables: options?.excludeTables,
+    })
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],

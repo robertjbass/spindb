@@ -5,6 +5,14 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.4] - 2026-09-01
+
+### Fixed
+
+- **A remote MySQL dump from a GTID-enabled source now restores as a normal user instead of failing on `SET @@GLOBAL.GTID_PURGED`.** `spindb pull` and the remote-URL backup paths built their `mysqldump` invocation without `--set-gtid-purged=OFF`, so a dump taken from a managed MySQL that runs with GTIDs on (Aiven documents requiring this flag, and it is the norm across managed MySQL) embedded a `SET @@GLOBAL.GTID_PURGED` statement in the output. Replaying that statement takes privileges a normal application user does not have, so the restore into a spindb container failed on a dump that had itself succeeded, with an error that named GTIDs rather than the flag that caused it. The local backup path in `engines/mysql/backup.ts` has always passed the flag; the remote path simply never got it.
+- **A remote MySQL dump no longer locks the source tables while it reads them.** The same invocation was missing `--single-transaction`, so a dump from a live database held read locks for its whole duration instead of reading from one consistent InnoDB snapshot. Both flags are MySQL-only: `mariadb-dump` rejects `--set-gtid-purged`, and MariaDB builds its own arguments, so nothing changed for that engine.
+- **A Heroku Redis URL with the legacy `h` username now authenticates.** Heroku's classic Redis add-on minted URLs shaped like `rediss://h:<password>@host:port`, where `h` is a placeholder rather than an ACL user. The RESP client treated any username other than `default` as real and sent `AUTH h <password>`, which those servers reject with `WRONGPASS` even though the password is correct. A lone `h` is now handled the same way an absent username already was, with a one-argument `AUTH`. Modern Heroku Key-Value URLs leave the username empty and were never affected, and every other username, including a real ACL user whose name merely starts with `h`, is unchanged.
+
 ## [0.68.3] - 2026-08-26
 
 ### Changed
