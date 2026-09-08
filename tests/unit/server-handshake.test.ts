@@ -4,6 +4,7 @@ import {
   parseMysqlWireHandshake,
   classifyMysqlFamilyServer,
   readMysqlWireServerVersion,
+  probeMysqlFamilyServer,
 } from '../../core/server-handshake'
 import { assert, assertEqual, assertNotEqual } from '../utils/assertions'
 
@@ -137,6 +138,26 @@ describe('parseMysqlWireHandshake', () => {
 
     assert(parsed.kind === 'error', 'an ERR packet is not a greeting')
     assertEqual(parsed.message, 'Access denied for user', 'message only')
+  })
+
+  it('refuses a header that declares an empty payload', () => {
+    // A zero-length payload has no protocol byte to read. Reading it anyway
+    // threw a TypeError out of the socket data listener, which is an UNCAUGHT
+    // exception rather than a rejected promise, so it took the process down
+    // instead of degrading to an unknown flavor.
+    const empty = Buffer.concat([
+      packet(Buffer.alloc(0)),
+      Buffer.from([0x0a, 0x00, 0x00, 0x00]),
+    ])
+
+    const parsed = parseMysqlWireHandshake(empty)
+
+    assert(parsed.kind === 'error', 'an empty packet is not a greeting')
+    assertEqual(parsed.errorCode, null, 'no MySQL error code to report')
+    assert(
+      parsed.message.includes('empty packet'),
+      `the reason should be legible, got: ${parsed.message}`,
+    )
   })
 
   it('refuses a packet that is not the MySQL wire protocol', () => {
@@ -296,6 +317,51 @@ describe('readMysqlWireServerVersion', () => {
           message.includes('Timed out'),
           `a silent server should time out, got: ${message}`,
         )
+      },
+    )
+  })
+})
+
+describe('probeMysqlFamilyServer', () => {
+  it('reports unknown for a server that sends an empty packet', async () => {
+    // The regression this exists for: a zero-length packet made the parser
+    // throw inside the socket data listener, which is an uncaught exception,
+    // so the probe crashed the process instead of resolving. A probe failure
+    // must never be more than "keep doing what you did before".
+    await withFakeServer(
+      (socket) =>
+        socket.write(
+          Buffer.concat([
+            packet(Buffer.alloc(0)),
+            Buffer.from([0x0a, 0x00, 0x00, 0x00]),
+          ]),
+        ),
+      async (port) => {
+        const server = await probeMysqlFamilyServer({
+          host: '127.0.0.1',
+          port,
+          timeoutMs: 500,
+        })
+
+        assertEqual(server.flavor, 'unknown', 'flavor')
+        assertEqual(server.version, '', 'no version to report')
+        assertEqual(server.majorVersion, null, 'no major version')
+      },
+    )
+  })
+
+  it('reports the flavor of a server that does answer', async () => {
+    await withFakeServer(
+      (socket) => socket.write(handshakePacket('11.8.8-MariaDB')),
+      async (port) => {
+        const server = await probeMysqlFamilyServer({
+          host: '127.0.0.1',
+          port,
+          timeoutMs: 500,
+        })
+
+        assertEqual(server.flavor, 'mariadb', 'flavor')
+        assertEqual(server.version, '11.8.8-MariaDB', 'version')
       },
     )
   })

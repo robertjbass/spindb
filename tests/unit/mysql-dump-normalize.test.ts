@@ -6,6 +6,7 @@ import {
   normalizeMariaDbDumpForMysql,
   normalizeMariaDbDumpFile,
   mapUca1400Collation,
+  mapUca1400Utf8mb3Collation,
   totalRewrites,
 } from '../../engines/mysql/dump-normalize'
 import { assert, assertEqual } from '../utils/assertions'
@@ -87,6 +88,48 @@ describe('MariaDB dump normalization: collations', () => {
       rewrite('COLLATE=utf8mb3_uca1400_ai_ci;'),
       'COLLATE=utf8mb3_unicode_ci;',
       'utf8mb3 target',
+    )
+    assertEqual(
+      rewrite('COLLATE=utf8_uca1400_as_ci;'),
+      'COLLATE=utf8mb3_unicode_ci;',
+      'the utf8 alias takes the same target',
+    )
+  })
+
+  it('keeps case sensitivity on a utf8mb3 collation', () => {
+    // MySQL's UCA 9.0.0 collations are utf8mb4 only, so a case-sensitive
+    // utf8mb3 column has nowhere to go but utf8mb3_bin. Flattening it into
+    // utf8mb3_unicode_ci would silently start matching rows the source did
+    // not.
+    assertEqual(
+      mapUca1400Utf8mb3Collation('as_cs'),
+      'utf8mb3_bin',
+      'accent and case sensitive',
+    )
+    assertEqual(
+      mapUca1400Utf8mb3Collation('ai_cs'),
+      'utf8mb3_bin',
+      'case sensitive is the half that can be kept',
+    )
+    assertEqual(
+      mapUca1400Utf8mb3Collation('nopad_as_cs'),
+      'utf8mb3_bin',
+      'a nopad variant follows its padded equivalent',
+    )
+    assertEqual(
+      mapUca1400Utf8mb3Collation('ai_ci'),
+      'utf8mb3_unicode_ci',
+      'case insensitive keeps UCA ordering',
+    )
+    assertEqual(
+      mapUca1400Utf8mb3Collation('swedish_ai_ci'),
+      'utf8mb3_unicode_ci',
+      'a locale-specific collation takes the default',
+    )
+    assertEqual(
+      rewrite('`name` varchar(64) COLLATE utf8mb3_uca1400_ai_cs NOT NULL'),
+      '`name` varchar(64) COLLATE utf8mb3_bin NOT NULL',
+      'through the line rewrite too',
     )
   })
 

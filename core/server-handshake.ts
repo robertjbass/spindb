@@ -71,6 +71,20 @@ export function parseMysqlWireHandshake(buffer: Buffer): MysqlWireHandshake {
 
   const payload = buffer.subarray(HEADER_BYTES, HEADER_BYTES + payloadLength)
 
+  // A header that declares a zero-length payload carries no protocol byte, so
+  // every read below would be `undefined`. Classify it before touching
+  // `payload[0]`: the packet is already complete, so asking for more bytes
+  // would only stall until the timeout.
+  if (payload.length === 0) {
+    return {
+      kind: 'error',
+      errorCode: null,
+      message:
+        'Server sent an empty packet instead of a greeting. ' +
+        'This does not look like a MySQL-protocol server.',
+    }
+  }
+
   if (payload[0] === ERR_PACKET_HEADER) {
     return parseErrPacket(payload)
   }
@@ -178,7 +192,23 @@ export async function readMysqlWireServerVersion(options: {
 
     socket.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk])
-      const parsed = parseMysqlWireHandshake(buffer)
+
+      // A throw in here is an uncaught exception on the socket, not a rejected
+      // promise, so it would take the whole process down instead of reaching
+      // the caller's catch. The probe is best-effort: a parser it cannot trust
+      // must still end as a rejected read.
+      let parsed: MysqlWireHandshake
+      try {
+        parsed = parseMysqlWireHandshake(buffer)
+      } catch (error) {
+        finish(
+          new Error(
+            `Could not read the greeting from ${host}:${port}: ` +
+              (error instanceof Error ? error.message : String(error)),
+          ),
+        )
+        return
+      }
 
       if (parsed.kind === 'incomplete') return
 

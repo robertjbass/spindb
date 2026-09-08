@@ -37,8 +37,28 @@ describe('selectInstalledVersion', () => {
   })
 
   it('matches on version segments, never as a substring', () => {
-    // '11.8' must not match '11.80.x', which is the trap a startsWith check
-    // falls into.
+    // '9.6' must not match '9.60.x', which is the trap a startsWith check
+    // falls into. Both lines are installed and 9.60.1 is the newer one, so
+    // only picking the OLDER 9.6.0 proves the match is on segment boundaries:
+    // a substring match would return 9.60.1, which is also what the
+    // newest-install fallback returns, so a same-line-only fixture proves
+    // nothing.
+    assertEqual(
+      selectInstalledVersion({
+        installed: ['9.6.0', '9.60.1'],
+        preferVersion: '9.6',
+      }),
+      '9.6.0',
+      'the requested line beats a newer install that only shares a prefix',
+    )
+    assertEqual(
+      selectInstalledVersion({
+        installed: ['9.6.0', '9.60.1', '10.1.0'],
+        preferVersion: '9.6',
+      }),
+      '9.6.0',
+      'a strictly newer version outside the line does not win either',
+    )
     assertEqual(
       selectInstalledVersion({
         installed: ['11.80.1', '10.11.15'],
