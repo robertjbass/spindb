@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.7] - 2026-09-08
+
+### Fixed
+
+- **A MariaDB dump taken from a remote connection string is now a consistent snapshot instead of a table-by-table read of a moving source.** `mariadb-dump` was invoked with the connection details and nothing else, so it read each table at whatever point in time it reached it. On a busy source that is enough to copy one table before a write and the next table after it, and the restored copy then contains rows that reference rows that are not there. Every restore-from-URL into a MariaDB target went through this path, which includes the MySQL to MariaDB conversion and the guided MySQL/MariaDB imports, so the inconsistency landed in the new database without anything failing. The dump now runs with `--single-transaction`, which reads the InnoDB tables inside one REPEATABLE READ transaction without locking the source. The local `spindb backup` paths for MariaDB, both the plain SQL and the gzipped one, were missing the same flag and now pass it too.
+- The remote argument list moved into an exported `buildMariaDbRemoteDumpArgs`, matching the MySQL builder, so the flags are unit tested rather than only exercised by a real dump. The two builders stay separate on purpose: `--set-gtid-purged` and `--column-statistics` are MySQL-only and `mariadb-dump` rejects both, so the MariaDB builder must never grow them.
+
 ## [0.68.6] - 2026-09-08
 
 ### Fixed
