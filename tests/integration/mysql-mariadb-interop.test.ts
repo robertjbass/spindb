@@ -48,7 +48,13 @@ const MARIADB_VERSION = getEngineDefaults('mariadb').defaultVersion
 // - the trigger drags a `NO_AUTO_CREATE_USER` sql_mode through the dump, which
 //   MySQL 8+ answers with ERROR 1231,
 // - the json_valid() CHECK is the control: MySQL has json_valid(), so it must
-//   survive untouched.
+//   survive untouched,
+// - two of the rows store the literal text `utf8mb4_uca1400_ai_ci` and
+//   `NO_AUTO_CREATE_USER`, which is data the conversion must NOT touch. They
+//   are the last rows of the insert on purpose: mariadb-dump writes an
+//   extended insert one row per line, and only the first line carries the
+//   INSERT keyword, so a row guard that reads a single line in isolation
+//   protects the first row and rewrites the rest.
 const MARIADB_SCHEMA = `
 CREATE TABLE catalog_item (
   id INT NOT NULL AUTO_INCREMENT,
@@ -64,7 +70,9 @@ FOR EACH ROW SET NEW.touched_by = 'trigger';
 INSERT INTO catalog_item (name, attributes) VALUES
   ('bordeaux', '{"color":"red"}'),
   ('crémant', '{"color":"white"}'),
-  ('rosé', '{"color":"pink"}');
+  ('rosé', '{"color":"pink"}'),
+  ('moved the table to utf8mb4_uca1400_ai_ci last week', '{"color":"none"}'),
+  ('sql_mode was STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER before', '{"color":"none"}');
 `
 
 async function startContainer(options: {
@@ -203,10 +211,40 @@ describe('MariaDB source -> MySQL target restore', () => {
     )
     const names = result.rows.map((row) => String(row.item_name))
 
-    assertEqual(names.length, 3, 'all three rows should have crossed engines')
+    assertEqual(names.length, 5, 'all five rows should have crossed engines')
     assert(
       names.includes('crémant'),
       `non-ASCII data should survive the collation rewrite, got: ${names.join(', ')}`,
+    )
+  })
+
+  it('leaves row data that names a collation or a sql_mode verbatim', async () => {
+    // The conversion rewrites DDL, never data. Both of these are ordinary
+    // strings a user is entitled to store (a migration log, a schema-tracking
+    // table), and they sit in the middle of an extended insert, where
+    // mariadb-dump puts one row per line and only the first line starts with
+    // the INSERT keyword the row guard matches on. A guard applied to each
+    // line in isolation therefore protected the first row only, and the
+    // collation row arrived saying `utf8mb4_0900_ai_ci`: the target holding
+    // something the source never said.
+    const result = await executeQuery(
+      mysqlName,
+      `SELECT name AS item_name FROM catalog_item
+       WHERE name LIKE '%uca1400%' OR name LIKE '%NO_AUTO_CREATE_USER%'
+       ORDER BY id`,
+      DATABASE,
+    )
+    const names = result.rows.map((row) => String(row.item_name))
+
+    assert(
+      names.includes('moved the table to utf8mb4_uca1400_ai_ci last week'),
+      `the stored collation name should be untouched, got: ${names.join(' | ')}`,
+    )
+    assert(
+      names.includes(
+        'sql_mode was STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER before',
+      ),
+      `the stored sql_mode name should be untouched, got: ${names.join(' | ')}`,
     )
   })
 

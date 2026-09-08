@@ -28,7 +28,11 @@
  * `json_valid()`.
  *
  * Every rule is line-oriented, so a multi-gigabyte dump is rewritten as a
- * stream and never held in memory.
+ * stream and never held in memory. The rules are applied through a small
+ * statement-aware wrapper (`createMariaDbDumpNormalizer`) rather than to each
+ * line in isolation, because `mariadb-dump` writes an extended insert across
+ * many lines and only the first of them starts with the `INSERT` keyword the
+ * row guard matches on.
  */
 
 import { createReadStream, createWriteStream } from 'fs'
@@ -156,6 +160,11 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
   // target than the source holds - the exact outcome the sql_mode rule below
   // already refuses. No INSERT or REPLACE in a dump carries a collation that
   // needs converting, so the whole line is left alone.
+  //
+  // This guard only sees the line that carries the keyword. An extended insert
+  // spans many lines and only the first one starts with `INSERT`, so the rest
+  // of the statement is protected by `createMariaDbDumpNormalizer`, not here.
+  // Call that, not this, to rewrite a real dump.
   if (ROW_STATEMENT.test(line)) {
     return { line, counts }
   }
@@ -192,7 +201,66 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
 }
 
 /**
- * Stream a MariaDB dump through `normalizeMariaDbDumpForMysql`, writing the
+ * A statement-aware normalizer over the pure line rules.
+ *
+ * `mariadb-dump` 11.x writes an extended insert as one statement spread over
+ * many lines, one row per line:
+ *
+ * ```sql
+ * INSERT INTO `t_text` VALUES
+ * (1,'moved the table to utf8mb4_uca1400_ai_ci last week'),
+ * (2,'sql_mode was STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER before');
+ * ```
+ *
+ * Only the first line starts with `INSERT`, so a per-line row guard protects
+ * that line and none of the rows under it: a row whose own text names a
+ * uca1400 collation was rewritten and arrived in MySQL saying something the
+ * source never said. (The `NO_AUTO_CREATE_USER` rule survived this only
+ * because it is anchored to a `SET sql_mode` context, which a row line has
+ * no reason to match.)
+ *
+ * So the row guard is carried across lines: once a row statement opens, every
+ * line passes through untouched until the statement terminates.
+ *
+ * **Termination is "the trimmed line ends with `;`".** That is safe for a
+ * dump, and only for a dump: `mariadb-dump` (and `mysqldump`) escape `\n` and
+ * `\r` inside string literals, so a value never ends a physical line, and the
+ * generator always closes the statement at the end of its own line. A
+ * hand-written SQL file could end a line with a `;` inside a string literal
+ * and close the guard early; a dump cannot, and a dump is the only input this
+ * converts.
+ *
+ * Deliberately unchanged: `LOAD DATA` and a bare `VALUES` statement are not
+ * treated as row statements (`mariadb-dump` emits neither in the output we
+ * convert, and the rules do not corrupt them), and `/*!...*\/` versioned
+ * comment lines keep taking the ordinary rules, which is what strips
+ * `NO_AUTO_CREATE_USER` out of the `/*!50003 SET sql_mode = ... *\/` line
+ * around every trigger.
+ */
+export function createMariaDbDumpNormalizer(): {
+  next: (line: string) => NormalizedDumpLine
+} {
+  let inRowStatement = false
+
+  return {
+    next(line: string): NormalizedDumpLine {
+      const terminates = line.trim().endsWith(';')
+
+      if (inRowStatement) {
+        if (terminates) inRowStatement = false
+        return { line, counts: emptyNormalizationCounts() }
+      }
+
+      const normalized = normalizeMariaDbDumpForMysql(line)
+      if (ROW_STATEMENT.test(line) && !terminates) inRowStatement = true
+
+      return normalized
+    },
+  }
+}
+
+/**
+ * Stream a MariaDB dump through `createMariaDbDumpNormalizer`, writing the
  * MySQL-ready result to a new file.
  *
  * Line by line with explicit backpressure: a dump is routinely larger than the
@@ -219,10 +287,11 @@ export async function normalizeMariaDbDumpFile(options: {
   const input = createReadStream(inputPath, { encoding: 'latin1' })
   const output = createWriteStream(outputPath, { encoding: 'latin1' })
   const lines = createInterface({ input, crlfDelay: Infinity })
+  const normalizer = createMariaDbDumpNormalizer()
 
   try {
     for await (const line of lines) {
-      const normalized = normalizeMariaDbDumpForMysql(line)
+      const normalized = normalizer.next(line)
       counts.collationsMapped += normalized.counts.collationsMapped
       counts.sqlModeFlagsRemoved += normalized.counts.sqlModeFlagsRemoved
       counts.sandboxDirectivesDropped +=

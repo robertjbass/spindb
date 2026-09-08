@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.10] - 2026-09-08
+
+### Fixed
+
+- **The MariaDB to MySQL dump conversion no longer rewrites the rows of a multi-line insert.** 0.68.9 stopped the collation rules from touching row data by skipping any line that starts with `INSERT` or `REPLACE`, which covers a single-line insert and nothing else. `mariadb-dump` 11.x writes an extended insert as one statement spread over many lines, with the keyword alone on the first line and one row per line after it, so the guard protected the keyword line and every row under it was still rewritten: a row reading `moved the table to utf8mb4_uca1400_ai_ci last week` arrived in MySQL saying `utf8mb4_0900_ai_ci`. The `NO_AUTO_CREATE_USER` rule was never exposed to this, because it is anchored to a `SET sql_mode` context a row line has no reason to match. The row guard is now carried across lines by `createMariaDbDumpNormalizer`: once a row statement opens, every line passes through untouched until one ends the statement, and DDL after the terminator is rewritten again as before. `normalizeMariaDbDumpForMysql` stays pure and single-line, so the rules themselves are still unit tested line by line. Termination is read as "the trimmed line ends with `;`", which holds for a dump and only for a dump: `mariadb-dump` escapes `\n` and `\r` inside string literals, so a value never ends a physical line, and the generator always closes the statement at the end of its own line. Covered by unit tests over the exact multi-line shape, its CRLF variant and a single-line insert, and by the `mysql-mariadb-interop` test against real binaries, whose source table now stores the literal text `utf8mb4_uca1400_ai_ci` and `NO_AUTO_CREATE_USER` in rows that are not the first of their insert, which is the fixture that would have caught this.
+
 ## [0.68.9] - 2026-09-08
 
 ### Fixed
