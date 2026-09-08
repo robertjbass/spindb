@@ -99,9 +99,21 @@ export function parseMysqlWireHandshake(buffer: Buffer): MysqlWireHandshake {
     }
   }
 
+  // The payload is already complete at this point (the header's declared
+  // length was satisfied above), so a missing NUL terminator is not "more
+  // bytes are coming" - it is a packet that cannot be a greeting. Reporting
+  // `incomplete` here stalls the probe for the whole timeout on a server that
+  // is never going to send anything else, which is exactly the trap the
+  // empty-payload case above exists to avoid.
   const terminator = payload.indexOf(0x00, 1)
   if (terminator === -1) {
-    return { kind: 'incomplete' }
+    return {
+      kind: 'error',
+      errorCode: null,
+      message:
+        'Server sent a greeting with no server version string. ' +
+        'This does not look like a MySQL-protocol server.',
+    }
   }
 
   return {
