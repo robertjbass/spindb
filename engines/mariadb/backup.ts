@@ -63,8 +63,8 @@ async function getDumpPath(container: ContainerConfig): Promise<string> {
  * Create a backup of a MariaDB database
  *
  * CLI equivalent:
- * - SQL format: mariadb-dump -h 127.0.0.1 -P {port} -u root --result-file={outputPath} {database}
- * - Dump format: mariadb-dump -h 127.0.0.1 -P {port} -u root {database} | gzip > {outputPath}
+ * - SQL format: mariadb-dump -h 127.0.0.1 -P {port} -u root --single-transaction --result-file={outputPath} {database}
+ * - Dump format: mariadb-dump -h 127.0.0.1 -P {port} -u root --single-transaction {database} | gzip > {outputPath}
  */
 export async function createBackup(
   container: ContainerConfig,
@@ -126,6 +126,7 @@ async function createSqlBackup(
       String(port),
       '-u',
       auth.user,
+      '--single-transaction', // Consistent snapshot without locking the source
       '--result-file',
       outputPath,
       database,
@@ -187,6 +188,7 @@ async function createCompressedBackup(
     String(port),
     '-u',
     auth.user,
+    '--single-transaction', // Consistent snapshot without locking the source
     database,
   ]
 

@@ -5,6 +5,21 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.7] - 2026-09-08
+
+### Fixed
+
+- **A MariaDB dump taken from a remote connection string is now a consistent snapshot instead of a table-by-table read of a moving source.** `mariadb-dump` was invoked with the connection details and nothing else, so it read each table at whatever point in time it reached it. On a busy source that is enough to copy one table before a write and the next table after it, and the restored copy then contains rows that reference rows that are not there. Every restore-from-URL into a MariaDB target went through this path, which includes the MySQL to MariaDB conversion and the guided MySQL/MariaDB imports, so the inconsistency landed in the new database without anything failing. The dump now runs with `--single-transaction`, which reads the InnoDB tables inside one REPEATABLE READ transaction without locking the source. The local `spindb backup` paths for MariaDB, both the plain SQL and the gzipped one, were missing the same flag and now pass it too.
+- The remote argument list moved into an exported `buildMariaDbRemoteDumpArgs`, matching the MySQL builder, so the flags are unit tested rather than only exercised by a real dump. The two builders stay separate on purpose: `--set-gtid-purged` and `--column-statistics` are MySQL-only and `mariadb-dump` rejects both, so the MariaDB builder must never grow them.
+
+## [0.68.6] - 2026-09-08
+
+### Fixed
+
+- **A remote MySQL dump taken from a MariaDB source no longer fails before it writes anything.** Converting a MariaDB database to MySQL runs `mysqldump` in the MySQL target against the MariaDB source, and every `mysqldump` from 8.0.2 onward reads `information_schema.COLUMN_STATISTICS` on its way to dumping histogram data. MariaDB has no such table, so the dump aborted with an information_schema error that named a table nobody asked about, on a conversion that had otherwise lined up correctly. The remote dump now passes `--column-statistics=0`, which only omits histogram statements - statements a fresh target cannot replay anyway - so a MySQL source is unaffected. Every `mysqldump` spindb ships is 8.0.40 or newer, so the flag needs no version guard, and a unit test holds the version map to that.
+- **The restore-time tool check now knows MariaDB exists.** `config/os-dependencies.ts` had entries for PostgreSQL, MySQL, SQLite, MongoDB, Redis, Valkey, and ClickHouse, and none for MariaDB, so `spindb restore` against a MariaDB container looked up an engine the list had never heard of, found no dependencies at all, and reported "Required tools available" no matter what was actually on disk. A real missing binary then surfaced later as a raw spawn failure. MariaDB now has its own entry naming the binaries the engine actually registers (`mariadbd`, `mariadb`, `mariadb-dump`, `mariadb-admin`) rather than the mysql-prefixed compatibility names, which is why the existing MySQL entry never covered it.
+- **A failed `spindb restore --from-url` now names the tool that ran instead of guessing `pg_dump`.** The label was hard-coded as `mysqldump` for MySQL and `pg_dump` for everything else, so a MariaDB restore whose `mariadb-dump` was missing reported a `pg_dump` error and offered to install PostgreSQL's client tools. The name is now taken from the engine's own declared client tools, the same resolution `spindb create` already uses, so the error, and the install prompt it leads to, both point at the right tool and the right `spindb engines download` target.
+
 ## [0.68.5] - 2026-09-01
 
 ### Fixed
