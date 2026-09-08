@@ -160,6 +160,20 @@ describe('parseMysqlWireHandshake', () => {
     )
   })
 
+  it('refuses a complete greeting that carries no version string', () => {
+    // The header's declared length is satisfied, so no more bytes are coming.
+    // Asking for more anyway stalled the probe for the whole timeout against
+    // a server that was never going to speak again.
+    const payload = Buffer.from([0x0a, 0x39, 0x2e, 0x37, 0x2e, 0x32])
+    const parsed = parseMysqlWireHandshake(packet(payload))
+
+    assert(
+      parsed.kind === 'error',
+      `an unterminated version string is not a greeting, got: ${parsed.kind}`,
+    )
+    assertEqual(parsed.errorCode, null, 'no MySQL error code to report')
+  })
+
   it('refuses a packet that is not the MySQL wire protocol', () => {
     const parsed = parseMysqlWireHandshake(
       packet(Buffer.from([0x52, 0x00, 0x00, 0x00])),
@@ -347,6 +361,30 @@ describe('probeMysqlFamilyServer', () => {
         assertEqual(server.version, '', 'no version to report')
         assertEqual(server.majorVersion, null, 'no major version')
       },
+    )
+  })
+
+  it('does not wait out the timeout on a greeting with no version string', async () => {
+    const payload = Buffer.from([0x0a, 0x39, 0x2e, 0x37, 0x2e, 0x32])
+    const header = Buffer.alloc(4)
+    header.writeUIntLE(payload.length, 0, 3)
+
+    const startedAt = Date.now()
+    await withFakeServer(
+      (socket) => socket.write(Buffer.concat([header, payload])),
+      async (port) => {
+        const server = await probeMysqlFamilyServer({
+          host: '127.0.0.1',
+          port,
+          timeoutMs: 2000,
+        })
+        assertEqual(server.flavor, 'unknown', 'flavor')
+      },
+    )
+
+    assert(
+      Date.now() - startedAt < 1500,
+      'the probe should classify the packet immediately, not stall until the timeout',
     )
   })
 

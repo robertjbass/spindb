@@ -150,6 +150,16 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
     return { line: null, counts }
   }
 
+  // A row is data, never DDL. A collation name is an ordinary string that a
+  // user is entitled to store (a migration log, a schema-tracking table, an
+  // ORM's own bookkeeping), and rewriting it would put different bytes in the
+  // target than the source holds - the exact outcome the sql_mode rule below
+  // already refuses. No INSERT or REPLACE in a dump carries a collation that
+  // needs converting, so the whole line is left alone.
+  if (ROW_STATEMENT.test(line)) {
+    return { line, counts }
+  }
+
   let result = line.replace(UTF8MB4_UCA1400, (_match, suffix: string) => {
     counts.collationsMapped++
     return mapUca1400Collation(suffix)
@@ -162,8 +172,7 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
 
   if (
     result.includes(NO_AUTO_CREATE_USER) &&
-    SQL_MODE_ASSIGNMENT.test(result) &&
-    !ROW_STATEMENT.test(result)
+    SQL_MODE_ASSIGNMENT.test(result)
   ) {
     result = result.replace(/'([^']*)'/g, (match, contents: string) => {
       if (!contents.includes(NO_AUTO_CREATE_USER)) return match
@@ -188,6 +197,17 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
  *
  * Line by line with explicit backpressure: a dump is routinely larger than the
  * process can hold, so it is never read into a string.
+ *
+ * **Read and written as `latin1`, never `utf8`.** A dump is not guaranteed to
+ * be valid UTF-8: a `latin1` column, or a BLOB that `mariadb-dump` writes as
+ * escaped bytes rather than a hex literal, puts arbitrary bytes above 0x7F in
+ * the file. Decoding those as UTF-8 replaces every invalid sequence with
+ * U+FFFD, so the conversion silently rewrote the user's data (a `0x80 0xFF`
+ * BLOB came out as six `EF BF BD` bytes). `latin1` maps bytes 1:1 to code
+ * points 0-255 and back, so the file round-trips byte for byte and only the
+ * ASCII tokens the rules match are ever changed. Line splitting stays correct
+ * because MySQL escapes `\n` and `\r` inside string literals, so a raw
+ * newline byte never appears in dump data.
  */
 export async function normalizeMariaDbDumpFile(options: {
   inputPath: string
@@ -196,8 +216,8 @@ export async function normalizeMariaDbDumpFile(options: {
   const { inputPath, outputPath } = options
   const counts = emptyNormalizationCounts()
 
-  const input = createReadStream(inputPath, { encoding: 'utf8' })
-  const output = createWriteStream(outputPath)
+  const input = createReadStream(inputPath, { encoding: 'latin1' })
+  const output = createWriteStream(outputPath, { encoding: 'latin1' })
   const lines = createInterface({ input, crlfDelay: Infinity })
 
   try {
