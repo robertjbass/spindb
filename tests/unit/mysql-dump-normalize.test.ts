@@ -146,6 +146,28 @@ describe('MariaDB dump normalization: collations', () => {
     assertEqual(result.counts.collationsMapped, 2, 'two collations mapped')
   })
 
+  it('does not touch row data that happens to name a uca1400 collation', () => {
+    // A collation name is an ordinary string a user is entitled to store (a
+    // migration log, a schema-tracking table). Rewriting it would put
+    // different bytes in the target than the source holds, which is worse
+    // than the error the rule exists to avoid.
+    const line =
+      "INSERT INTO `migration_log` VALUES (1,'moved the table to utf8mb4_uca1400_ai_ci');"
+    const result = normalizeMariaDbDumpForMysql(line)
+
+    assertEqual(result.line, line, 'row data is untouched')
+    assertEqual(result.counts.collationsMapped, 0, 'nothing mapped')
+  })
+
+  it('does not touch a REPLACE row either', () => {
+    const line =
+      "REPLACE INTO `notes` VALUES (2,'utf8mb3_uca1400_as_cs is MariaDB only');"
+    const result = normalizeMariaDbDumpForMysql(line)
+
+    assertEqual(result.line, line, 'row data is untouched')
+    assertEqual(totalRewrites(result.counts), 0, 'nothing rewritten')
+  })
+
   it('leaves a collation MySQL already has alone', () => {
     const line =
       ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;'
@@ -315,6 +337,44 @@ describe('normalizeMariaDbDumpFile', () => {
       assert(
         converted.includes('CREATE TRIGGER `stamp`'),
         'the trigger should be carried through',
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('carries bytes that are not valid UTF-8 through untouched', async () => {
+    // mariadb-dump writes a BLOB (and a latin1 column) as escaped raw bytes,
+    // not as a hex literal, so a dump is not guaranteed to be valid UTF-8.
+    // Reading it as UTF-8 turned every invalid sequence into U+FFFD, which is
+    // silent corruption of the user's data.
+    const dir = await mkdtemp(join(tmpdir(), 'spindb-normalize-bytes-'))
+    const inputPath = join(dir, 'source.sql')
+    const outputPath = join(dir, 'converted.sql')
+
+    const source = Buffer.concat([
+      Buffer.from(') ENGINE=InnoDB COLLATE=utf8mb4_uca1400_ai_ci;\n'),
+      Buffer.from("INSERT INTO `blobs` VALUES (1,'"),
+      Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x80, 0xff]),
+      Buffer.from("');\n"),
+    ])
+    await writeFile(inputPath, source)
+
+    try {
+      const counts = await normalizeMariaDbDumpFile({ inputPath, outputPath })
+      const converted = await readFile(outputPath)
+
+      assertEqual(counts.collationsMapped, 1, 'the DDL line is still rewritten')
+      assertEqual(
+        converted.toString('latin1'),
+        source
+          .toString('latin1')
+          .replace('utf8mb4_uca1400_ai_ci', 'utf8mb4_0900_ai_ci'),
+        'every byte outside the rewritten token survives unchanged',
+      )
+      assert(
+        converted.includes(Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x80, 0xff])),
+        'the raw blob bytes should survive byte for byte',
       )
     } finally {
       await rm(dir, { recursive: true, force: true })

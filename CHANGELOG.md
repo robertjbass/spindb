@@ -5,6 +5,14 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.9] - 2026-09-08
+
+### Fixed
+
+- **The MariaDB to MySQL dump conversion no longer rewrites a collation name that appears in a data row.** The `uca1400` collation rules matched anywhere on a line, including inside the string literals of an `INSERT`, so a row whose own text happened to contain `utf8mb4_uca1400_ai_ci` (a migration log, a schema-tracking table, an ORM's bookkeeping) arrived in MySQL saying `utf8mb4_0900_ai_ci`. That is the target holding different data than the source, which is exactly what the `NO_AUTO_CREATE_USER` rule already refused to do by skipping row statements. Both collation rules now skip `INSERT` and `REPLACE` lines too: no row in a dump carries a collation that needs converting, so the whole line is left alone.
+- **The conversion no longer corrupts bytes that are not valid UTF-8.** The dump was streamed through a `utf8` decode and re-encode, so every byte sequence the decoder could not read became U+FFFD: a `latin1` column, or a BLOB that `mariadb-dump` writes as escaped raw bytes rather than a hex literal, came out of the conversion with its contents silently replaced (a six-byte blob ending `0x80 0xFF` arrived as nine bytes of `EF BF BD`). The dump is now read and written as `latin1`, which maps bytes 1:1 to code points 0-255 and back, so the file round-trips byte for byte and only the ASCII tokens the rules match are ever changed. Line splitting is unaffected: MySQL escapes `\n` and `\r` inside string literals, so a raw newline byte never appears in dump data.
+- **A greeting that carries no server version string is classified immediately instead of stalling the probe for the full timeout.** `parseMysqlWireHandshake` returned `incomplete` when the version string had no NUL terminator, but at that point the header's declared payload length has already been satisfied, so no more bytes are coming: the probe sat waiting on a server that would never speak again, adding the whole 5 second timeout to every remote dump against such a front end. It is now reported as a failed read, which the best-effort probe already degrades to an unknown flavor and the unchanged `mysqldump` path, the same reasoning the empty-payload case shipped with in 0.68.8.
+
 ## [0.68.8] - 2026-09-08
 
 ### Fixed
