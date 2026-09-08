@@ -145,18 +145,27 @@ export function buildMysqlInlineCommand(
  * string. Exported for unit testing: the flags are the whole contract here, so
  * the test asserts the built array rather than running mysqldump.
  *
- * Two flags matter beyond the connection details, and both match what the
- * local backup path in `backup.ts` already passes:
+ * Three flags matter beyond the connection details:
  * - `--set-gtid-purged=OFF` keeps `SET @@GLOBAL.GTID_PURGED` out of the dump.
  *   A GTID-enabled source (Aiven documents requiring this flag; managed MySQL
  *   generally) otherwise writes a statement only a superuser can replay, so
  *   the restore fails on the target.
  * - `--single-transaction` takes the dump inside one consistent InnoDB
  *   snapshot instead of locking the source tables while it reads them.
+ * - `--column-statistics=0` stops mysqldump from reading
+ *   `information_schema.COLUMN_STATISTICS`, a table that exists only in MySQL.
+ *   The source of a remote dump is not always MySQL: converting a MariaDB
+ *   database to MySQL runs this mysqldump against a MariaDB server, which has
+ *   no such table, so the dump aborts before it writes anything. The flag only
+ *   omits histogram statements, which are not restorable into a fresh target
+ *   anyway, so nothing is lost when the source really is MySQL.
  *
- * `--set-gtid-purged` is mysqldump-only: mariadb-dump rejects it outright, so
- * MariaDB builds its own arguments in `engines/mariadb/index.ts` and must
- * never reuse this builder.
+ * All three flags are mysqldump-only. `--set-gtid-purged` and
+ * `--column-statistics` are both rejected outright by mariadb-dump, so MariaDB
+ * builds its own arguments in `engines/mariadb/index.ts` and must never reuse
+ * this builder. Every mysqldump spindb ships is 8.0.40 or newer (see
+ * `engines/mysql/version-maps.ts`), well past the 8.0.2 that introduced
+ * `--column-statistics`, so the flag needs no version guard.
  */
 export function buildMysqlRemoteDumpArgs(options: {
   host: string
@@ -177,6 +186,7 @@ export function buildMysqlRemoteDumpArgs(options: {
     user,
     '--single-transaction', // Consistent snapshot without locking the source
     '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
+    '--column-statistics=0', // Source may be MariaDB, which has no COLUMN_STATISTICS
     '--result-file',
     outputPath,
     // mysqldump requires db-qualified names; qualify bare names with the
