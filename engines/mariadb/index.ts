@@ -132,6 +132,53 @@ async function runMariaDbBinary(
   })
 }
 
+/**
+ * Build the mariadb-dump argument list for a dump taken from a remote
+ * connection string. Exported for unit testing: the flags are the whole
+ * contract here, so the test asserts the built array rather than running
+ * mariadb-dump.
+ *
+ * `--single-transaction` takes the dump inside one consistent REPEATABLE READ
+ * snapshot of the InnoDB tables instead of reading each table at whatever
+ * point in time it gets to it. Without it, a dump of a live source can copy
+ * table A before a write and table B after it, which is how a restore ends up
+ * with rows that reference rows that are not there.
+ *
+ * The MySQL builder in `engines/mysql/index.ts` also passes
+ * `--set-gtid-purged=OFF`, and other MySQL paths pass `--column-statistics`.
+ * mariadb-dump rejects both outright, so the two builders stay separate and
+ * this one must never grow either flag.
+ */
+export function buildMariaDbRemoteDumpArgs(options: {
+  host: string
+  port: string
+  user: string
+  database: string
+  outputPath: string
+  excludeTables?: string[]
+}): string[] {
+  const { host, port, user, database, outputPath, excludeTables } = options
+
+  return [
+    '-h',
+    host,
+    '-P',
+    port,
+    '-u',
+    user,
+    '--single-transaction', // Consistent snapshot without locking the source
+    '--result-file',
+    outputPath,
+    // mariadb-dump requires db-qualified names; qualify bare names with the
+    // database being dumped
+    ...(excludeTables ?? []).map(
+      (table) =>
+        `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
+    ),
+    database,
+  ]
+}
+
 export class MariaDBEngine extends BaseEngine {
   name = ENGINE
   displayName = 'MariaDB'
@@ -972,23 +1019,14 @@ export class MariaDBEngine extends BaseEngine {
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
 
-    const args = [
-      '-h',
+    const args = buildMariaDbRemoteDumpArgs({
       host,
-      '-P',
       port,
-      '-u',
       user,
-      '--result-file',
-      outputPath,
-      // mariadb-dump requires db-qualified names; qualify bare names with the
-      // database being dumped
-      ...(options?.excludeTables ?? []).map(
-        (table) =>
-          `--ignore-table=${table.includes('.') ? table : `${database}.${table}`}`,
-      ),
       database,
-    ]
+      outputPath,
+      excludeTables: options?.excludeTables,
+    })
 
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
