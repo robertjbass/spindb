@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
+  createMariaDbDumpNormalizer,
   normalizeMariaDbDumpForMysql,
   normalizeMariaDbDumpFile,
   mapUca1400Collation,
@@ -375,6 +376,186 @@ describe('normalizeMariaDbDumpFile', () => {
       assert(
         converted.includes(Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x80, 0xff])),
         'the raw blob bytes should survive byte for byte',
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+// The shape mariadb-dump 11.x actually writes an extended insert in: the
+// keyword on one line, then one row per line, then the terminator. Only the
+// first line starts with INSERT.
+const EXTENDED_INSERT_DUMP = [
+  'CREATE TABLE `t_text` (',
+  '  `id` int NOT NULL AUTO_INCREMENT,',
+  '  `note` text COLLATE utf8mb4_uca1400_ai_ci NOT NULL,',
+  '  PRIMARY KEY (`id`)',
+  ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;',
+  '/*!40000 ALTER TABLE `t_text` DISABLE KEYS */;',
+  'INSERT INTO `t_text` VALUES',
+  "(1,'moved the table to utf8mb4_uca1400_ai_ci last week'),",
+  "(2,'sql_mode was STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER before'),",
+  "(3,'crémant and rosé, naïve café');",
+  '/*!40000 ALTER TABLE `t_text` ENABLE KEYS */;',
+  'CREATE TABLE `t_after` (',
+  '  `id` int NOT NULL,',
+  '  `label` varchar(64) COLLATE utf8mb4_uca1400_as_cs NOT NULL',
+  ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;',
+]
+
+// The three row lines and the keyword line, by index into the fixture above.
+const ROW_STATEMENT_LINES = [6, 7, 8, 9]
+
+describe('MariaDB dump normalization: multi-line row statements', () => {
+  it('leaves every line of an extended insert untouched, not just the first', () => {
+    // mariadb-dump writes one row per line and only the first line carries the
+    // INSERT keyword, so a per-line row guard protected the keyword line and
+    // none of the rows under it. Row 1 here names a collation and row 2 names
+    // a sql_mode; both are the user's own text and must arrive verbatim.
+    const normalizer = createMariaDbDumpNormalizer()
+    const output = EXTENDED_INSERT_DUMP.map((line) => normalizer.next(line))
+
+    for (const index of ROW_STATEMENT_LINES) {
+      assertEqual(
+        output[index].line,
+        EXTENDED_INSERT_DUMP[index],
+        `row statement line ${index} should be byte-identical`,
+      )
+      assertEqual(
+        totalRewrites(output[index].counts),
+        0,
+        `nothing should be rewritten on row statement line ${index}`,
+      )
+    }
+  })
+
+  it('still rewrites the DDL before the insert and after its terminator', () => {
+    const normalizer = createMariaDbDumpNormalizer()
+    const output = EXTENDED_INSERT_DUMP.map((line) => normalizer.next(line))
+
+    assertEqual(
+      output[2].line,
+      '  `note` text COLLATE utf8mb4_0900_ai_ci NOT NULL,',
+      'the column collation before the insert is rewritten',
+    )
+    assertEqual(
+      output[4].line,
+      ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;',
+      'the table collation before the insert is rewritten',
+    )
+
+    // The `;` on the last row line closes the statement, so the guard must be
+    // released: a CREATE TABLE after it is DDL again.
+    assertEqual(
+      output[13].line,
+      '  `label` varchar(64) COLLATE utf8mb4_0900_as_cs NOT NULL',
+      'the column collation after the insert is rewritten again',
+    )
+    assertEqual(
+      output[14].line,
+      ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;',
+      'the table collation after the insert is rewritten again',
+    )
+
+    const mapped = output.reduce(
+      (total, result) => total + result.counts.collationsMapped,
+      0,
+    )
+    assertEqual(mapped, 4, 'four DDL collations mapped, no row ones')
+  })
+
+  it('holds the guard across CRLF line endings', () => {
+    // A dump taken on Windows, or read by a splitter that keeps the carriage
+    // return, ends every line with \r. The terminator check trims first, so
+    // `);\r` still closes the statement and `\r` alone does not open it.
+    const normalizer = createMariaDbDumpNormalizer()
+    const output = EXTENDED_INSERT_DUMP.map(
+      (line) => normalizer.next(`${line}\r`).line,
+    )
+
+    for (const index of ROW_STATEMENT_LINES) {
+      assertEqual(
+        output[index],
+        `${EXTENDED_INSERT_DUMP[index]}\r`,
+        `row statement line ${index} should be byte-identical, CR included`,
+      )
+    }
+    assertEqual(
+      output[14],
+      ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\r',
+      'the guard was released by the CRLF-terminated row line',
+    )
+  })
+
+  it('does not open the guard on a single-line insert', () => {
+    // A one-line INSERT is already terminated, so the DDL on the next line
+    // must still be rewritten.
+    const normalizer = createMariaDbDumpNormalizer()
+
+    const row = normalizer.next(
+      "INSERT INTO `t_text` VALUES (1,'utf8mb4_uca1400_ai_ci');",
+    )
+    assertEqual(
+      row.line,
+      "INSERT INTO `t_text` VALUES (1,'utf8mb4_uca1400_ai_ci');",
+      'the row is untouched',
+    )
+    assertEqual(totalRewrites(row.counts), 0, 'nothing rewritten on the row')
+
+    const ddl = normalizer.next('COLLATE=utf8mb4_uca1400_ai_ci;')
+    assertEqual(
+      ddl.line,
+      'COLLATE=utf8mb4_0900_ai_ci;',
+      'the next line is DDL again',
+    )
+    assertEqual(ddl.counts.collationsMapped, 1, 'one collation mapped')
+  })
+
+  it('protects a multi-line REPLACE the same way', () => {
+    const normalizer = createMariaDbDumpNormalizer()
+    const lines = [
+      'REPLACE INTO `notes` VALUES',
+      "(1,'utf8mb3_uca1400_as_cs is MariaDB only');",
+    ]
+
+    const output = lines.map((line) => normalizer.next(line).line)
+    assertEqual(output[0], lines[0], 'the keyword line is untouched')
+    assertEqual(output[1], lines[1], 'the row line is untouched')
+  })
+
+  it('carries an extended insert through the whole file conversion', async () => {
+    // The regression as it actually shipped: normalizeMariaDbDumpFile is the
+    // only caller a real dump goes through.
+    const dir = await mkdtemp(join(tmpdir(), 'spindb-normalize-extended-'))
+    const inputPath = join(dir, 'source.sql')
+    const outputPath = join(dir, 'converted.sql')
+    await writeFile(inputPath, `${EXTENDED_INSERT_DUMP.join('\n')}\n`, 'utf8')
+
+    try {
+      const counts = await normalizeMariaDbDumpFile({ inputPath, outputPath })
+      const converted = await readFile(outputPath, 'utf8')
+
+      assertEqual(counts.collationsMapped, 4, 'only the DDL collations mapped')
+      assert(
+        converted.includes(
+          "(1,'moved the table to utf8mb4_uca1400_ai_ci last week'),",
+        ),
+        'the row keeps the collation name the user stored',
+      )
+      assert(
+        converted.includes(
+          "(2,'sql_mode was STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER before'),",
+        ),
+        'the row keeps the sql_mode name the user stored',
+      )
+      assert(
+        converted.includes("(3,'crémant and rosé, naïve café');"),
+        'non-ASCII row data survives',
+      )
+      assert(
+        !converted.includes('COLLATE=utf8mb4_uca1400_ai_ci;'),
+        'no DDL collation should survive',
       )
     } finally {
       await rm(dir, { recursive: true, force: true })
