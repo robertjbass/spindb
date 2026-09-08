@@ -5,7 +5,7 @@ import {
   NEUTRAL_DUMP_TOOL_NAME,
 } from '../../config/engines-registry'
 import { Engine } from '../../types'
-import { assertEqual } from '../utils/assertions'
+import { assertEqual, assertNotEqual } from '../utils/assertions'
 
 describe('Dump tool naming', () => {
   it('picks the dump utility out of an engine client tool list', () => {
@@ -45,6 +45,20 @@ describe('Dump tool naming', () => {
       NEUTRAL_DUMP_TOOL_NAME,
       'a client tool list without a dump tool reads neutrally',
     )
+  })
+
+  it('never falls back to pg_dump for a non-PostgreSQL engine', async () => {
+    // `spindb restore --from-url` used to label every non-MySQL failure
+    // pg_dump, so a MariaDB restore whose mariadb-dump was missing offered to
+    // install PostgreSQL's client tools.
+    for (const engine of [Engine.MariaDB, Engine.MySQL, Engine.MongoDB]) {
+      const tool = await getDumpToolName(engine)
+      assertNotEqual(
+        tool,
+        'pg_dump',
+        `${engine} must not report a pg_dump failure`,
+      )
+    }
   })
 
   it('resolves the dump tool for a real engine', async () => {

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test'
 import { buildMysqlRemoteDumpArgs } from '../../engines/mysql/index'
+import { MYSQL_VERSION_MAP } from '../../engines/mysql/version-maps'
 import { assert, assertDeepEqual, assertEqual } from '../utils/assertions'
 
 const baseOptions = {
@@ -29,6 +30,15 @@ describe('MySQL remote dump args', () => {
     )
   })
 
+  it('turns off column statistics so a MariaDB source can be dumped', () => {
+    const args = buildMysqlRemoteDumpArgs(baseOptions)
+
+    assert(
+      args.includes('--column-statistics=0'),
+      'mysqldump must not read information_schema.COLUMN_STATISTICS, which a MariaDB source does not have',
+    )
+  })
+
   it('builds the full argument list in order', () => {
     assertDeepEqual(
       buildMysqlRemoteDumpArgs(baseOptions),
@@ -41,6 +51,7 @@ describe('MySQL remote dump args', () => {
         'avnadmin',
         '--single-transaction',
         '--set-gtid-purged=OFF',
+        '--column-statistics=0',
         '--result-file',
         '/tmp/appdb.sql',
         'appdb',
@@ -68,5 +79,23 @@ describe('MySQL remote dump args', () => {
       'appdb',
       'the database must stay the final positional argument',
     )
+  })
+})
+
+describe('MySQL dump flag support', () => {
+  it('ships no mysqldump older than the 8.0.2 that added --column-statistics', () => {
+    // The remote dump passes --column-statistics=0 unconditionally, with no
+    // version guard. That is only safe while every mysqldump spindb can
+    // install understands the flag.
+    for (const version of Object.values(MYSQL_VERSION_MAP)) {
+      const [major, minor, patch] = version.split('.').map(Number)
+      const isSupported =
+        major > 8 || (major === 8 && (minor > 0 || (minor === 0 && patch >= 2)))
+
+      assert(
+        isSupported,
+        `MySQL ${version} predates --column-statistics (8.0.2); the remote dump builder needs a version guard`,
+      )
+    }
   })
 })
