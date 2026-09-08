@@ -355,11 +355,19 @@ jobs:
         id: mysql-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-mysql-8.0-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-mysql-8.0-mariadb-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download MySQL binaries (8.0 is the default in engines.json)
       - name: Install MySQL via SpinDB
         run: pnpm start engines download mysql 8.0
+
+      # The interop test below restores a real MariaDB source into a real
+      # MySQL 9 container, so it needs both engines' binaries.
+      - name: Install MySQL 9 via SpinDB (for the interop test)
+        run: pnpm start engines download mysql 9
+
+      - name: Install MariaDB via SpinDB (for the interop test)
+        run: pnpm start engines download mariadb 11.8
 
       # Show what SpinDB installed
       - name: Show installed engines
@@ -368,6 +376,12 @@ jobs:
       - name: Run MySQL integration tests
         run: pnpm test:engine mysql
         timeout-minutes: 15
+
+      # MariaDB source -> MySQL target restore-from-URL. Runs here because this
+      # job now has BOTH engines' binaries downloaded.
+      - name: Run MariaDB->MySQL interop tests
+        run: pnpm test:engine mysql-mariadb-interop
+        timeout-minutes: 20
 
   # ============================================
   # SQLite Integration Tests

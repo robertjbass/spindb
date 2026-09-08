@@ -560,6 +560,9 @@ export async function handleRestore(): Promise<void> {
           const dumpResult = await engine.dumpFromConnectionString(
             connectionString,
             tempDumpPath,
+            // Prefer a client tool matching this container's version when the
+            // engine keeps several installed.
+            { targetVersion: config.version },
           )
           dumpSpinner.succeed('Dump created from remote database')
           if (dumpResult.warnings?.length) {
@@ -1241,6 +1244,9 @@ export async function handleRestoreForContainer(
       const dumpResult = await engine.dumpFromConnectionString(
         connectionString,
         tempDumpPath,
+        // Prefer a client tool matching this container's version when the
+        // engine keeps several installed.
+        { targetVersion: config.version },
       )
       dumpSpinner.succeed('Dump created from remote database')
       if (dumpResult.warnings?.length) {

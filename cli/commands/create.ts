@@ -1130,6 +1130,9 @@ export const createCommand = new Command('create')
                 const dumpResult = await dbEngine.dumpFromConnectionString(
                   restoreLocation,
                   tempDumpPath,
+                  // Prefer a client tool matching the container being created
+                  // when the engine keeps several versions installed.
+                  { targetVersion: config.version },
                 )
                 dumpSpinner.succeed('Dump created from remote database')
                 if (dumpResult.warnings?.length) {

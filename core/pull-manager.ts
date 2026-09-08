@@ -302,11 +302,12 @@ export class PullManager {
 
       // Step 4: Dump remote to temp file
       logDebug(`Dumping remote database to: ${tempRemoteDump}`)
-      await engine.dumpFromConnectionString(
-        options.fromUrl,
-        tempRemoteDump,
-        buildRemoteDumpOptions(options),
-      )
+      await engine.dumpFromConnectionString(options.fromUrl, tempRemoteDump, {
+        ...buildRemoteDumpOptions(options),
+        // Prefer a client tool matching this container's version when the
+        // engine keeps several installed.
+        targetVersion: config.version,
+      })
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {
@@ -472,11 +473,12 @@ export class PullManager {
 
       // Step 3: Dump remote to temp file
       logDebug(`Dumping remote database to: ${tempRemoteDump}`)
-      await engine.dumpFromConnectionString(
-        options.fromUrl,
-        tempRemoteDump,
-        buildRemoteDumpOptions(options),
-      )
+      await engine.dumpFromConnectionString(options.fromUrl, tempRemoteDump, {
+        ...buildRemoteDumpOptions(options),
+        // Prefer a client tool matching this container's version when the
+        // engine keeps several installed.
+        targetVersion: config.version,
+      })
       tx.addRollback({
         description: 'Delete remote dump temp file',
         execute: async () => {

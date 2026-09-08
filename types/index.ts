@@ -352,6 +352,10 @@ export type RemoteDumpOptions = {
   excludeTables?: string[] // Skip these tables/collections entirely (schema + data)
   excludeTableData?: string[] // Keep schema but skip rows (PostgreSQL only)
   jobs?: number // Parallel dump workers; >1 switches pg_dump to directory format (-Fd)
+  // Version of the container the dump is headed for. Engines that keep several
+  // versions of a client tool installed use it to pick the one that matches
+  // the target instead of whichever path happens to be registered globally.
+  targetVersion?: string
 }
 
 export type PullResult = {
@@ -432,12 +436,29 @@ export type BackupResult = {
   size: number
 }
 
+/**
+ * What a remote dump actually ran against, for engines that have to choose.
+ *
+ * The dump tool follows the SOURCE server, so on a family with more than one
+ * client (MySQL and MariaDB share a wire protocol and a URL scheme) the tool
+ * that ran is not implied by the container being restored into. Reported to
+ * the user and carried into `--json` so a conversion is never silent.
+ */
+export type RemoteDumpSourceInfo = {
+  flavor: string // e.g. 'mysql', 'mariadb', 'unknown'
+  serverVersion?: string // What the source server announced
+  dumpTool: string // e.g. 'mysqldump', 'mariadb-dump'
+  dumpToolVersion?: string // Installed version the tool was taken from
+  rewrites?: Record<string, number> // Per-rule counts of dump statements rewritten
+}
+
 export type DumpResult = {
   filePath: string
   stdout?: string
   stderr?: string
   code?: number
   warnings?: string[]
+  remoteSource?: RemoteDumpSourceInfo
 }
 
 export type EngineInfo = {

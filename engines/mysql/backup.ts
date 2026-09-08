@@ -5,20 +5,14 @@
  */
 
 import { spawn, type SpawnOptions } from 'child_process'
-import { createWriteStream, existsSync } from 'fs'
+import { createWriteStream } from 'fs'
 import { stat } from 'fs/promises'
-import { join } from 'path'
 import { createGzip } from 'zlib'
 import { pipeline } from 'stream/promises'
 import { configManager } from '../../core/config-manager'
-import {
-  getWindowsSpawnOptions,
-  isWindows,
-  platformService,
-} from '../../core/platform-service'
+import { resolveBundledMysqlFamilyBinary } from '../../core/mysql-family-binary-resolver'
+import { getWindowsSpawnOptions, isWindows } from '../../core/platform-service'
 import { getEngineDefaults } from '../../config/defaults'
-import { paths } from '../../config/paths'
-import { normalizeVersion } from './version-maps'
 import {
   getDefaultUsername,
   loadCredentials,
@@ -36,48 +30,21 @@ const engineDef = getEngineDefaults('mysql')
  * Get mysqldump path for a specific MySQL version.
  *
  * Prioritizes SpinDB-managed binaries that match the container's version,
- * falling back to system mysqldump only if no matching version is found.
+ * falling back to the globally registered mysqldump only if no bundled binary
+ * carries the tool. The version preference itself lives in
+ * `core/mysql-family-binary-resolver.ts`, shared with the remote dump path, so
+ * "which mysqldump" is answered the same way everywhere.
  *
  * @param containerVersion - The container's MySQL version (e.g., "8" or "8.4.3")
  * @returns Path to the version-matched mysqldump binary
  */
 async function getMysqldumpPath(containerVersion: string): Promise<string> {
-  // Normalize to full version (e.g., "8" -> "8.4.3")
-  const fullVersion = normalizeVersion(containerVersion)
-
-  // Get platform info for building the binary path
-  const platformInfo = platformService.getPlatformInfo()
-  const ext = platformInfo.platform === 'win32' ? '.exe' : ''
-
-  // Try to find SpinDB-managed mysqldump for the matching version
-  const versionedBinPath = paths.getBinaryPath({
+  const bundled = resolveBundledMysqlFamilyBinary({
     engine: 'mysql',
-    version: fullVersion,
-    platform: platformInfo.platform,
-    arch: platformInfo.arch,
+    tool: 'mysqldump',
+    preferVersion: containerVersion,
   })
-
-  const versionedMysqldump = join(versionedBinPath, 'bin', `mysqldump${ext}`)
-
-  if (existsSync(versionedMysqldump)) {
-    return versionedMysqldump
-  }
-
-  // Try to find any installed version for this major version
-  const majorVersion = containerVersion.split('.')[0]
-  const installed = paths.findInstalledBinaryForMajor(
-    'mysql',
-    majorVersion,
-    platformInfo.platform,
-    platformInfo.arch,
-  )
-
-  if (installed) {
-    const installedMysqldump = join(installed.path, 'bin', `mysqldump${ext}`)
-    if (existsSync(installedMysqldump)) {
-      return installedMysqldump
-    }
-  }
+  if (bundled) return bundled.path
 
   // Fall back to globally registered mysqldump (system binary)
   const systemMysqldump = await configManager.getBinaryPath('mysqldump')
@@ -85,6 +52,7 @@ async function getMysqldumpPath(containerVersion: string): Promise<string> {
     return systemMysqldump
   }
 
+  const majorVersion = containerVersion.split('.')[0]
   throw new Error(
     `mysqldump not found for MySQL ${containerVersion}. ` +
       `Either download MySQL binaries with 'spindb create --engine mysql --version ${majorVersion}' ` +
