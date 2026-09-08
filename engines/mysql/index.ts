@@ -46,6 +46,18 @@ import {
 } from './restore'
 import { createBackup } from './backup'
 import {
+  normalizeMariaDbDumpFile,
+  totalRewrites,
+  type DumpNormalizationCounts,
+} from './dump-normalize'
+import { buildMariaDbRemoteDumpArgs } from '../mariadb/index'
+import { mariadbBinaryManager } from '../mariadb/binary-manager'
+import {
+  probeMysqlFamilyServer,
+  type MysqlFamilyServer,
+} from '../../core/server-handshake'
+import { resolveBundledMysqlFamilyBinary } from '../../core/mysql-family-binary-resolver'
+import {
   Engine,
   Platform,
   type Arch,
@@ -1105,15 +1117,57 @@ export class MySQLEngine extends BaseEngine {
     }
   }
 
+  /**
+   * Dump a remote database reached through a `mysql://` URL.
+   *
+   * **The dump tool follows the SOURCE server, not this container.** That is
+   * the rule PostgreSQL already follows (`validateDumpCompatibility` in
+   * `engines/postgresql/version-validator.ts` swaps in a `pg_dump` that can
+   * read the remote major). PostgreSQL only has to follow a version. The MySQL
+   * family has to follow a flavor as well, because MySQL and MariaDB share a
+   * wire protocol and a URL scheme: `mysql://host/db` says nothing about which
+   * server is on the other end, and the two ship different, mutually
+   * unusable dump tools.
+   *
+   * Guessing wrong is not a degraded dump, it is no dump at all. `mysqldump` 9
+   * cannot even authenticate against a MariaDB server: MySQL 9 dropped the
+   * `mysql_native_password` client plugin, MariaDB's root user still uses it,
+   * and the dump dies on `Authentication plugin 'mysql_native_password' cannot
+   * be loaded` before it reads a single table. No flag fixes that.
+   *
+   * So the source is probed first (`core/server-handshake.ts` reads the
+   * greeting the server sends on connect, without writing anything or
+   * authenticating), and a MariaDB source is dumped with `mariadb-dump` and
+   * then normalized for this MySQL target. A MySQL source, or a source that
+   * could not be probed, takes the unchanged `mysqldump` path.
+   */
   async dumpFromConnectionString(
     connectionString: string,
     outputPath: string,
     options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
-    const dumpPath = await this.getDumpPath()
-
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
+
+    const source = await probeMysqlFamilyServer({
+      host,
+      port: parseInt(port, 10) || 3306,
+    })
+
+    if (source.flavor === 'mariadb') {
+      return this.dumpFromMariaDbSource({
+        source,
+        host,
+        port,
+        user,
+        password,
+        database,
+        outputPath,
+        excludeTables: options?.excludeTables,
+      })
+    }
+
+    const dumpPath = await this.getDumpPath(options?.targetVersion)
 
     const args = buildMysqlRemoteDumpArgs({
       host,
@@ -1124,13 +1178,220 @@ export class MySQLEngine extends BaseEngine {
       excludeTables: options?.excludeTables,
     })
 
+    const { stdout, stderr } = await this.runDumpTool({
+      toolPath: dumpPath,
+      toolName: 'mysqldump',
+      args,
+      password,
+    })
+
+    logDebug('Remote dump taken with mysqldump', {
+      host,
+      sourceFlavor: source.flavor,
+      sourceVersion: source.version,
+      dumpPath,
+    })
+
+    return {
+      filePath: outputPath,
+      stdout,
+      stderr,
+      code: 0,
+      remoteSource: {
+        flavor: source.flavor,
+        serverVersion: source.version || undefined,
+        dumpTool: 'mysqldump',
+      },
+    }
+  }
+
+  /**
+   * Dump a MariaDB source into a file this MySQL container can restore.
+   *
+   * Two steps, both of which are needed: take the dump with MariaDB's own
+   * tool, then rewrite the MariaDB-only SQL it emits (see
+   * `engines/mysql/dump-normalize.ts` for exactly which statements and why).
+   */
+  private async dumpFromMariaDbSource(options: {
+    source: MysqlFamilyServer
+    host: string
+    port: string
+    user: string
+    password: string
+    database: string
+    outputPath: string
+    excludeTables?: string[]
+  }): Promise<DumpResult> {
+    const {
+      source,
+      host,
+      port,
+      user,
+      password,
+      database,
+      outputPath,
+      excludeTables,
+    } = options
+
+    const tool = await this.resolveMariaDbDumpPath(source)
+    // mariadb-dump writes through --result-file, so the raw dump lands beside
+    // the requested path and is rewritten into it.
+    const rawPath = `${outputPath}.mariadb`
+
+    const warnings: string[] = [
+      `Source is MariaDB ${source.version}; dumped with mariadb-dump ${tool.version} ` +
+        '(mysqldump cannot authenticate against a MariaDB server)',
+    ]
+    if (tool.downloaded) {
+      warnings.push(
+        `Downloaded MariaDB ${tool.version} client tools to read the source`,
+      )
+    }
+
+    let counts: DumpNormalizationCounts
+    let stdout: string
+    let stderr: string
+
+    try {
+      const dump = await this.runDumpTool({
+        toolPath: tool.path,
+        toolName: 'mariadb-dump',
+        args: buildMariaDbRemoteDumpArgs({
+          host,
+          port,
+          user,
+          database,
+          outputPath: rawPath,
+          excludeTables,
+        }),
+        password,
+      })
+      stdout = dump.stdout
+      stderr = dump.stderr
+
+      counts = await normalizeMariaDbDumpFile({
+        inputPath: rawPath,
+        outputPath,
+      })
+    } finally {
+      await rm(rawPath, { force: true })
+    }
+
+    if (totalRewrites(counts) > 0) {
+      warnings.push(
+        `Converted the dump for MySQL: ${counts.collationsMapped} uca1400 collations mapped, ` +
+          `${counts.sqlModeFlagsRemoved} NO_AUTO_CREATE_USER sql_mode flags removed, ` +
+          `${counts.sandboxDirectivesDropped} MariaDB sandbox directives dropped`,
+      )
+    }
+    warnings.push(
+      'MariaDB-only objects (sequences, UUID/INET4/INET6/VECTOR columns) are not ' +
+        'converted and will be reported by the server if the source uses them',
+    )
+
+    logDebug('Remote dump taken with mariadb-dump', {
+      host,
+      sourceVersion: source.version,
+      dumpPath: tool.path,
+      ...counts,
+    })
+
+    return {
+      filePath: outputPath,
+      stdout,
+      stderr,
+      code: 0,
+      warnings,
+      remoteSource: {
+        flavor: 'mariadb',
+        serverVersion: source.version,
+        dumpTool: 'mariadb-dump',
+        dumpToolVersion: tool.version,
+        rewrites: {
+          collationsMapped: counts.collationsMapped,
+          sqlModeFlagsRemoved: counts.sqlModeFlagsRemoved,
+          sandboxDirectivesDropped: counts.sandboxDirectivesDropped,
+        },
+      },
+    }
+  }
+
+  /**
+   * Find a `mariadb-dump` able to read this source, downloading MariaDB's
+   * client tools if none is installed.
+   *
+   * The source's own major.minor line is preferred, so an 11.8 server is read
+   * by an 11.8 tool when one is on disk; otherwise the newest installed
+   * MariaDB is used, and only a machine with no MariaDB at all downloads.
+   */
+  private async resolveMariaDbDumpPath(source: MysqlFamilyServer): Promise<{
+    path: string
+    version: string
+    downloaded: boolean
+  }> {
+    const preferVersion =
+      source.majorVersion !== null && source.minorVersion !== null
+        ? `${source.majorVersion}.${source.minorVersion}`
+        : undefined
+
+    const installed = resolveBundledMysqlFamilyBinary({
+      engine: 'mariadb',
+      tool: 'mariadb-dump',
+      preferVersion,
+    })
+    if (installed) return { ...installed, downloaded: false }
+
+    const { platform: p, arch: a } = this.getPlatformInfo()
+    const defaultVersion = getEngineDefaults('mariadb').defaultVersion
+
+    try {
+      await mariadbBinaryManager.ensureInstalled(defaultVersion, p, a)
+    } catch (error) {
+      throw new SpinDBError(
+        ErrorCodes.DEPENDENCY_MISSING,
+        `The source server is MariaDB ${source.version}, which needs mariadb-dump, ` +
+          `and downloading MariaDB ${defaultVersion} failed: ${(error as Error).message}`,
+        'fatal',
+        'Download MariaDB client tools: spindb engines download mariadb',
+      )
+    }
+
+    const downloaded = resolveBundledMysqlFamilyBinary({
+      engine: 'mariadb',
+      tool: 'mariadb-dump',
+      preferVersion,
+    })
+    if (!downloaded) {
+      throw new SpinDBError(
+        ErrorCodes.DEPENDENCY_MISSING,
+        `The source server is MariaDB ${source.version}, but no mariadb-dump is installed.`,
+        'fatal',
+        'Download MariaDB client tools: spindb engines download mariadb',
+      )
+    }
+
+    return { ...downloaded, downloaded: true }
+  }
+
+  /**
+   * Run a dump tool and collect its output. Shared by both source flavors so
+   * the failure surface (and the password handling) is identical.
+   */
+  private async runDumpTool(options: {
+    toolPath: string
+    toolName: string
+    args: string[]
+    password?: string
+  }): Promise<{ stdout: string; stderr: string }> {
+    const { toolPath, toolName, args, password } = options
+
     const spawnOptions: SpawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: password ? { ...process.env, MYSQL_PWD: password } : process.env,
     }
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(dumpPath, args, spawnOptions)
+      const proc = spawn(toolPath, args, spawnOptions)
 
       let stdout = ''
       let stderr = ''
@@ -1146,20 +1407,32 @@ export class MySQLEngine extends BaseEngine {
 
       proc.on('close', (code) => {
         if (code === 0) {
-          resolve({
-            filePath: outputPath,
-            stdout,
-            stderr,
-            code,
-          })
+          resolve({ stdout, stderr })
         } else {
-          reject(new Error(stderr || `mysqldump exited with code ${code}`))
+          reject(new Error(stderr || `${toolName} exited with code ${code}`))
         }
       })
     })
   }
 
-  private async getDumpPath(): Promise<string> {
+  /**
+   * Resolve mysqldump, preferring the version the dump is headed for.
+   *
+   * `configManager.getBinaryPath('mysqldump')` keeps ONE path per tool name
+   * with no version dimension, so on a machine with several MySQL versions
+   * installed it returns whichever was registered first and still exists: a
+   * 9.7.2 container was dumping through `mysql-9.6.0/bin/mysqldump`. The
+   * bundled cache is asked first, exactly as the local backup path already
+   * does, and the globally registered path stays the last resort.
+   */
+  private async getDumpPath(preferVersion?: string): Promise<string> {
+    const bundled = resolveBundledMysqlFamilyBinary({
+      engine: 'mysql',
+      tool: 'mysqldump',
+      preferVersion,
+    })
+    if (bundled) return bundled.path
+
     const configPath = await configManager.getBinaryPath('mysqldump')
     if (configPath) return configPath
 
