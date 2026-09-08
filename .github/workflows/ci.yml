@@ -367,7 +367,7 @@ jobs:
         run: pnpm start engines download mysql 9
 
       - name: Install MariaDB via SpinDB (for the interop test)
-        run: pnpm start engines download mariadb
+        run: pnpm start engines download mariadb 11.8
 
       # Show what SpinDB installed
       - name: Show installed engines
