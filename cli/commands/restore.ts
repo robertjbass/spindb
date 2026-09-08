@@ -24,6 +24,7 @@ import {
   isFileBasedEngine,
   isRemoteContainer,
   restoreCreatesDatabase,
+  type RemoteDumpSourceInfo,
 } from '../../types'
 import { logDebug } from '../../core/error-handler'
 import { getEngineMetadata } from '../helpers'
@@ -68,6 +69,10 @@ export const restoreCommand = new Command('restore')
       },
     ) => {
       let tempDumpPath: string | null = null
+      // Which tool the remote dump actually ran, when the engine had to
+      // choose one (a `mysql://` source can be MySQL or MariaDB). Surfaced in
+      // --json so a conversion is visible to a script, not just to a reader.
+      let remoteSource: RemoteDumpSourceInfo | undefined
 
       try {
         let containerName = name
@@ -403,8 +408,13 @@ export const restoreCommand = new Command('restore')
               const dumpResult = await engine.dumpFromConnectionString(
                 options.fromUrl,
                 tempDumpPath,
+                // Let the engine prefer a client tool that matches the
+                // container being restored into when it keeps several
+                // versions installed.
+                { targetVersion: config.version },
               )
               dumpSpinner.succeed('Dump created from remote database')
+              remoteSource = dumpResult.remoteSource
               if (dumpResult.warnings?.length) {
                 for (const warning of dumpResult.warnings) {
                   console.log(chalk.yellow(`  ${warning}`))
@@ -735,6 +745,7 @@ export const restoreCommand = new Command('restore')
               engine: engineName,
               format: format.description,
               sourceType: options.fromUrl ? 'remote' : 'file',
+              ...(remoteSource ? { remoteSource } : {}),
               connectionString,
               overwritten: databaseExists,
               ...metadata,

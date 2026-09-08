@@ -40,6 +40,9 @@ const ENGINE_TEST_FILES: Record<string, string> = {
   // Cross-engine: MongoDB <-> FerretDB backup/restore interoperability. Needs
   // BOTH engines' binaries (run from the FerretDB CI job, which downloads both).
   'mongo-ferret-interop': 'mongo-ferret-interop.test.ts',
+  // Cross-engine: restoring a MariaDB source into a MySQL container. Needs
+  // BOTH engines' binaries (run from the MySQL CI job, which downloads both).
+  'mysql-mariadb-interop': 'mysql-mariadb-interop.test.ts',
 }
 
 // Aliases for engine names (maps alias -> canonical name)

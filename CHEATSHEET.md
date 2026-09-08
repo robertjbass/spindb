@@ -250,6 +250,18 @@ spindb restore mydb --from-url "postgresql://admin:quest@host:8812/qdb"  # Quest
 spindb restore mydb --from-url "http://host:8086"                      # InfluxDB
 ```
 
+The tool that takes a remote dump follows the SOURCE server, not the container
+you are restoring into. A `mysql://` URL can reach either MySQL or MariaDB, so
+spindb reads the server's greeting first and dumps a MariaDB source with
+`mariadb-dump` (downloading MariaDB's client tools if you have none), then
+converts the dump for the MySQL target: MariaDB's `uca1400` collations become
+their MySQL `0900` counterparts and the `NO_AUTO_CREATE_USER` sql_mode MySQL 8+
+rejects is dropped. What was converted is printed, and reported under
+`remoteSource` in `--json`. MariaDB-only objects (sequences, `UUID`, `INET4`,
+`INET6`, `VECTOR`) have no MySQL equivalent and are left to fail with the
+server's own error rather than silently changed. PostgreSQL already worked this
+way, swapping in a `pg_dump` that can read the remote major version.
+
 ## Clone
 
 ```bash
