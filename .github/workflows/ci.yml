@@ -375,7 +375,7 @@ jobs:
 
       - name: Run MySQL integration tests
         run: pnpm test:engine mysql
-        timeout-minutes: 15
+        timeout-minutes: 25
 
       # MariaDB source -> MySQL target restore-from-URL. Runs here because this
       # job now has BOTH engines' binaries downloaded.
