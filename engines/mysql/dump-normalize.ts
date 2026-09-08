@@ -78,11 +78,20 @@ const UCA1400_SUFFIX_MAP: Record<string, string> = {
   ai_cs: 'utf8mb4_0900_as_cs',
 }
 
+// The two suffixes that ask for case sensitivity. MariaDB spells accent and
+// case sensitivity separately; only the case half survives a utf8mb3 target.
+const CASE_SENSITIVE_SUFFIXES = new Set(['as_cs', 'ai_cs'])
+
 const UTF8MB4_FALLBACK = 'utf8mb4_0900_ai_ci'
 const UTF8MB3_FALLBACK = 'utf8mb3_unicode_ci'
+// MySQL has no utf8mb3 UCA collation that is case sensitive, so a schema that
+// asked for one gets `utf8mb3_bin`. Binary ordering is not UCA ordering, but it
+// is the only utf8mb3 collation that keeps case sensitivity, and losing case
+// sensitivity silently changes which rows a comparison matches.
+const UTF8MB3_CASE_SENSITIVE = 'utf8mb3_bin'
 
 const UTF8MB4_UCA1400 = /\butf8mb4_uca1400_([a-z0-9_]+)/gi
-const UTF8MB3_UCA1400 = /\b(?:utf8mb3|utf8)_uca1400_[a-z0-9_]+/gi
+const UTF8MB3_UCA1400 = /\b(?:utf8mb3|utf8)_uca1400_([a-z0-9_]+)/gi
 const SQL_MODE_ASSIGNMENT = /\bsql_mode\s*=\s*'/i
 const ROW_STATEMENT = /^\s*(?:INSERT|REPLACE)\b/i
 const SANDBOX_DIRECTIVE = /^\s*\/\*M!\d+\\?-.*sandbox mode.*\*\/\s*;?\s*$/i
@@ -99,8 +108,32 @@ const NO_AUTO_CREATE_USER = 'NO_AUTO_CREATE_USER'
  * not line up one-for-one with MariaDB's.
  */
 export function mapUca1400Collation(suffix: string): string {
-  const normalized = suffix.toLowerCase().replace(/^nopad_/, '')
-  return UCA1400_SUFFIX_MAP[normalized] ?? UTF8MB4_FALLBACK
+  return UCA1400_SUFFIX_MAP[normalizeUca1400Suffix(suffix)] ?? UTF8MB4_FALLBACK
+}
+
+/**
+ * Map one MariaDB utf8mb3 uca1400 collation name to a utf8mb3 collation MySQL
+ * has.
+ *
+ * Same suffix parsing as `mapUca1400Collation`, different target set: MySQL's
+ * UCA 9.0.0 collations are utf8mb4 only, so a utf8mb3 column cannot follow the
+ * charset it declared into `utf8mb4_0900_*`. What it can keep is case
+ * sensitivity, so `_as_cs` and `_ai_cs` (and their `nopad_` forms) map to
+ * `utf8mb3_bin` rather than being flattened into a `_ci` collation that would
+ * quietly start matching rows the source did not.
+ */
+export function mapUca1400Utf8mb3Collation(suffix: string): string {
+  return CASE_SENSITIVE_SUFFIXES.has(normalizeUca1400Suffix(suffix))
+    ? UTF8MB3_CASE_SENSITIVE
+    : UTF8MB3_FALLBACK
+}
+
+/**
+ * `nopad_` is a padding variant MySQL does not spell out in the collation name,
+ * so it is stripped before the accent/case suffix is read.
+ */
+function normalizeUca1400Suffix(suffix: string): string {
+  return suffix.toLowerCase().replace(/^nopad_/, '')
 }
 
 /**
@@ -122,9 +155,9 @@ export function normalizeMariaDbDumpForMysql(line: string): NormalizedDumpLine {
     return mapUca1400Collation(suffix)
   })
 
-  result = result.replace(UTF8MB3_UCA1400, () => {
+  result = result.replace(UTF8MB3_UCA1400, (_match, suffix: string) => {
     counts.collationsMapped++
-    return UTF8MB3_FALLBACK
+    return mapUca1400Utf8mb3Collation(suffix)
   })
 
   if (
