@@ -359,6 +359,103 @@ const mysqlDependencies: EngineDependencies = {
 }
 
 // =============================================================================
+// MariaDB Dependencies
+// =============================================================================
+
+// MariaDB registers its binaries under their native names (see
+// `engines/mariadb/index.ts`), not the mysql-prefixed compatibility symlinks,
+// so the `mysql` entry above never matched a MariaDB container. Without this
+// entry `getEngineDependencies('mariadb')` returned undefined and every
+// dependency preflight for MariaDB silently found nothing missing.
+function createMariadbClientDependency(
+  name: string,
+  description: string,
+): Dependency {
+  return {
+    name,
+    binary: name,
+    description,
+    packages: {
+      brew: { package: 'mariadb' },
+      apt: { package: 'mariadb-client' },
+      yum: { package: 'mariadb' },
+      dnf: { package: 'mariadb' },
+      pacman: { package: 'mariadb-clients' },
+      choco: { package: 'mariadb' },
+      winget: { package: 'MariaDB.Server' },
+      scoop: { package: 'mariadb' },
+    },
+    manualInstall: {
+      darwin: [
+        'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+        'Then run: brew install mariadb',
+      ],
+      linux: [
+        'Debian/Ubuntu: sudo apt install mariadb-client',
+        'CentOS/RHEL: sudo yum install mariadb',
+        'Fedora: sudo dnf install mariadb',
+        'Arch: sudo pacman -S mariadb-clients',
+      ],
+      win32: [
+        'Using Chocolatey: choco install mariadb',
+        'Using winget: winget install MariaDB.Server',
+        'Using Scoop: scoop install mariadb',
+        'Or download from: https://mariadb.org/download/',
+      ],
+    },
+  }
+}
+
+const mariadbDependencies: EngineDependencies = {
+  engine: 'mariadb',
+  displayName: 'MariaDB',
+  dependencies: [
+    {
+      name: 'mariadbd',
+      binary: 'mariadbd',
+      description: 'MariaDB server daemon',
+      packages: {
+        brew: { package: 'mariadb' },
+        apt: { package: 'mariadb-server' },
+        yum: { package: 'mariadb-server' },
+        dnf: { package: 'mariadb-server' },
+        pacman: { package: 'mariadb' },
+        choco: { package: 'mariadb' },
+        winget: { package: 'MariaDB.Server' },
+        scoop: { package: 'mariadb' },
+      },
+      manualInstall: {
+        darwin: [
+          'Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+          'Then run: brew install mariadb',
+        ],
+        linux: [
+          'Debian/Ubuntu: sudo apt install mariadb-server',
+          'CentOS/RHEL: sudo yum install mariadb-server',
+          'Fedora: sudo dnf install mariadb-server',
+          'Arch: sudo pacman -S mariadb',
+        ],
+        win32: [
+          'Using Chocolatey: choco install mariadb',
+          'Using winget: winget install MariaDB.Server',
+          'Using Scoop: scoop install mariadb',
+          'Or download from: https://mariadb.org/download/',
+        ],
+      },
+    },
+    createMariadbClientDependency('mariadb', 'MariaDB command-line client'),
+    createMariadbClientDependency(
+      'mariadb-dump',
+      'MariaDB database backup utility',
+    ),
+    createMariadbClientDependency(
+      'mariadb-admin',
+      'MariaDB server administration utility',
+    ),
+  ],
+}
+
+// =============================================================================
 // SQLite Dependencies
 // =============================================================================
 
@@ -838,6 +935,7 @@ export const iredisDependency: Dependency = {
 export const engineDependencies: EngineDependencies[] = [
   postgresqlDependencies,
   mysqlDependencies,
+  mariadbDependencies,
   sqliteDependencies,
   mongodbDependencies,
   redisDependencies,

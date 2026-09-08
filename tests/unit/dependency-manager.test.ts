@@ -9,7 +9,13 @@ import {
   clientToolCheckRequired,
   type DetectedPackageManager,
 } from '../../core/dependency-manager'
-import { assert, assertEqual } from '../utils/assertions'
+import { getEngineDependencies } from '../../config/os-dependencies'
+import {
+  assert,
+  assertDeepEqual,
+  assertEqual,
+  assertTruthy,
+} from '../utils/assertions'
 
 describe('DependencyManager', () => {
   describe('detectPackageManager', () => {
@@ -499,5 +505,51 @@ describe('clientToolCheckRequired (C-009)', () => {
       true,
       'default (no flag) must require the client-tool check',
     )
+  })
+})
+
+describe('Engine dependency coverage', () => {
+  it('knows MariaDB and names its native binaries', () => {
+    const deps = getEngineDependencies('mariadb')
+
+    assertTruthy(
+      deps,
+      'a missing mariadb entry makes the restore dependency preflight a silent no-op',
+    )
+
+    const binaries = deps.dependencies.map((d) => d.binary).sort()
+    assertDeepEqual(
+      binaries,
+      ['mariadb', 'mariadb-admin', 'mariadb-dump', 'mariadbd'],
+      'MariaDB registers its binaries under native names, not the mysql-prefixed ones',
+    )
+  })
+
+  it('keeps the MySQL entry on the mysql-prefixed binaries', () => {
+    const deps = getEngineDependencies('mysql')
+
+    assertTruthy(deps, 'the mysql entry must still exist')
+    assert(
+      deps.dependencies.every((d) => d.binary.startsWith('mysql')),
+      'the mysql entry must not start claiming MariaDB binaries',
+    )
+  })
+
+  it('gives every engine dependency a package entry per platform', () => {
+    const deps = getEngineDependencies('mariadb')
+    assertTruthy(deps, 'the mariadb entry must exist')
+
+    for (const dep of deps.dependencies) {
+      assert(
+        Object.keys(dep.packages).length > 0,
+        `${dep.binary} should declare package names`,
+      )
+      for (const platform of ['darwin', 'linux', 'win32'] as const) {
+        assert(
+          (dep.manualInstall[platform]?.length ?? 0) > 0,
+          `${dep.binary} should carry manual install steps for ${platform}`,
+        )
+      }
+    }
   })
 })

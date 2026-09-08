@@ -16,6 +16,7 @@ import { uiSuccess, uiError, uiWarning } from '../ui/theme'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getMissingDependencies } from '../../core/dependency-manager'
+import { getDumpToolName } from '../../config/engines-registry'
 import { platformService } from '../../core/platform-service'
 import { TransactionManager } from '../../core/transaction-manager'
 import {
@@ -385,6 +386,12 @@ export const restoreCommand = new Command('restore')
           let attempts = 0
           const maxAttempts = 2
 
+          // Name the dump tool this engine actually runs. The label used to be
+          // mysqldump for MySQL and pg_dump for everything else, so a MariaDB
+          // restore whose mariadb-dump was missing reported a pg_dump failure
+          // and offered to install PostgreSQL's client tools.
+          const dumpTool = await getDumpToolName(engineName)
+
           while (!dumpSuccess && attempts < maxAttempts) {
             attempts++
             const dumpSpinner = createSpinner(
@@ -409,7 +416,6 @@ export const restoreCommand = new Command('restore')
               const e = error as Error
               dumpSpinner.fail('Failed to create dump')
 
-              const dumpTool = engineName === 'mysql' ? 'mysqldump' : 'pg_dump'
               if (
                 e.message.includes(`${dumpTool} not found`) ||
                 e.message.includes('ENOENT')
