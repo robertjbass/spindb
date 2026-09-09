@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.2] - 2026-09-09
+
+### Fixed
+
+- **`spindb restore --force` over a PostgreSQL database something is still connected to no longer loses the race.** PostgreSQL refuses `DROP DATABASE` while any session is attached to the target, and the destructive restore path drops the target before restoring it. 0.62.10 made `dropDatabase` terminate the attached backends first, which fixes a session that just sits there, but terminating and then dropping are two separate statements: anything that reconnects on its own between them - a pgbouncer pool re-opening its server connection, a query console, the customer's app - re-attaches inside that window and the drop fails again. On PostgreSQL 13+ the drop is now `DROP DATABASE "x" WITH (FORCE)`, which terminates the sessions inside the same statement, so there is no window to reconnect in; older servers keep the two-step and get one retry after a short delay. The version gate reads the container's pinned version (an unrecorded or unparseable version is treated as pre-13, the safe direction), and a server that turns out not to understand the option falls back to the two-step rather than reporting a syntax error. The drop connection targets the maintenance database as before, and `template1` in the one case where the target IS `postgres`. MySQL and MariaDB need none of this: their `DROP DATABASE` does not refuse on account of open connections, so their drop path is unchanged.
+- **A restore that could not drop the target now says why.** The failure was reported as the bare label `Failed to drop database` and rethrown into the generic handler, which printed `exec`'s `Command failed: <the whole psql command line>` - so the server's actual reason (a session still attached, a permission the caller does not have, a template database) never reached anyone. A cloud migration failed three times in a row on exactly this with nothing to go on. `--json` now emits `{ error: 'Failed to drop database "x": <the server's text>', errorName?, errorCode?, phase: "drop-target" }` and non-`--json` writes both the label and the detail to stderr, so a pipe keeps them together. `phase: "drop-target"` is the useful part for a caller: the restore never started, so the existing database is untouched. The PostgreSQL admin statements behind it (drop, terminate) moved from a shell command string to `spawn`, which is what makes the error text available at all, and drops the separate Windows quoting branch.
+
 ## [0.69.1] - 2026-09-09
 
 ### Added
