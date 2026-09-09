@@ -95,6 +95,7 @@ spindb run myapp -c "SELECT version()"           # Run inline SQL
 spindb run myapp ./schema.sql                    # Run SQL file
 spindb backup myapp --format sql                 # Backup
 spindb url myapp --copy                          # Copy connection string
+spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/roles first
 ```
 
 ### MongoDB

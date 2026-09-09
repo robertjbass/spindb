@@ -29,6 +29,12 @@ import {
   exitWithError,
   logWarning,
 } from '../../core/error-handler'
+import {
+  classifyRestoreOutcome,
+  restoreDiagnosticsJson,
+  restoreErrorReportLines,
+  restoreFailureMessage,
+} from '../../core/restore-outcome'
 import { resolve } from 'path'
 import { Engine, Platform, ALL_ENGINES } from '../../types'
 import { canCreateDatabase } from '../../core/database-capabilities'
@@ -547,6 +553,16 @@ export const createCommand = new Command('create')
       },
     ) => {
       let tempDumpPath: string | null = null
+      // How the --from restore turned out, when there was one. Mirrors the
+      // `restore` command's contract so a create-with-import reports a partial
+      // restore instead of a clean success.
+      let restoreStatus: 'completed' | 'completed_with_errors' | undefined
+      let restoreDiagnostics: Record<string, unknown> = {}
+      // What the remote dump rewrote on its way in (a MariaDB source dumped
+      // for a MySQL target, say). Human text in `--json` mode would sit ahead
+      // of the JSON object and make stdout unparseable, so it is carried in
+      // the payload instead of printed.
+      let remoteDumpWarnings: string[] = []
 
       try {
         let containerName = name
@@ -1136,8 +1152,11 @@ export const createCommand = new Command('create')
                 )
                 dumpSpinner.succeed('Dump created from remote database')
                 if (dumpResult.warnings?.length) {
-                  for (const warning of dumpResult.warnings) {
-                    console.log(chalk.yellow(`  ${warning}`))
+                  remoteDumpWarnings = dumpResult.warnings
+                  if (!options.json) {
+                    for (const warning of dumpResult.warnings) {
+                      console.log(chalk.yellow(`  ${warning}`))
+                    }
                   }
                 }
                 backupPath = tempDumpPath
@@ -1202,22 +1221,30 @@ export const createCommand = new Command('create')
             createDatabase: false,
           })
 
-          if (result.code === 0) {
-            restoreSpinner.succeed('Backup restored successfully')
-          } else {
-            restoreSpinner.warn('Restore completed with warnings')
-            if (result.stderr) {
-              console.log(chalk.yellow('\n  Warnings:'))
-              const lines = result.stderr.split('\n').slice(0, 5)
-              lines.forEach((line) => {
-                if (line.trim()) {
-                  console.log(chalk.gray(`    ${line}`))
-                }
-              })
-              if (result.stderr.split('\n').length > 5) {
-                console.log(chalk.gray('    ...'))
+          // Same classifier the `restore` command uses: an import that could
+          // not create half its objects must not read as a clean create.
+          const restoreOutcome = classifyRestoreOutcome(result)
+          restoreStatus = restoreOutcome.status
+          restoreDiagnostics = restoreDiagnosticsJson(restoreOutcome)
+
+          if (restoreOutcome.failed) {
+            restoreSpinner.fail('Restore failed')
+            throw new Error(restoreFailureMessage(result))
+          }
+
+          if (restoreOutcome.hadObjectErrors) {
+            restoreSpinner.warn(restoreOutcome.summary)
+            if (!options.json) {
+              console.log(chalk.yellow('\n  Objects that failed to restore:'))
+              for (const line of restoreErrorReportLines(
+                restoreOutcome.diagnostics,
+                10,
+              )) {
+                console.log(chalk.gray(`    ${line}`))
               }
             }
+          } else {
+            restoreSpinner.succeed(restoreOutcome.summary)
           }
         }
 
@@ -1240,6 +1267,11 @@ export const createCommand = new Command('create')
                 connectionString,
                 status: finalConfig.status,
                 restored: !!restoreLocation,
+                ...(restoreStatus ? { restoreStatus } : {}),
+                ...(remoteDumpWarnings.length > 0
+                  ? { remoteDumpWarnings }
+                  : {}),
+                ...restoreDiagnostics,
                 ...metadata,
               }),
             )

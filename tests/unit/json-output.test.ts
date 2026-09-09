@@ -404,6 +404,40 @@ describe('JSON Output Validation', () => {
         }
       }
     })
+
+    it('spindb restore nonexistent <file> --json should output JSON error', () => {
+      const result = runCommand(
+        'restore nonexistent-container-12345 /tmp/does-not-exist.dump --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error('restore --json should fail for nonexistent container')
+      }
+      const output = result.stdout.trim()
+      assertValidJson(output, 'restore nonexistent --json')
+      const parsed = JSON.parse(output)
+      if (!parsed.error) {
+        throw new Error('restore error should include "error" field')
+      }
+    })
+
+    it('spindb restore nonexistent --from-url --json should output JSON error', () => {
+      // The remote-dump failure paths used to print NOTHING in --json mode, so
+      // a script got exit 1 with empty stdout and no way to know why.
+      const result = runCommand(
+        'restore nonexistent-container-12345 --from-url postgresql://user:pw@127.0.0.1:1/db --json',
+      )
+      if (result.exitCode === 0) {
+        throw new Error(
+          'restore --from-url --json should fail for nonexistent container',
+        )
+      }
+      const output = result.stdout.trim()
+      assertValidJson(output, 'restore --from-url nonexistent --json')
+      const parsed = JSON.parse(output)
+      if (!parsed.error) {
+        throw new Error('restore --from-url error should include "error" field')
+      }
+    })
   })
 
   describe('JSON structure validation', () => {

@@ -8,6 +8,7 @@ import {
   createDependencyMissingError,
   isValidDatabaseName,
   assertValidDatabaseName,
+  describeThrown,
 } from '../../core/error-handler'
 import { assert, assertEqual } from '../utils/assertions'
 
@@ -437,5 +438,46 @@ describe('Database Name Validation', () => {
       }
       assert(threw, 'Should have thrown an error for name starting with number')
     })
+  })
+})
+
+describe('describeThrown', () => {
+  it('describes a normal Error', () => {
+    const d = describeThrown(new Error('pg_dump: connection refused'))
+    assertEqual(d.message, 'pg_dump: connection refused', 'message is kept')
+    assertEqual(d.name, 'Error', 'name is reported')
+  })
+
+  it('carries the code off a system error', () => {
+    const error = Object.assign(new Error('spawn pg_dump ENOENT'), {
+      code: 'ENOENT',
+    })
+    const d = describeThrown(error)
+    assertEqual(d.code, 'ENOENT', 'the errno code is reported')
+  })
+
+  it('falls back to the name when the message is empty', () => {
+    const error = new Error('')
+    error.name = 'AbortError'
+    assertEqual(describeThrown(error).message, 'AbortError', 'name is used')
+  })
+
+  it('describes a thrown string', () => {
+    assertEqual(describeThrown('  boom  ').message, 'boom', 'string is trimmed')
+  })
+
+  it('describes a rejected plain object instead of yielding undefined', () => {
+    // This is the case that made `--json` print a bare `{}`: a rejection that
+    // is not an Error has no `.message`, and JSON.stringify drops undefined.
+    const d = describeThrown({ code: 'WRONGPASS', errno: -1 })
+    assert(d.message.includes('WRONGPASS'), 'the payload is described')
+    assertEqual(d.code, 'WRONGPASS', 'the code is lifted out')
+    assert(d.message.length > 0, 'never empty')
+  })
+
+  it('describes null, undefined and a bare value', () => {
+    assertEqual(describeThrown(null).message, 'Unknown error', 'null')
+    assertEqual(describeThrown(undefined).message, 'Unknown error', 'undefined')
+    assertEqual(describeThrown(42).message, '42', 'number')
   })
 })

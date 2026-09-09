@@ -4,7 +4,8 @@
 
 Quick capture for ideas that need review and prioritization:
 
--
+- [ ] **Restore diagnostics for the non-PostgreSQL engines.** `engines/postgresql/restore-diagnostics.ts` parses `pg_restore`/`psql` error lines, so a partial restore on those engines reports `status: completed_with_errors` with the objects that failed. The MySQL family (`ERROR 1064 (42000) at line N:`) and `mongorestore` (`Failed: ... error`) print their own shapes and currently classify as a clean success unless the tool also exits non-zero. Add a per-engine parser behind the same `RestoreResult.diagnostics` field rather than widening the pg regexes.
+- [ ] **`--pre-sql` for the remaining engines.** Gated to PostgreSQL/MySQL/MariaDB because only their `runScript` honors `quiet`, which `--json` needs. Any engine that grows a quiet script path can join the allowlist in `cli/commands/restore.ts`.
 
 ---
 

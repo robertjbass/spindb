@@ -159,6 +159,65 @@ export class UnsupportedOperationError extends Error {
   }
 }
 
+export type ThrownDescription = {
+  message: string
+  name?: string
+  code?: string
+}
+
+/**
+ * Describe anything a `catch` can receive.
+ *
+ * `(error as Error).message` is a lie the type system allows: a thrown string,
+ * a rejected `{ code, stderr }` object, or an `AggregateError` all leave it
+ * `undefined`, and `JSON.stringify({ error: undefined })` is `{}` - an empty
+ * object where an error report should be, which is exactly what a `--json`
+ * caller got when a Redis keyspace copy failed. Always yields a non-empty
+ * message.
+ */
+export function describeThrown(error: unknown): ThrownDescription {
+  if (error instanceof Error) {
+    const withCode = error as Error & { code?: unknown }
+    return {
+      message: error.message?.trim() || error.name || 'Unknown error',
+      name: error.name || undefined,
+      code:
+        typeof withCode.code === 'string' || typeof withCode.code === 'number'
+          ? String(withCode.code)
+          : undefined,
+    }
+  }
+
+  if (typeof error === 'string') {
+    return { message: error.trim() || 'Unknown error' }
+  }
+
+  if (error === null || error === undefined) {
+    return { message: 'Unknown error' }
+  }
+
+  const record = error as Record<string, unknown>
+  const name = typeof record.name === 'string' ? record.name : undefined
+  const code =
+    typeof record.code === 'string' || typeof record.code === 'number'
+      ? String(record.code)
+      : undefined
+
+  let message: string
+  if (typeof record.message === 'string' && record.message.trim()) {
+    message = record.message.trim()
+  } else {
+    try {
+      const json = JSON.stringify(error)
+      message = json && json !== '{}' ? json : String(error)
+    } catch {
+      message = String(error)
+    }
+  }
+
+  return { message: message || 'Unknown error', name, code }
+}
+
 function getLogPath(): string {
   return join(getSpinDBRoot(), 'spindb.log')
 }

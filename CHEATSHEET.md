@@ -234,6 +234,15 @@ spindb restore mydb ./backup.dump --into-existing  # In-place: restore INTO the 
                                         # Replaces the backed-up objects; objects added after the
                                         # backup survive. Wire engines only (pg/mysql/mariadb/mongo/
                                         # ferret/cockroach/clickhouse/questdb).
+spindb restore mydb ./backup.dump --pre-sql ./shims.sql  # Run a SQL file against the target
+                                        # AFTER it is created and BEFORE the restore. For the
+                                        # compatibility shims a dump needs and the target lacks:
+                                        # a missing extension, roles the dump grants to, a
+                                        # function a column default calls. PostgreSQL, MySQL and
+                                        # MariaDB. Works with --into-existing too (it runs before
+                                        # that restore as well). A shim that fails aborts the
+                                        # restore, and rolls back the database this restore
+                                        # created (never one you already had).
 
 # Restore from remote database (all engines supported)
 spindb restore mydb --from-url "postgresql://user:pass@host:5432/db"
@@ -261,6 +270,58 @@ rejects is dropped. What was converted is printed, and reported under
 `INET6`, `VECTOR`) have no MySQL equivalent and are left to fail with the
 server's own error rather than silently changed. PostgreSQL already worked this
 way, swapping in a `pg_dump` that can read the remote major version.
+
+### A restore that lost objects says so
+
+`pg_restore` keeps going past an object it cannot create. A dump that references
+an extension the target does not have (`uuid-ossp`, PostGIS) or roles it does not
+have (`authenticated`, `service_role` in a Supabase dump) can therefore fail every
+`CREATE TABLE` whose column default calls that extension, skip every `COPY` into
+those tables, and still end with a zero exit code. The restore now reports what
+the tool actually said:
+
+```bash
+spindb restore mydb ./supabase.dump -d app --force --json
+```
+
+```json
+{
+  "success": true,
+  "status": "completed_with_errors",
+  "restoreErrorCount": 9,
+  "restoreErrors": ["pg_restore: error: could not execute query: ERROR:  extension \"uuid-ossp\" is not available"],
+  "restoreWarningCount": 1,
+  "restoreIgnoredErrors": 819,
+  "restoreErrorsTruncated": false
+}
+```
+
+- `status` is `completed` or `completed_with_errors`, and is always present.
+- The five `restore*` fields appear ONLY when objects failed. `restoreErrors` is
+  deduplicated and capped at 200 entries; `restoreErrorCount` is the uncapped
+  total of the error lines the tool printed, so it is the number to trust over
+  the length of the list.
+- `restoreIgnoredErrors` is a different number: `pg_restore`'s own
+  `errors ignored on restore: N` summary, which counts every ignored failure
+  rather than the lines it chose to print. It is normally the larger of the two,
+  and is `null` when the tool printed no summary.
+- `success` stays `true` and the exit code stays 0 for a partial restore: the
+  database exists and holds what could be restored. Check `status`, not the exit
+  code, when you need to know whether everything arrived.
+- A restore that genuinely failed (a `FATAL`, or a non-zero exit with no object
+  errors to explain it) exits 1 with an `error` field, as before.
+- `preSqlApplied: true` appears when `--pre-sql` ran.
+
+The usual fix for a partial restore is to create the missing pieces first:
+
+```bash
+cat > shims.sql <<'SQL'
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
+SQL
+spindb restore mydb ./supabase.dump -d app --force --pre-sql shims.sql --json
+```
 
 ## Clone
 
