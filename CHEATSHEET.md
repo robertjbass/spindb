@@ -345,6 +345,28 @@ spindb restore mydb ./prod.dump -d app --force --pre-sql roles.sql --with-privil
 `spindb create <name> --from <dump> --with-privileges` accepts the same flag on
 the restore it runs.
 
+### `--force` drops the target first, and says why if it cannot
+
+Without `--into-existing`, a restore over an existing database DROPS and
+recreates it. On PostgreSQL 13+ that drop is `DROP DATABASE ... WITH (FORCE)`,
+which terminates whatever is attached (a pooler holding a server connection, an
+open query console, your app) inside the same statement, so a restore no longer
+fails with `database "x" is being accessed by other users`. Older servers
+terminate the sessions in a separate statement and retry the drop once.
+
+A drop that still cannot happen reports the server's own reason and stops before
+anything is destroyed:
+
+```json
+{
+  "error": "Failed to drop database \"app\": ERROR:  cannot drop a template database",
+  "phase": "drop-target"
+}
+```
+
+`phase: "drop-target"` says the restore never started: the existing database is
+untouched. Without `--json` the same label and detail are written to stderr.
+
 The usual fix for a partial restore is to create the missing pieces first:
 
 ```bash

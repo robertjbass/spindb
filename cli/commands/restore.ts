@@ -726,7 +726,33 @@ export const restoreCommand = new Command('restore')
             dropSpinner.succeed(`Dropped database "${databaseName}"`)
           } catch (dropErr) {
             dropSpinner.fail('Failed to drop database')
-            throw dropErr
+
+            // What the server actually said. This used to rethrow into the
+            // outer handler, which prints only the message - and exec's
+            // message is "Command failed: <the whole psql command line>", so
+            // the reason (a session still attached, a permission the caller
+            // does not have, a template database) never reached anyone. A
+            // cloud migration failed three times in a row on exactly this,
+            // with nothing to go on.
+            const thrown = describeThrown(dropErr)
+            const message = `Failed to drop database "${databaseName}": ${thrown.message}`
+            if (options.json) {
+              console.log(
+                JSON.stringify({
+                  error: message,
+                  ...(thrown.name ? { errorName: thrown.name } : {}),
+                  ...(thrown.code ? { errorCode: thrown.code } : {}),
+                  phase: 'drop-target',
+                }),
+              )
+            } else {
+              // Label AND detail on stderr, so a pipe keeps them together.
+              console.error(
+                uiError(`Failed to drop database "${databaseName}"`),
+              )
+              console.error(chalk.gray(`  ${thrown.message}`))
+            }
+            process.exit(1)
           }
         }
 
