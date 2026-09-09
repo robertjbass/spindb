@@ -23,6 +23,17 @@ import {
   normalizeVersion,
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
+import {
+  DROP_RETRY_DELAY_MS,
+  buildDropDatabaseSql,
+  buildTerminateConnectionsSql,
+  isDatabaseInUseError,
+  isDatabaseMissingError,
+  isDropForceUnsupportedError,
+  maintenanceDatabaseFor,
+  parsePostgresMajor,
+  supportsDropForce,
+} from './drop-database-sql'
 import { createBackup } from './backup'
 import {
   validateDumpCompatibility,
@@ -742,37 +753,139 @@ export class PostgreSQLEngine extends BaseEngine {
   }
 
   /**
+   * Run one admin statement against this server's maintenance database.
+   *
+   * spawn (not a shell command string) so nothing has to be quoted for cmd.exe
+   * vs sh, and so the psql error text comes back on its own instead of buried
+   * in exec's "Command failed: <the whole command line>" wrapper - a drop that
+   * fails has to be able to say WHY.
+   */
+  private async runAdminStatement(
+    container: ContainerConfig,
+    sql: string,
+    maintenanceDatabase: string,
+  ): Promise<void> {
+    const { port } = container
+    const psqlPath = await this.getPsqlPath()
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        psqlPath,
+        [
+          '-h',
+          '127.0.0.1',
+          '-p',
+          String(port),
+          '-U',
+          defaults.superuser,
+          '-d',
+          maintenanceDatabase,
+          '-c',
+          sql,
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      )
+
+      let stdout = ''
+      let stderr = ''
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+          return
+        }
+        const output = `${stderr}\n${stdout}`.trim()
+        reject(
+          new Error(output || `psql exited with code ${code ?? 'unknown'}`),
+        )
+      })
+    })
+  }
+
+  /**
    * Drop a database using PostgreSQL's native DROP DATABASE.
-   * Terminates active connections first (PG refuses the drop with
-   * "database is being accessed by other users" while any session is attached).
+   *
+   * PostgreSQL refuses the drop while any session is attached to the target
+   * ("database <name> is being accessed by other users"). On 13+ that is
+   * handled inside the statement with WITH (FORCE), which is the only version
+   * of this that is not a race - terminating the backends first and then
+   * dropping leaves a window for a pooler or the user's app to reconnect in,
+   * and the drop fails again. Older servers get the two-step plus one retry.
+   *
+   * The connection issuing the drop always targets the maintenance database,
+   * never the one being dropped.
    */
   async dropDatabase(
     container: ContainerConfig,
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
-    const psqlPath = await this.getPsqlPath()
 
-    // PostgreSQL requires no active connections to the database being dropped.
-    // Doing this here (rather than only at call sites) means every caller -
-    // `spindb restore --force`, pull, the menu handlers - inherits it.
-    await this.terminateConnections(container, database)
+    const canForce = supportsDropForce(parsePostgresMajor(container.version))
+    const maintenanceDatabase = maintenanceDatabaseFor(database)
 
-    // On Windows, single quotes don't work in cmd.exe - use double quotes and escape inner quotes
-    const sql = `DROP DATABASE IF EXISTS "${database}"`
-    const cmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${sql}'`
+    // Pre-13 only: clear the sessions in a separate statement first. On 13+
+    // WITH (FORCE) does it atomically, so this round-trip is pure race.
+    if (!canForce) {
+      await this.terminateConnections(container, database)
+    }
+
+    const drop = (force: boolean) =>
+      this.runAdminStatement(
+        container,
+        buildDropDatabaseSql(database, { force }),
+        maintenanceDatabase,
+      )
 
     try {
-      await execAsync(cmd)
+      await drop(canForce)
+      return
     } catch (error) {
-      const err = error as Error
-      // Ignore "database does not exist" error
-      if (!err.message.includes('does not exist')) {
-        throw error
+      const message = (error as Error).message ?? String(error)
+
+      // Nothing to drop.
+      if (isDatabaseMissingError(message)) return
+
+      // The recorded container version claimed 13+ but the server answering is
+      // older. Fall back to the two-step rather than reporting a syntax error.
+      if (canForce && isDropForceUnsupportedError(message)) {
+        await this.terminateConnections(container, database)
+        await this.retryDropDatabase(container, database, false)
+        return
       }
+
+      // Something attached between our terminate and the drop (or FORCE lost a
+      // race with a reconnecting pooler). Clear it and try once more.
+      if (!isDatabaseInUseError(message)) throw error
+
+      await new Promise((resolve) => setTimeout(resolve, DROP_RETRY_DELAY_MS))
+      await this.terminateConnections(container, database)
+      await this.retryDropDatabase(container, database, canForce)
+    }
+  }
+
+  /** The single retry dropDatabase allows itself. */
+  private async retryDropDatabase(
+    container: ContainerConfig,
+    database: string,
+    force: boolean,
+  ): Promise<void> {
+    try {
+      await this.runAdminStatement(
+        container,
+        buildDropDatabaseSql(database, { force }),
+        maintenanceDatabaseFor(database),
+      )
+    } catch (error) {
+      const message = (error as Error).message ?? String(error)
+      if (isDatabaseMissingError(message)) return
+      throw error
     }
   }
 
@@ -964,21 +1077,16 @@ export class PostgreSQLEngine extends BaseEngine {
     database: string,
   ): Promise<void> {
     assertValidDatabaseName(database)
-    const { port } = container
-    const psqlPath = await this.getPsqlPath()
 
-    // Terminate all connections to the database except our own
-    const sql = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${database}' AND pid <> pg_backend_pid()`
-
-    // Connect to 'postgres' database for admin operations
-    // Escape single quotes for shell: ' becomes '\'' (end quote, escaped quote, start quote)
-    const shellEscapedSql = sql.replace(/'/g, "'\\''")
-    const cmd = isWindows()
-      ? `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c "${sql.replace(/"/g, '\\"')}"`
-      : `"${psqlPath}" -h 127.0.0.1 -p ${port} -U ${defaults.superuser} -d postgres -c '${shellEscapedSql}'`
-
+    // Terminate all connections to the database except our own, from the
+    // maintenance database (a session cannot terminate itself out of the
+    // database it is connected to).
     try {
-      await execAsync(cmd)
+      await this.runAdminStatement(
+        container,
+        buildTerminateConnectionsSql(database),
+        maintenanceDatabaseFor(database),
+      )
     } catch {
       // Ignore errors - connections may already be gone
     }

@@ -818,6 +818,163 @@ describe('PostgreSQL Integration Tests', () => {
     }
   })
 
+  it('restore --force completes while a session holds the target open', async () => {
+    console.log(`\n🔁 Testing restore --force over a connected database...`)
+
+    const { spawn } = await import('child_process')
+    const { writeFile, rm } = await import('fs/promises')
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const busyDatabase = 'restorebusydb'
+    const dumpPath = join(tmpdir(), `pg-restore-busy-${Date.now()}.sql`)
+
+    // The target has to already exist and be tracked, or restore just creates
+    // it and never reaches the drop this test is about.
+    await engine.createDatabase(config!, busyDatabase)
+    await containerManager.addDatabase(containerName, busyDatabase)
+    await writeFile(
+      dumpPath,
+      [
+        'CREATE TABLE busy_demo (id integer PRIMARY KEY);',
+        'INSERT INTO busy_demo (id) VALUES (1);',
+        'INSERT INTO busy_demo (id) VALUES (2);',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+
+    // A session that stays attached for the whole restore - a pooler holding a
+    // server connection, a query console, the customer's app. This is what
+    // made a real cloud migration fail three times in a row.
+    const psqlPath = await engine.getPsqlPath()
+    const holder = spawn(
+      psqlPath,
+      [
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String(testPorts[0]),
+        '-U',
+        'postgres',
+        '-d',
+        busyDatabase,
+        '-c',
+        'SELECT pg_sleep(120)',
+      ],
+      { stdio: 'ignore' },
+    )
+
+    try {
+      let attached = 0
+      for (let i = 0; i < 40; i++) {
+        const activity = await executeQuery(
+          containerName,
+          `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = '${busyDatabase}'`,
+          'postgres',
+        )
+        attached = activity.rows[0].n as number
+        if (attached > 0) break
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+      assert(attached > 0, 'a session should be attached before the restore')
+
+      const result = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        busyDatabase,
+        '--force',
+        '--json',
+      ])
+
+      assertEqual(
+        result.exitCode,
+        0,
+        `restore --force should succeed over a connected database (stdout: ${result.stdout} stderr: ${result.stderr})`,
+      )
+      const parsed = JSON.parse(result.stdout.trim())
+      assertEqual(parsed.success, true, 'and report success')
+      assertEqual(parsed.overwritten, true, 'having overwritten the target')
+
+      const rows = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM busy_demo',
+        busyDatabase,
+      )
+      assertEqual(Number(rows.rows[0].n), 2, 'the dump rows arrived')
+
+      console.log(
+        `   ✓ Restored over "${busyDatabase}" with ${attached} session(s) attached`,
+      )
+    } finally {
+      holder.kill('SIGKILL')
+      await rm(dumpPath, { force: true })
+    }
+  })
+
+  it('a drop that really cannot happen says why, in --json', async () => {
+    console.log(`\n🧾 Testing the drop-target failure payload...`)
+
+    const { writeFile, rm } = await import('fs/promises')
+    const engine = getEngine(ENGINE)
+    const config = await containerManager.getConfig(containerName)
+    assert(config !== null, 'Container config should exist')
+
+    const undroppable = 'droptemplatedb'
+    const dumpPath = join(tmpdir(), `pg-drop-fail-${Date.now()}.sql`)
+
+    await engine.createDatabase(config!, undroppable)
+    await containerManager.addDatabase(containerName, undroppable)
+    await writeFile(dumpPath, 'CREATE TABLE never_restored (id integer);\n')
+
+    // A template database cannot be dropped at all - not even WITH (FORCE) -
+    // so this is a drop failure that is genuinely the server's answer rather
+    // than a simulated one.
+    await runScriptSQL(
+      containerName,
+      `UPDATE pg_database SET datistemplate = true WHERE datname = '${undroppable}'`,
+      'postgres',
+    )
+
+    try {
+      const result = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        undroppable,
+        '--force',
+        '--json',
+      ])
+
+      assertEqual(result.exitCode, 1, 'a failed drop exits non-zero')
+      const parsed = JSON.parse(result.stdout.trim())
+      assertEqual(parsed.phase, 'drop-target', 'the phase names the drop')
+      assert(
+        String(parsed.error).includes(
+          `Failed to drop database "${undroppable}"`,
+        ),
+        'the error names the database',
+      )
+      assert(
+        /cannot drop a template database/i.test(String(parsed.error)),
+        `the server's own reason survives (got: ${parsed.error})`,
+      )
+
+      console.log(`   ✓ Reported: ${parsed.error.split('\n')[0]}`)
+    } finally {
+      await runScriptSQL(
+        containerName,
+        `UPDATE pg_database SET datistemplate = false WHERE datname = '${undroppable}'`,
+        'postgres',
+      )
+      await engine.dropDatabase(config!, undroppable)
+      await containerManager.removeDatabase(containerName, undroppable)
+      await rm(dumpPath, { force: true })
+    }
+  })
+
   it('should restore from SQL format and verify data', async () => {
     console.log(`\n📥 Testing SQL format restore...`)
 

@@ -374,13 +374,11 @@ spindb restore mydb ./supabase.dump -d app --force --json
 A PostgreSQL custom/tar/directory dump is restored by `pg_restore`, which spindb
 gives `--no-owner --no-privileges`, so every GRANT and REVOKE in the dump is
 discarded without a word: the roles they name do not exist in a fresh local
-container, and failing on that would make most dumps unrestorable. (A plain-SQL
-dump has no such switch - `psql` replays the file as written, so whatever
-ownership and grant statements `pg_dump -Fp` put in it run, and fail on their own
-if the roles are missing. `--with-privileges` is a no-op there.) `--with-privileges` drops the `--no-privileges` half (ownership is
-still stripped, since the owning role does not exist locally) and replays them,
-which is the honest option: a grant to a role this server does not have fails as
-an object-level error and is reported in the diagnostics above, rather than
+container, and failing on that would make most dumps unrestorable.
+`--with-privileges` drops the `--no-privileges` half (ownership is still
+stripped, since the owning role does not exist locally) and replays them, which
+is the honest option: a grant to a role this server does not have fails as an
+object-level error and is reported in the diagnostics above, rather than
 vanishing. Create the roles with `--pre-sql` and both halves succeed:
 
 ```bash
@@ -393,6 +391,32 @@ spindb restore mydb ./prod.dump -d app --force --pre-sql roles.sql --with-privil
 
 `spindb create <name> --from <dump> --with-privileges` accepts the same flag on
 the restore it runs.
+
+A plain-SQL dump has no such switch: `psql` replays the file as written, so
+whatever ownership and grant statements `pg_dump -Fp` put in it run, and fail on
+their own if the roles are missing. `--with-privileges` is a no-op there.
+
+### `--force` drops the target first, and says why if it cannot
+
+Without `--into-existing`, a restore over an existing database DROPS and
+recreates it. On PostgreSQL 13+ that drop is `DROP DATABASE ... WITH (FORCE)`,
+which terminates whatever is attached (a pooler holding a server connection, an
+open query console, your app) inside the same statement, so a restore no longer
+fails with `database "x" is being accessed by other users`. Older servers
+terminate the sessions in a separate statement and retry the drop once.
+
+A drop that still cannot happen reports the server's own reason and stops before
+anything is destroyed:
+
+```json
+{
+  "error": "Failed to drop database \"app\": ERROR:  cannot drop a template database",
+  "phase": "drop-target"
+}
+```
+
+`phase: "drop-target"` says the restore never started: the existing database is
+untouched. Without `--json` the same label and detail are written to stderr.
 
 The usual fix for a partial restore is to create the missing pieces first:
 
