@@ -412,13 +412,22 @@ export const restoreCommand = new Command('restore')
                 {
                   onProgress: (p: RedisCopyProgress) => {
                     keysCopied = p.restored
-                    copySpinner.text = `Copying keyspace... ${p.restored}/${p.total} keys`
+                    const how =
+                      p.strategy === 'logical' ? ' (type-aware copy)' : ''
+                    copySpinner.text = `Copying keyspace${how}... ${p.restored}/${p.total} keys`
                   },
                 },
               )
               copySpinner.succeed(
                 `Copied ${copyResult.keysCopied} keys from the remote ${engineName}`,
               )
+              // Module types (ReJSON-RL, TSDB-TYPE, ...) have no portable
+              // read/write pair, so the type-aware path cannot carry them. Say
+              // so rather than letting the key count quietly disagree.
+              const skippedNote =
+                copyResult.skipped > 0
+                  ? `${copyResult.skipped} key(s) were skipped because their type cannot be copied without a matching module: ${copyResult.skippedTypes.join(', ')}`
+                  : null
               if (options.json) {
                 console.log(
                   JSON.stringify({
@@ -429,6 +438,13 @@ export const restoreCommand = new Command('restore')
                     format: 'redis-keyspace',
                     sourceType: 'connection-string',
                     keysCopied: copyResult.keysCopied,
+                    strategy: copyResult.strategy,
+                    ...(copyResult.skipped > 0
+                      ? {
+                          skipped: copyResult.skipped,
+                          skippedTypes: copyResult.skippedTypes,
+                        }
+                      : {}),
                     overwritten: false,
                   }),
                 )
@@ -438,6 +454,14 @@ export const restoreCommand = new Command('restore')
                     `Migrated ${copyResult.keysCopied} keys into "${containerName}"`,
                   ),
                 )
+                if (copyResult.strategy === 'logical') {
+                  console.log(
+                    chalk.yellow(
+                      '  The source and target serialize differently, so the keys were copied value by value instead of byte for byte.',
+                    ),
+                  )
+                }
+                if (skippedNote) console.log(chalk.yellow(`  ${skippedNote}`))
               }
             } catch (error) {
               copySpinner.fail('Redis migration failed')

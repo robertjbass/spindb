@@ -280,6 +280,55 @@ rejects is dropped. What was converted is printed, and reported under
 server's own error rather than silently changed. PostgreSQL already worked this
 way, swapping in a `pg_dump` that can read the remote major version.
 
+### Redis and Valkey migrate across engine families
+
+`spindb restore <container> --from-url redis://...` copies the keyspace with
+`SCAN` + `DUMP` -> `RESTORE`, which moves the source server's own serialization
+and is exact and fast. That only works while the target understands the source's
+RDB version, and Redis and Valkey have stopped sharing one:
+
+| Server | RDB version its `DUMP` stamps |
+| --- | --- |
+| Redis 7.2 | 11 |
+| Redis 8.x | 12 |
+| Upstash (reports `redis_version:8.4.0`) | 14 |
+| Valkey 8.0 | 11 |
+| Valkey 9.0 | 80 |
+
+`RESTORE` refuses a payload outside the format it knows, so a Valkey 9 source
+cannot be moved byte for byte into any Redis, and a Redis 8 or Upstash source
+cannot be moved into Redis 7.2 or into Valkey. There is no version you can pick
+to fix that.
+
+When the target refuses the payload format - or the source does not implement
+`DUMP`, which a serverless provider may not - the copy switches for the rest of
+the run to a type-aware walk that reads each key with `TYPE`/`GET`/`HSCAN`/
+`SSCAN`/`ZSCAN`/`LRANGE`/`XRANGE`/`PTTL` and rewrites it with `SET`/`HSET`/
+`SADD`/`ZADD`/`RPUSH`/`XADD`/`PEXPIRE`. Strings, hashes, lists, sets, sorted
+sets and streams cross over with their values, order, stream ids and TTLs
+intact, and binary keys and values stay binary. Module types (`ReJSON-RL`,
+`TSDB-TYPE`, `MBbloom--`) have no portable read/write pair and are reported
+rather than dropped silently.
+
+```bash
+spindb restore mykv --from-url "rediss://default:pw@host:6379" --json
+```
+
+```json
+{
+  "success": true,
+  "keysCopied": 1252,
+  "strategy": "logical",
+  "skipped": 2,
+  "skippedTypes": ["ReJSON-RL"]
+}
+```
+
+`strategy` is `dump-restore` when the fast path was used and `logical` when it
+fell back; `skipped`/`skippedTypes` appear only when something could not be
+carried. The container must be RUNNING, and the copy REPLACES the keys it
+carries without emptying the rest of the target first.
+
 ### A restore that lost objects says so
 
 `pg_restore` keeps going past an object it cannot create. A dump that references
