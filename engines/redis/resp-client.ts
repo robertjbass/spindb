@@ -543,12 +543,30 @@ function firstReadCommand(
   }
 }
 
+// The largest sequence a stream id can hold: both halves of a stream id are
+// unsigned 64-bit, and Redis rolls a full sequence over into the next
+// millisecond rather than refusing the entry.
+const STREAM_ID_PART_MAX = 18446744073709551615n
+
 // Stream ids are `<ms>-<seq>`. XRANGE ranges are inclusive, and the exclusive
 // `(` form only exists from Redis 6.2, so the next page starts at seq+1 of the
 // last id we saw - a form every version understands.
-function nextStreamId(id: string): string {
-  const [ms, seq] = id.split('-')
-  return `${ms}-${Number(seq ?? 0) + 1}`
+//
+// The arithmetic is BigInt because both halves are uint64 and a Number cannot
+// hold one past 2^53. `Number('9007199254740993') + 1` is 9007199254740994 by
+// luck, but `Number('18446744073709551615') + 1` is 18446744073709552000 - a
+// value that is not the next id and is not even in the stream, so the walk
+// would silently skip the tail of a large stream. A sequence that is already at
+// the maximum carries into the next millisecond, exactly as Redis does when it
+// assigns one.
+export function nextStreamId(id: string): string {
+  const match = /^(\d+)(?:-(\d+))?$/.exec(id)
+  if (!match) {
+    throw new Error(`Unexpected stream entry id from the source: ${id}`)
+  }
+  const ms = BigInt(match[1])
+  const seq = match[2] === undefined ? 0n : BigInt(match[2])
+  return seq >= STREAM_ID_PART_MAX ? `${ms + 1n}-0` : `${ms}-${seq + 1n}`
 }
 
 type StreamEntry = { id: string; fields: Buffer[] }

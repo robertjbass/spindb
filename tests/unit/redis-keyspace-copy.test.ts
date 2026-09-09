@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import {
   copyRedisKeyspace,
+  nextStreamId,
   shouldFallBackToLogicalCopy,
   annotateHandshakeError,
 } from '../../engines/redis/resp-client'
@@ -361,6 +362,56 @@ describe('Redis keyspace copy: type-aware reads and writes', () => {
     )
   })
 
+  it('asks for the next stream page at an id a Number cannot represent', async () => {
+    // The paging walk only continues when a page comes back FULL, so this needs
+    // a real chunk-sized first page. Its last id sits at 2^53, where
+    // `Number(seq) + 1` returns the same value - which would make the walk
+    // re-request the page it just read, forever.
+    const CHUNK = 512
+    const bigSeq = '9007199254740992'
+    const entry = (id: string) =>
+      respArray([respBulk(id), respArray([respBulk('f'), respBulk('v')])])
+    const firstPage = respArray(
+      Array.from({ length: CHUNK }, (_, i) =>
+        entry(i === CHUNK - 1 ? `5-${bigSeq}` : `5-${i}`),
+      ),
+    )
+    let xrangeCalls = 0
+    const source: FakeRespHandler = (request) => {
+      switch (request.name) {
+        case 'SCAN':
+          return respScan('0', ['k1'])
+        case 'DUMP':
+          return respBulk(Buffer.from([0x00, 0x01, 0x76, 0x0b, 0x00]))
+        case 'PTTL':
+          return respInteger(-1)
+        case 'TYPE':
+          return Buffer.from('+stream\r\n')
+        case 'XRANGE':
+          xrangeCalls++
+          // The second call ends the walk, so the assertion is about the id it
+          // was asked for, not about what comes back.
+          return xrangeCalls === 1 ? firstPage : respArray([])
+        default:
+          return respOk()
+      }
+    }
+
+    const { sourceRequests } = await runCopy({
+      source,
+      target: (request) =>
+        request.name === 'RESTORE' ? respError(RDB_REFUSAL) : respOk(),
+    })
+
+    const continuation = sourceRequests.filter((r) => r.name === 'XRANGE')[1]
+    assertTruthy(continuation, 'the full page should have been followed up')
+    assertEqual(
+      continuation.text[1],
+      '5-9007199254740993',
+      'the next page must start one past the last id, exactly',
+    )
+  })
+
   it('carries a TTL across as a millisecond expiry', async () => {
     const { targetRequests } = await runCopy({
       source: collectionSource('string', respBulk('v1'), (request) =>
@@ -510,6 +561,67 @@ describe('Redis keyspace copy: connection failure shapes', () => {
       error.message.length > 0,
       'an empty error reply must still produce readable text',
     )
+  })
+})
+
+// Both halves of a stream id are unsigned 64-bit. The paging walk asks for the
+// next page starting at seq+1 of the last id it saw, so the increment has to be
+// exact for every value a real stream can reach - well past what a Number holds.
+describe('Stream id paging arithmetic', () => {
+  it('increments an ordinary sequence', () => {
+    assertEqual(nextStreamId('1526919030474-55'), '1526919030474-56', 'seq+1')
+    assertEqual(nextStreamId('1526919030474-0'), '1526919030474-1', 'from zero')
+  })
+
+  it('treats a bare millisecond id as sequence zero', () => {
+    assertEqual(nextStreamId('1526919030474'), '1526919030474-1', 'implicit 0')
+  })
+
+  it('is exact at 2^53, where Number stops being able to count', () => {
+    // 9007199254740992 is Number.MAX_SAFE_INTEGER + 1. `Number(x) + 1` returns
+    // the SAME value here, so the walk would re-request the page it just read
+    // and loop forever on a stream that reached this sequence.
+    assertEqual(
+      nextStreamId('5-9007199254740992'),
+      '5-9007199254740993',
+      'the id after 2^53 must be 2^53 + 1, not 2^53',
+    )
+    assertEqual(
+      nextStreamId('5-9007199254740993'),
+      '5-9007199254740994',
+      'and it must keep counting one at a time above that',
+    )
+  })
+
+  it('is exact well beyond 2^53', () => {
+    assertEqual(
+      nextStreamId('1526919030474-18446744073709551614'),
+      '1526919030474-18446744073709551615',
+      'one below the uint64 ceiling still just increments',
+    )
+  })
+
+  it('carries into the next millisecond at the uint64 ceiling', () => {
+    // 18446744073709551615 is 2^64 - 1, the largest sequence a stream id can
+    // hold. `Number(...) + 1` gives 18446744073709552000 - an id that is not
+    // next and is not in the stream, so the tail would be skipped silently.
+    assertEqual(
+      nextStreamId('1526919030474-18446744073709551615'),
+      '1526919030475-0',
+      'a full sequence rolls into the next millisecond, as Redis does',
+    )
+  })
+
+  it('refuses an id it cannot read rather than inventing one', () => {
+    for (const bad of ['', 'abc', '5-', '5-x', '-1', '1-2-3']) {
+      let threw = false
+      try {
+        nextStreamId(bad)
+      } catch {
+        threw = true
+      }
+      assert(threw, `"${bad}" is not a stream id and must not be guessed at`)
+    }
   })
 })
 
