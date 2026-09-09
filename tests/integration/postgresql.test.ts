@@ -39,6 +39,34 @@ const DATABASE = 'testdb'
 const SEED_FILE = join(__dirname, '../fixtures/postgresql/seeds/sample-db.sql')
 const EXPECTED_ROW_COUNT = 5
 
+const CLI_PATH = join(__dirname, '../../cli/bin.ts')
+
+/**
+ * Run the real `spindb restore` CLI and capture its streams.
+ *
+ * The restore CONTRACT (what `--json` promises a caller: layerbase-cloud,
+ * layerbase-desktop, a migration script) lives in the command, not in the
+ * engine, so it has to be exercised through the command.
+ */
+async function runRestoreCli(
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const { spawn } = await import('child_process')
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      process.execPath,
+      ['--import', 'tsx', CLI_PATH, 'restore', ...args],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    let stdout = ''
+    let stderr = ''
+    proc.stdout.on('data', (chunk) => (stdout += String(chunk)))
+    proc.stderr.on('data', (chunk) => (stderr += String(chunk)))
+    proc.on('error', reject)
+    proc.on('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }))
+  })
+}
+
 describe('PostgreSQL Integration Tests', () => {
   let testPorts: number[]
   let containerName: string
@@ -508,13 +536,25 @@ describe('PostgreSQL Integration Tests', () => {
         createDatabase: false,
         clean: true,
       })
-      // pg_restore legitimately exits non-zero on warnings (e.g. "table does not
-      // exist, skipping" during --clean --if-exists), which spindb surfaces as a
-      // non-zero code - so assert only that it did NOT fatally fail; the
-      // row-count below is the real success gate.
+      // A clean restore reports a clean restore. Asserting only "no FATAL" is
+      // what let a restore that lost 19 tables pass for a success: it blessed
+      // the swallow. `code` used to be undefined here even on success (the
+      // engine spread exec's {stdout, stderr} and never set it), so this also
+      // pins that fix.
+      assertEqual(result.code, 0, 'a successful restore reports code 0')
       assert(
         !result.stderr?.includes('FATAL'),
         'restore should not fatally fail',
+      )
+      assertEqual(
+        result.diagnostics?.restoreErrorCount ?? 0,
+        0,
+        'a clean restore reports no object errors',
+      )
+      assertEqual(
+        result.diagnostics?.restoreIgnoredErrors ?? null,
+        null,
+        'and no ignored-errors summary',
       )
 
       // The extra row is gone -> contents were REPLACED, not merged.
@@ -534,6 +574,177 @@ describe('PostgreSQL Integration Tests', () => {
       )
     } finally {
       await rm(backupPath, { force: true })
+    }
+  })
+
+  it('reports a partial restore as completed_with_errors instead of a clean success', async () => {
+    console.log(`\n🧾 Testing partial-restore reporting (--json contract)...`)
+
+    // The shape of the customer failure: an object the target cannot create
+    // (an unavailable extension), a table whose default calls a function that
+    // therefore does not exist, and the INSERT that follows it. pg keeps
+    // going, so the restore "succeeds" while the table never arrives.
+    const { writeFile, rm } = await import('fs/promises')
+    const dumpPath = join(tmpdir(), `pg-partial-${Date.now()}.sql`)
+    const partialDb = 'partialrestoredb'
+
+    await writeFile(
+      dumpPath,
+      [
+        'CREATE EXTENSION IF NOT EXISTS "does_not_exist_ext";',
+        'CREATE TABLE broken_demo (id integer PRIMARY KEY, label text NOT NULL DEFAULT shim_label());',
+        'INSERT INTO broken_demo (id) VALUES (1);',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+
+    try {
+      const result = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        partialDb,
+        '--force',
+        '--json',
+      ])
+
+      const parsed = JSON.parse(result.stdout.trim())
+      assertEqual(result.exitCode, 0, 'a partial restore still exits 0')
+      assertEqual(parsed.success, true, 'and still reports success')
+      assertEqual(
+        parsed.status,
+        'completed_with_errors',
+        'but the status says objects failed',
+      )
+      assert(
+        parsed.restoreErrorCount > 0,
+        'the error count is reported to the caller',
+      )
+      assert(
+        Array.isArray(parsed.restoreErrors) && parsed.restoreErrors.length > 0,
+        'the failing objects are named',
+      )
+      assert(
+        parsed.restoreErrors.some((line: string) =>
+          line.includes('does_not_exist_ext'),
+        ),
+        'the unavailable extension is one of them',
+      )
+
+      const tables = await executeQuery(
+        containerName,
+        "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'broken_demo'",
+        partialDb,
+      )
+      assertEqual(
+        Number(tables.rows[0].n),
+        0,
+        'the table really did not arrive - which is what the status is for',
+      )
+
+      console.log(
+        `   ✓ Reported ${parsed.restoreErrorCount} object error(s) instead of a clean success`,
+      )
+    } finally {
+      await rm(dumpPath, { force: true })
+    }
+  })
+
+  it('--pre-sql creates the shim the dump needs, turning a partial restore into a clean one', async () => {
+    console.log(`\n🩹 Testing restore --pre-sql...`)
+
+    const { writeFile, rm } = await import('fs/promises')
+    const stamp = Date.now()
+    const dumpPath = join(tmpdir(), `pg-needs-shim-${stamp}.sql`)
+    const shimPath = join(tmpdir(), `pg-shim-${stamp}.sql`)
+
+    await writeFile(
+      dumpPath,
+      [
+        'CREATE TABLE shim_demo (id integer PRIMARY KEY, label text NOT NULL DEFAULT shim_label());',
+        'INSERT INTO shim_demo (id) VALUES (1);',
+        'INSERT INTO shim_demo (id) VALUES (2);',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    await writeFile(
+      shimPath,
+      [
+        "CREATE FUNCTION shim_label() RETURNS text AS $$ SELECT 'shimmed'::text $$ LANGUAGE sql;",
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+
+    try {
+      // Without the shim: the same partial restore as above.
+      const withoutShim = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        'preSqlControlDb'.toLowerCase(),
+        '--force',
+        '--json',
+      ])
+      const withoutParsed = JSON.parse(withoutShim.stdout.trim())
+      assertEqual(
+        withoutParsed.status,
+        'completed_with_errors',
+        'without the shim the restore is partial',
+      )
+
+      // With --pre-sql the function exists before the restore runs, so the
+      // table and its rows land.
+      const withShim = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        'presqldb',
+        '--force',
+        '--pre-sql',
+        shimPath,
+        '--json',
+      ])
+      const parsed = JSON.parse(withShim.stdout.trim())
+      assertEqual(withShim.exitCode, 0, 'the restore succeeds')
+      assertEqual(parsed.status, 'completed', 'and it is clean')
+      assertEqual(parsed.preSqlApplied, true, 'the shim is reported as applied')
+      assert(
+        parsed.restoreErrorCount === undefined,
+        'a clean restore adds no error fields',
+      )
+
+      const rows = await executeQuery(
+        containerName,
+        'SELECT count(*)::int AS n FROM shim_demo',
+        'presqldb',
+      )
+      assertEqual(Number(rows.rows[0].n), 2, 'both rows arrived')
+
+      // A --pre-sql file that is not there must fail before anything runs.
+      const missing = await runRestoreCli([
+        containerName,
+        dumpPath,
+        '-d',
+        'presqlmissingdb',
+        '--force',
+        '--pre-sql',
+        join(tmpdir(), `pg-no-such-shim-${stamp}.sql`),
+        '--json',
+      ])
+      assertEqual(missing.exitCode, 1, 'a missing --pre-sql file fails')
+      const missingParsed = JSON.parse(missing.stdout.trim())
+      assert(
+        String(missingParsed.error).includes('--pre-sql file not found'),
+        'and says which file',
+      )
+
+      console.log(`   ✓ --pre-sql applied, 2 rows restored, clean status`)
+    } finally {
+      await rm(dumpPath, { force: true })
+      await rm(shimPath, { force: true })
     }
   })
 

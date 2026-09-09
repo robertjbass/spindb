@@ -26,7 +26,14 @@ import {
   restoreCreatesDatabase,
   type RemoteDumpSourceInfo,
 } from '../../types'
-import { logDebug } from '../../core/error-handler'
+import { logDebug, describeThrown } from '../../core/error-handler'
+import {
+  classifyRestoreOutcome,
+  restoreDiagnosticsJson,
+  restoreErrorReportLines,
+  restoreFailureMessage,
+  type RestoreOutcome,
+} from '../../core/restore-outcome'
 import { getEngineMetadata } from '../helpers'
 import {
   copyRedisKeyspace,
@@ -55,6 +62,10 @@ export const restoreCommand = new Command('restore')
     '--into-existing',
     'Restore INTO an existing database without dropping/recreating it (non-destructive to the database object; replaces its contents). The database must already exist. Safe to run against a live database with open connections (e.g. behind a connection pooler).',
   )
+  .option(
+    '--pre-sql <file>',
+    'Run a SQL file against the target database after it is created and BEFORE the restore. For compatibility shims a dump needs and the target lacks: a missing extension, roles the dump grants to, a function a column default calls. Runs inside the same rollback scope as the restore.',
+  )
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
@@ -65,6 +76,7 @@ export const restoreCommand = new Command('restore')
         fromUrl?: string
         force?: boolean
         intoExisting?: boolean
+        preSql?: string
         json?: boolean
       },
     ) => {
@@ -73,6 +85,10 @@ export const restoreCommand = new Command('restore')
       // choose one (a `mysql://` source can be MySQL or MariaDB). Surfaced in
       // --json so a conversion is visible to a script, not just to a reader.
       let remoteSource: RemoteDumpSourceInfo | undefined
+      // Whether --pre-sql ran, and how the restore itself turned out. Both are
+      // reported in --json.
+      let preSqlApplied = false
+      let outcome: RestoreOutcome | undefined
 
       try {
         let containerName = name
@@ -166,6 +182,32 @@ export const restoreCommand = new Command('restore')
           process.exit(1)
         }
 
+        // --pre-sql runs a SQL file through the engine's own client. The
+        // allowlist is the set of engines whose client can be told to keep its
+        // chatter off stdout (runScript's `quiet`), because --pre-sql --json
+        // has to stay parseable.
+        const PRE_SQL_ENGINES = new Set(['postgresql', 'mysql', 'mariadb'])
+        if (options.preSql) {
+          if (!PRE_SQL_ENGINES.has(engineName)) {
+            const msg = `--pre-sql is not supported for ${engineName}. It is available for ${[...PRE_SQL_ENGINES].join(', ')}.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
+            process.exit(1)
+          }
+          if (!existsSync(options.preSql)) {
+            const msg = `--pre-sql file not found: ${options.preSql}`
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
+            process.exit(1)
+          }
+        }
+
         // Check if container needs to be running for restore
         // - File-based engines (SQLite, DuckDB) don't need to be running
         // - Redis/Valkey RDB restore requires container to be STOPPED (text format needs running)
@@ -251,20 +293,24 @@ export const restoreCommand = new Command('restore')
             options.fromUrl.startsWith('rediss://')
 
           if (engineName === 'postgresql' && !isPgUrl) {
-            console.error(
-              uiError(
-                'Connection string must start with postgresql:// or postgres:// for PostgreSQL containers',
-              ),
-            )
+            const msg =
+              'Connection string must start with postgresql:// or postgres:// for PostgreSQL containers'
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
 
           if (engineName === 'mysql' && !isMysqlUrl) {
-            console.error(
-              uiError(
-                'Connection string must start with mysql:// for MySQL containers',
-              ),
-            )
+            const msg =
+              'Connection string must start with mysql:// for MySQL containers'
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
 
@@ -324,6 +370,10 @@ export const restoreCommand = new Command('restore')
               'Copying keyspace from the remote database...',
             )
             copySpinner.start()
+            // Hoisted out of the progress callback so a failure can say how
+            // far the copy got. A migration that moved 40,000 keys and then
+            // died is a different problem than one that moved none.
+            let keysCopied = 0
             try {
               const copyResult = await copyRedisKeyspace(
                 {
@@ -344,6 +394,7 @@ export const restoreCommand = new Command('restore')
                 },
                 {
                   onProgress: (p: RedisCopyProgress) => {
+                    keysCopied = p.restored
                     copySpinner.text = `Copying keyspace... ${p.restored}/${p.total} keys`
                   },
                 },
@@ -373,9 +424,22 @@ export const restoreCommand = new Command('restore')
               }
             } catch (error) {
               copySpinner.fail('Redis migration failed')
-              const msg = (error as Error).message
+              // A rejected RESP call is not always an Error (a socket teardown
+              // can reject with a plain object), and `(error as Error).message`
+              // was then undefined - which JSON.stringify drops, so --json
+              // printed a bare `{}`.
+              const thrown = describeThrown(error)
+              const msg = `Redis migration failed: ${thrown.message}`
               if (options.json) {
-                console.log(JSON.stringify({ error: msg }))
+                console.log(
+                  JSON.stringify({
+                    error: msg,
+                    ...(thrown.name ? { errorName: thrown.name } : {}),
+                    ...(thrown.code ? { errorCode: thrown.code } : {}),
+                    phase: 'redis-keyspace-copy',
+                    keysCopied,
+                  }),
+                )
               } else {
                 console.error(uiError(msg))
               }
@@ -415,7 +479,7 @@ export const restoreCommand = new Command('restore')
               )
               dumpSpinner.succeed('Dump created from remote database')
               remoteSource = dumpResult.remoteSource
-              if (dumpResult.warnings?.length) {
+              if (dumpResult.warnings?.length && !options.json) {
                 for (const warning of dumpResult.warnings) {
                   console.log(chalk.yellow(`  ${warning}`))
                 }
@@ -423,13 +487,24 @@ export const restoreCommand = new Command('restore')
               backupPath = tempDumpPath
               dumpSuccess = true
             } catch (error) {
-              const e = error as Error
+              const thrown = describeThrown(error)
               dumpSpinner.fail('Failed to create dump')
 
               if (
-                e.message.includes(`${dumpTool} not found`) ||
-                e.message.includes('ENOENT')
+                thrown.message.includes(`${dumpTool} not found`) ||
+                thrown.message.includes('ENOENT')
               ) {
+                // No prompting in JSON mode - a script cannot answer it.
+                if (options.json) {
+                  console.log(
+                    JSON.stringify({
+                      error: `${dumpTool} not installed: ${thrown.message}`,
+                      phase: 'remote-dump',
+                      tool: dumpTool,
+                    }),
+                  )
+                  process.exit(1)
+                }
                 const installed = await promptInstallDependencies(
                   dumpTool,
                   engineName,
@@ -440,33 +515,70 @@ export const restoreCommand = new Command('restore')
                 continue
               }
 
-              console.log()
-              console.error(uiError(`${dumpTool} error:`))
-              console.log(chalk.gray(`  ${e.message}`))
+              // This path printed NOTHING in --json mode, so a failed remote
+              // dump exited 1 with empty stdout. It also split the label onto
+              // stderr and the detail onto stdout, which no pipe keeps
+              // together.
+              if (options.json) {
+                console.log(
+                  JSON.stringify({
+                    error: `${dumpTool} error: ${thrown.message}`,
+                    ...(thrown.name ? { errorName: thrown.name } : {}),
+                    ...(thrown.code ? { errorCode: thrown.code } : {}),
+                    phase: 'remote-dump',
+                    tool: dumpTool,
+                  }),
+                )
+              } else {
+                console.error()
+                console.error(uiError(`${dumpTool} error:`))
+                console.error(chalk.gray(`  ${thrown.message}`))
+              }
               process.exit(1)
             }
           }
 
           if (!dumpSuccess) {
-            console.error(uiError('Failed to create dump after retries'))
+            const msg = 'Failed to create dump after retries'
+            if (options.json) {
+              console.log(
+                JSON.stringify({
+                  error: msg,
+                  phase: 'remote-dump',
+                  tool: dumpTool,
+                }),
+              )
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
         } else {
           if (!backupPath) {
-            console.error(uiError('Backup file path is required'))
-            console.log(
-              chalk.gray('  Usage: spindb restore <container> <backup-file>'),
-            )
-            console.log(
-              chalk.gray(
-                '     or: spindb restore <container> --from-url <connection-string>',
-              ),
-            )
+            const msg = 'Backup file path is required'
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+              console.log(
+                chalk.gray('  Usage: spindb restore <container> <backup-file>'),
+              )
+              console.log(
+                chalk.gray(
+                  '     or: spindb restore <container> --from-url <connection-string>',
+                ),
+              )
+            }
             process.exit(1)
           }
 
           if (!existsSync(backupPath)) {
-            console.error(uiError(`Backup file not found: ${backupPath}`))
+            const msg = `Backup file not found: ${backupPath}`
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
         }
@@ -483,7 +595,12 @@ export const restoreCommand = new Command('restore')
         }
 
         if (!backupPath) {
-          console.error(uiError('No backup path specified'))
+          const msg = 'No backup path specified'
+          if (options.json) {
+            console.log(JSON.stringify({ error: msg }))
+          } else {
+            console.error(uiError(msg))
+          }
           process.exit(1)
         }
 
@@ -503,20 +620,22 @@ export const restoreCommand = new Command('restore')
           const isRdbFormat = format.format === 'rdb'
 
           if (isRdbFormat && running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" must be stopped for RDB restore. Run: spindb stop ${containerName}`,
-              ),
-            )
+            const msg = `Container "${containerName}" must be stopped for RDB restore. Run: spindb stop ${containerName}`
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
 
           if (!isRdbFormat && !running) {
-            console.error(
-              uiError(
-                `Container "${containerName}" is not running. Start it first for text format restore.`,
-              ),
-            )
+            const msg = `Container "${containerName}" is not running. Start it first for text format restore.`
+            if (options.json) {
+              console.log(JSON.stringify({ error: msg }))
+            } else {
+              console.error(uiError(msg))
+            }
             process.exit(1)
           }
         }
@@ -683,6 +802,37 @@ export const restoreCommand = new Command('restore')
             )
           }
 
+          // --pre-sql: compatibility shims the dump needs and the target does
+          // not have (a missing extension, the roles a dump grants to, a
+          // function a column default calls). It runs AFTER the database
+          // exists and BEFORE the restore, inside the same transaction scope,
+          // so a shim that fails takes the created database down with it
+          // rather than leaving a half-prepared one behind. With
+          // --into-existing there is no created database and no rollback, so a
+          // failed shim just aborts before anything is restored.
+          if (options.preSql) {
+            const preSqlSpinner = createSpinner(
+              `Applying pre-restore SQL from ${options.preSql}...`,
+            )
+            preSqlSpinner.start()
+            try {
+              await engine.runScript(config, {
+                file: options.preSql,
+                database: databaseName,
+                // Keep psql/mysql chatter off stdout: --json owns it.
+                quiet: true,
+              })
+              preSqlApplied = true
+              preSqlSpinner.succeed('Pre-restore SQL applied')
+            } catch (preSqlErr) {
+              preSqlSpinner.fail('Pre-restore SQL failed')
+              const thrown = describeThrown(preSqlErr)
+              throw new Error(
+                `--pre-sql failed (${options.preSql}): ${thrown.message}`,
+              )
+            }
+          }
+
           const restoreSpinner = createSpinner('Restoring backup...')
           restoreSpinner.start()
 
@@ -694,29 +844,43 @@ export const restoreCommand = new Command('restore')
             ...(options.intoExisting ? { clean: true } : {}),
           })
 
-          // Check if restore completely failed (non-zero code with no data restored)
-          if (result.code !== 0 && result.stderr?.includes('FATAL')) {
+          // What the restore tool actually did. The old rule here failed only
+          // on a literal FATAL in stderr, so a pg_restore that could not create
+          // a single table (missing extension -> failed defaults -> skipped
+          // COPY) reported success and exited 0.
+          outcome = classifyRestoreOutcome(result)
+
+          if (outcome.failed) {
             restoreSpinner.fail('Restore failed')
-            throw new Error(result.stderr || 'Restore failed with fatal error')
+            throw new Error(restoreFailureMessage(result))
           }
 
-          if (result.code === 0) {
-            restoreSpinner.succeed('Backup restored successfully')
-          } else {
-            // pg_restore often returns warnings even on success
-            restoreSpinner.warn('Restore completed with warnings')
-            if (result.stderr) {
-              console.log(chalk.yellow('\n  Warnings:'))
-              const lines = result.stderr.split('\n').slice(0, 5)
-              lines.forEach((line) => {
-                if (line.trim()) {
-                  console.log(chalk.gray(`    ${line}`))
-                }
-              })
-              if (result.stderr.split('\n').length > 5) {
-                console.log(chalk.gray('    ...'))
+          if (outcome.hadObjectErrors) {
+            restoreSpinner.warn(outcome.summary)
+            // STDOUT belongs to --json. This block used to write to it
+            // unconditionally, which made the JSON unparseable exactly when
+            // something had gone wrong.
+            if (!options.json) {
+              console.log(chalk.yellow('\n  Objects that failed to restore:'))
+              for (const line of restoreErrorReportLines(
+                outcome.diagnostics,
+                10,
+              )) {
+                console.log(chalk.gray(`    ${line}`))
               }
+              console.log(
+                chalk.gray(
+                  '\n  The database was created and holds what could be restored.',
+                ),
+              )
+              console.log(
+                chalk.gray(
+                  '  Re-run with --pre-sql <file> to create the missing extensions/roles first.',
+                ),
+              )
             }
+          } else {
+            restoreSpinner.succeed(outcome.summary)
           }
 
           // Restore succeeded - commit transaction (clear rollback actions)
@@ -739,13 +903,20 @@ export const restoreCommand = new Command('restore')
           const metadata = await getEngineMetadata(engineName)
           console.log(
             JSON.stringify({
+              // success + exit 0 still mean "the restore ran and the database
+              // is usable". `status` is what says whether everything in the
+              // dump made it: additive on purpose, so existing consumers
+              // (layerbase-desktop, layerbase-cloud) keep working unchanged.
               success: true,
+              status: outcome?.status ?? 'completed',
               database: databaseName,
               container: containerName,
               engine: engineName,
               format: format.description,
               sourceType: options.fromUrl ? 'remote' : 'file',
               ...(remoteSource ? { remoteSource } : {}),
+              ...(preSqlApplied ? { preSqlApplied: true } : {}),
+              ...(outcome ? restoreDiagnosticsJson(outcome) : {}),
               connectionString,
               overwritten: databaseExists,
               ...metadata,
@@ -773,7 +944,7 @@ export const restoreCommand = new Command('restore')
           console.log()
         }
       } catch (error) {
-        const e = error as Error
+        const thrown = describeThrown(error)
 
         const missingToolPatterns = [
           'pg_restore not found',
@@ -784,12 +955,18 @@ export const restoreCommand = new Command('restore')
         ]
 
         const matchingPattern = missingToolPatterns.find((p) =>
-          e.message.includes(p),
+          thrown.message.includes(p),
         )
 
         if (matchingPattern) {
           if (options.json) {
-            console.log(JSON.stringify({ error: e.message }))
+            console.log(
+              JSON.stringify({
+                error: thrown.message,
+                ...(thrown.name ? { errorName: thrown.name } : {}),
+                ...(thrown.code ? { errorCode: thrown.code } : {}),
+              }),
+            )
             process.exit(1)
           }
           const missingTool = matchingPattern.replace(' not found', '')
@@ -803,9 +980,18 @@ export const restoreCommand = new Command('restore')
         }
 
         if (options.json) {
-          console.log(JSON.stringify({ error: e.message }))
+          console.log(
+            JSON.stringify({
+              error: thrown.message,
+              ...(thrown.name ? { errorName: thrown.name } : {}),
+              ...(thrown.code ? { errorCode: thrown.code } : {}),
+              ...(outcome?.hadObjectErrors
+                ? restoreDiagnosticsJson(outcome)
+                : {}),
+            }),
+          )
         } else {
-          console.error(uiError(e.message))
+          console.error(uiError(thrown.message))
         }
         process.exit(1)
       } finally {

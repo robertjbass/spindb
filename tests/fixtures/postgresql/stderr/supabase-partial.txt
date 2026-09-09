@@ -1,0 +1,49 @@
+pg_restore: connecting to database for restore
+pg_restore: creating SCHEMA "public"
+pg_restore: creating EXTENSION "uuid-ossp"
+pg_restore: error: could not execute query: ERROR:  extension "uuid-ossp" is not available
+DETAIL:  Could not open extension control file "/opt/pg/share/extension/uuid-ossp.control": No such file or directory.
+HINT:  The extension must first be installed on the system where PostgreSQL is running.
+Command was: CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+
+pg_restore: creating TABLE "public.staff"
+pg_restore: error: could not execute query: ERROR:  function extensions.uuid_generate_v4() does not exist
+LINE 2:     id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+                            ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+Command was: CREATE TABLE "public"."staff" (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    email text NOT NULL
+);
+
+pg_restore: creating TABLE "public.shift"
+pg_restore: error: could not execute query: ERROR:  function extensions.uuid_generate_v4() does not exist
+LINE 2:     id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+                            ^
+Command was: CREATE TABLE "public"."shift" (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    staff_id uuid NOT NULL
+);
+
+pg_restore: processing data for table "public.staff"
+pg_restore: error: could not execute query: ERROR:  relation "public.staff" does not exist
+Command was: COPY "public"."staff" (id, email) FROM stdin;
+
+pg_restore: processing data for table "public.shift"
+pg_restore: error: could not execute query: ERROR:  relation "public.shift" does not exist
+Command was: COPY "public"."shift" (id, staff_id) FROM stdin;
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: GRANT SELECT ON TABLE "public"."staff" TO "authenticated";
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: GRANT SELECT ON TABLE "public"."shift" TO "authenticated";
+
+pg_restore: error: could not execute query: ERROR:  role "authenticated" does not exist
+Command was: GRANT SELECT ON TABLE "public"."invoice" TO "authenticated";
+
+pg_restore: error: could not execute query: ERROR:  role "service_role" does not exist
+Command was: GRANT ALL ON TABLE "public"."staff" TO "service_role";
+
+pg_restore: warning: could not find where to insert IF EXISTS in statement "DROP DEFAULT"
+pg_restore: warning: errors ignored on restore: 819

@@ -10,6 +10,7 @@ import { paths } from '../../config/paths'
 import { validateRestoreCompatibility } from './version-validator'
 import { normalizeVersion } from './version-maps'
 import { SpinDBError, ErrorCodes } from '../../core/error-handler'
+import { parsePgRestoreDiagnostics } from './restore-diagnostics'
 import type { BackupFormat, RestoreResult } from '../../types'
 
 const execAsync = promisify(exec)
@@ -362,9 +363,15 @@ export async function restoreBackup(
       execOptions,
     )
 
+    // psql exited 0. Say so explicitly: spreading execAsync's {stdout, stderr}
+    // left `code` undefined on EVERY successful restore, which every caller
+    // reads as "not zero" - so a clean restore reported "completed with
+    // warnings" 100% of the time and a real partial restore looked identical.
     return {
       format: 'sql',
       ...result,
+      code: 0,
+      diagnostics: parsePgRestoreDiagnostics(result.stderr || ''),
     }
   } else {
     // Use custom path if provided, otherwise find version-matched binary
@@ -397,15 +404,21 @@ export async function restoreBackup(
       return {
         format: detectedFormat,
         ...result,
+        code: 0,
+        diagnostics: parsePgRestoreDiagnostics(result.stderr || ''),
       }
     } catch (error) {
       const e = error as Error & { stdout?: string; stderr?: string }
-      // pg_restore often returns non-zero even on partial success
+      // pg_restore returns non-zero on partial success too: it keeps going past
+      // an object it could not create and prints one error line per failure.
+      // The diagnostics are what let the caller tell those two apart.
+      const stderr = e.stderr || e.message
       return {
         format: detectedFormat,
         stdout: e.stdout || '',
-        stderr: e.stderr || e.message,
+        stderr,
         code: 1,
+        diagnostics: parsePgRestoreDiagnostics(stderr),
       }
     }
   }

@@ -252,11 +252,47 @@ export type BackupFormat = {
   restoreCommand: string
 }
 
+/**
+ * What a restore tool reported about the objects it could not create.
+ *
+ * `pg_restore` keeps going after a failed object by default: a missing
+ * extension, a role the dump references that the target does not have, a
+ * column default calling a function that was never created. It prints one
+ * `pg_restore: error:` line per failure, a final
+ * `pg_restore: warning: errors ignored on restore: N` summary, and exits
+ * non-zero - while having restored everything it COULD. A restore that lost 19
+ * tables and one that lost nothing look the same from the exit code alone,
+ * which is why this is parsed and surfaced rather than inferred.
+ */
+export type PgRestoreDiagnostics = {
+  /** Unique error lines, in the order they appeared, capped. */
+  restoreErrors: string[]
+  /** Every error line that matched, duplicates included, before the cap. */
+  restoreErrorCount: number
+  /** Unique warning lines (never the ignored-errors summary), capped. */
+  restoreWarnings: string[]
+  /** Every warning line that matched, duplicates included, before the cap. */
+  restoreWarningCount: number
+  /** N from `pg_restore: warning: errors ignored on restore: N`, or null. */
+  restoreIgnoredErrors: number | null
+  /** True when the cap dropped lines from either array. */
+  truncated: boolean
+}
+
 export type RestoreResult = {
   format: string
   stdout?: string
   stderr?: string
   code?: number
+  /** Object-level errors parsed out of the restore tool's stderr. */
+  diagnostics?: PgRestoreDiagnostics
+  /**
+   * The restore moved SOME data and then hit errors. Set by engines that
+   * restore piecewise (InfluxDB writes table by table) so a partial result is
+   * reported as such instead of being classified as an unexplained failure and
+   * rolled back.
+   */
+  partial?: boolean
 }
 
 // Engine-specific backup format types
