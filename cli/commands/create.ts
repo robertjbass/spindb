@@ -528,6 +528,10 @@ export const createCommand = new Command('create')
     '--from <location>',
     'Restore from a dump file or connection string after creation',
   )
+  .option(
+    '--with-privileges',
+    'Replay the GRANT/REVOKE statements in the restored dump instead of dropping them. Requires --from, PostgreSQL only, and only for custom/tar/directory dumps (a plain-SQL dump is replayed as written, so its grants always ran). Object ownership is still stripped.',
+  )
   .option('-j, --json', 'Output result as JSON')
   .option(
     '--show-deprecated',
@@ -548,6 +552,7 @@ export const createCommand = new Command('create')
         start?: boolean
         connect?: boolean
         from?: string
+        withPrivileges?: boolean
         json?: boolean
         showDeprecated?: boolean
       },
@@ -695,6 +700,26 @@ export const createCommand = new Command('create')
         if (!options.json) {
           console.log(header('Creating Database Container'))
           console.log()
+        }
+
+        // --with-privileges only means anything on a restore, and only where
+        // the restore tool drops privileges to begin with (pg_restore).
+        // Checked here so the interactive path, which picks the engine after
+        // the flags are parsed, is held to the same rule.
+        if (options.withPrivileges) {
+          if (!restoreLocation) {
+            return exitWithError({
+              message:
+                '--with-privileges requires --from (it only affects a restore)',
+              json: options.json,
+            })
+          }
+          if (engine !== Engine.PostgreSQL) {
+            return exitWithError({
+              message: `--with-privileges is not supported for ${engine}. It is available for postgresql, whose restore drops the dump's GRANT/REVOKE statements by default.`,
+              json: options.json,
+            })
+          }
         }
 
         const dbEngine = getEngine(engine)
@@ -1219,6 +1244,7 @@ export const createCommand = new Command('create')
           const result = await dbEngine.restore(config, backupPath, {
             database,
             createDatabase: false,
+            ...(options.withPrivileges ? { withPrivileges: true } : {}),
           })
 
           // Same classifier the `restore` command uses: an import that could
@@ -1229,9 +1255,17 @@ export const createCommand = new Command('create')
 
           if (restoreOutcome.failed) {
             restoreSpinner.fail('Restore failed')
+            // The outer catch only reports the error, it does not roll back
+            // (`tx` is scoped to this try block), so a fatal restore would
+            // otherwise leave the running container and its data directory
+            // behind. Every other failure path here rolls back the same way,
+            // and rollback drains its own stack, so a second call is a no-op.
+            await tx.rollback()
             throw new Error(restoreFailureMessage(result))
           }
 
+          // A partial restore keeps the container: the objects that did land
+          // are usable, and the diagnostics above say what did not.
           if (restoreOutcome.hadObjectErrors) {
             restoreSpinner.warn(restoreOutcome.summary)
             if (!options.json) {
@@ -1268,6 +1302,7 @@ export const createCommand = new Command('create')
                 status: finalConfig.status,
                 restored: !!restoreLocation,
                 ...(restoreStatus ? { restoreStatus } : {}),
+                ...(options.withPrivileges ? { privilegesRestored: true } : {}),
                 ...(remoteDumpWarnings.length > 0
                   ? { remoteDumpWarnings }
                   : {}),
