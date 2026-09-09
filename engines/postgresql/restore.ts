@@ -164,6 +164,21 @@ export type RestoreOptions = {
   clean?: boolean
   /** Parallel restore workers (pg_restore -j). Only for custom/tar/directory formats. */
   jobs?: number
+  /**
+   * Replay the dump's GRANT/REVOKE statements instead of dropping them
+   * (`spindb restore --with-privileges`). Default (unset) keeps
+   * `--no-privileges`, which is why a restore never fails on a role the target
+   * does not have - and why every access grant in the dump is discarded
+   * without a word. `--no-owner` is kept either way: object ownership is the
+   * local superuser's, since the dump's owning role does not exist here.
+   *
+   * A GRANT to a role this server does not have then fails as an object-level
+   * error, which the restore diagnostics report rather than swallow. Only
+   * affects the custom/tar/directory (`pg_restore`) path; a plain-SQL dump is
+   * replayed by `psql` exactly as written, so its GRANTs always ran and the
+   * option is a no-op there.
+   */
+  withPrivileges?: boolean
 }
 
 /**
@@ -180,10 +195,16 @@ export function buildPgRestoreCommand(args: {
   backupPath: string
   clean?: boolean
   jobs?: number
+  withPrivileges?: boolean
 }): string {
+  // --no-owner always: the roles that owned the objects upstream do not exist
+  // here. --no-privileges unless the caller asked for the dump's GRANTs.
+  const ownershipFlags = args.withPrivileges
+    ? '--no-owner'
+    : '--no-owner --no-privileges'
   const cleanFlags = args.clean ? ' --clean --if-exists' : ''
   const jobsFlag = args.jobs && args.jobs > 1 ? ` -j ${args.jobs}` : ''
-  return `"${args.restorePath}" -h 127.0.0.1 -p ${args.port} -U ${args.user} -d ${args.database} --no-owner --no-privileges${cleanFlags}${jobsFlag} ${args.formatFlag} "${args.backupPath}"`
+  return `"${args.restorePath}" -h 127.0.0.1 -p ${args.port} -U ${args.user} -d ${args.database} ${ownershipFlags}${cleanFlags}${jobsFlag} ${args.formatFlag} "${args.backupPath}"`
 }
 
 /**
@@ -330,6 +351,7 @@ export async function restoreBackup(
     containerVersion,
     clean,
     jobs,
+    withPrivileges,
   } = options
   const execOptions = {
     maxBuffer: 50 * 1024 * 1024,
@@ -397,6 +419,7 @@ export async function restoreBackup(
           backupPath,
           clean,
           jobs,
+          withPrivileges,
         }),
         execOptions,
       )

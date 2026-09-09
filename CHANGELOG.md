@@ -5,6 +5,16 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.1] - 2026-09-09
+
+### Added
+
+- **`spindb restore --with-privileges`** (and the same flag on `spindb create --from`) replays the `GRANT`/`REVOKE` statements in a PostgreSQL dump instead of dropping them. A PostgreSQL custom/tar/directory dump is restored by `pg_restore`, which spindb gives `--no-owner --no-privileges`, so by default the whole access-control half of such a dump is discarded without a word - which is what keeps an ordinary dump restorable, since the roles it grants to do not exist in a fresh local container, but it also means a restore quietly does not reproduce the permissions you dumped. The flag drops the `--no-privileges` half only: ownership is still stripped, because the owning role does not exist locally either. A grant to a role this server does not have then fails as an object-level error and rides the restore diagnostics added in 0.69.0 (`status: completed_with_errors` plus the `restoreError*` fields), rather than vanishing - create the roles with `--pre-sql` and both halves succeed. `privilegesRestored: true` is reported in `--json` when it was used. PostgreSQL only, and only for custom/tar/directory dumps: a plain-SQL dump has no such switch - `psql` replays the file as written, so its ownership and grant statements always ran, and the flag is a documented no-op there; another engine refuses the flag with a message naming what it is for. The default is unchanged, so no existing caller behaves differently.
+
+### Fixed
+
+- **`spindb create --from` no longer leaves a container behind when the restore fails outright.** Creating a container is transactional: every failure between the container being created and the final commit rolls the transaction back, so the container, its data directory and its running server are cleaned up. The failed-restore verdict added in 0.69.0 threw from inside that transaction without rolling it back first, and the outer handler only reports the error (the transaction is scoped to the block that threw), so a `FATAL` restore - a connection that died mid-import, a server that went away - exited non-zero while leaving a running container holding a half-imported database, and the next `create` of that name refused to run without `--force`. The rollback now runs before the error propagates, exactly as the container-create, data-dir-init, start and create-database failures beside it already did. Rolling back twice is harmless (the rollback drains its own stack), so the paths that were already correct are unchanged. A PARTIAL restore still keeps the container on purpose: the objects that landed are usable, `status` is `completed_with_errors`, and the diagnostics say what did not arrive.
+
 ## [0.69.0] - 2026-09-09
 
 ### Added
