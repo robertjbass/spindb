@@ -243,6 +243,15 @@ spindb restore mydb ./backup.dump --pre-sql ./shims.sql  # Run a SQL file agains
                                         # that restore as well). A shim that fails aborts the
                                         # restore, and rolls back the database this restore
                                         # created (never one you already had).
+spindb restore mydb ./backup.dump --with-privileges  # Replay the dump's GRANT/REVOKE statements
+                                        # instead of dropping them. PostgreSQL only, and only for
+                                        # custom/tar/directory dumps (a plain-SQL dump is replayed
+                                        # by psql exactly as written, so its grants always ran and
+                                        # the flag is a no-op). Object OWNERSHIP is still stripped.
+                                        # A grant to a role this container does not have becomes a
+                                        # reported object error instead of silence - pair it with
+                                        # --pre-sql to create those roles first. Reported as
+                                        # privilegesRestored: true in --json.
 
 # Restore from remote database (all engines supported)
 spindb restore mydb --from-url "postgresql://user:pass@host:5432/db"
@@ -311,6 +320,27 @@ spindb restore mydb ./supabase.dump -d app --force --json
 - A restore that genuinely failed (a `FATAL`, or a non-zero exit with no object
   errors to explain it) exits 1 with an `error` field, as before.
 - `preSqlApplied: true` appears when `--pre-sql` ran.
+- `privilegesRestored: true` appears when `--with-privileges` ran.
+
+By default a restore is given `--no-owner --no-privileges`, so every GRANT and
+REVOKE in the dump is discarded without a word: the roles they name do not exist
+in a fresh local container, and failing on that would make most dumps
+unrestorable. `--with-privileges` drops the `--no-privileges` half (ownership is
+still stripped, since the owning role does not exist locally) and replays them,
+which is the honest option: a grant to a role this server does not have fails as
+an object-level error and is reported in the diagnostics above, rather than
+vanishing. Create the roles with `--pre-sql` and both halves succeed:
+
+```bash
+cat > roles.sql <<'SQL'
+CREATE ROLE app_readonly NOLOGIN;
+CREATE ROLE app_writer NOLOGIN;
+SQL
+spindb restore mydb ./prod.dump -d app --force --pre-sql roles.sql --with-privileges --json
+```
+
+`spindb create <name> --from <dump> --with-privileges` accepts the same flag on
+the restore it runs.
 
 The usual fix for a partial restore is to create the missing pieces first:
 

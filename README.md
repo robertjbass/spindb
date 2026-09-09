@@ -96,6 +96,7 @@ spindb run myapp ./schema.sql                    # Run SQL file
 spindb backup myapp --format sql                 # Backup
 spindb url myapp --copy                          # Copy connection string
 spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/roles first
+spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dropped by default)
 ```
 
 ### MongoDB

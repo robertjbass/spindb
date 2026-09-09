@@ -50,6 +50,7 @@ type Calls = {
   created: string[]
   deleted: string[]
   stopped: string[]
+  restoreOptions: Record<string, unknown>[]
   stdout: string[]
   exitCode: number | null
 }
@@ -92,7 +93,18 @@ function stubCreateFlow(restoreResult: RestoreResult): void {
     description: 'PostgreSQL custom-format dump',
     restoreCommand: 'pg_restore',
   }))
-  mock.method(postgresqlEngine, 'restore', async () => restoreResult)
+  mock.method(
+    postgresqlEngine,
+    'restore',
+    async (
+      _config: ContainerConfig,
+      _backupPath: string,
+      restoreOptions: Record<string, unknown> = {},
+    ) => {
+      calls.restoreOptions.push(restoreOptions)
+      return restoreResult
+    },
+  )
   mock.method(
     postgresqlEngine,
     'getConnectionString',
@@ -108,10 +120,18 @@ function stubCreateFlow(restoreResult: RestoreResult): void {
   })
 }
 
-async function runCreate(): Promise<void> {
+async function runCreate(extraArgs: string[] = []): Promise<void> {
   try {
     await createCommand.parseAsync(
-      [CONTAINER, '--engine', 'postgresql', '--from', dumpPath, '--json'],
+      [
+        CONTAINER,
+        '--engine',
+        'postgresql',
+        '--from',
+        dumpPath,
+        '--json',
+        ...extraArgs,
+      ],
       { from: 'user' },
     )
   } catch (error) {
@@ -133,6 +153,7 @@ describe('create --from rollback', () => {
       created: [],
       deleted: [],
       stopped: [],
+      restoreOptions: [],
       stdout: [],
       exitCode: null,
     }
@@ -197,5 +218,60 @@ describe('create --from rollback', () => {
     const output = jsonOutput()
     assert.equal(output.success, true)
     assert.equal(output.restoreStatus, 'completed_with_errors')
+  })
+
+  it('drops the dump privileges unless --with-privileges is passed', async () => {
+    stubCreateFlow({ format: 'custom', code: 0, stderr: '' })
+
+    await runCreate()
+
+    assert.equal(
+      calls.restoreOptions[0]?.withPrivileges,
+      undefined,
+      'the default restore keeps pg_restore --no-privileges',
+    )
+    assert.equal(jsonOutput().privilegesRestored, undefined)
+  })
+
+  it('passes --with-privileges through to the restore', async () => {
+    stubCreateFlow({ format: 'custom', code: 0, stderr: '' })
+
+    await runCreate(['--with-privileges'])
+
+    assert.equal(
+      calls.restoreOptions[0]?.withPrivileges,
+      true,
+      'the engine is told to replay the dump GRANTs',
+    )
+    assert.equal(
+      jsonOutput().privilegesRestored,
+      true,
+      '--json says the privileges were restored',
+    )
+  })
+
+  it('refuses --with-privileges on an engine whose restore never drops them', async () => {
+    stubCreateFlow({ format: 'custom', code: 0, stderr: '' })
+
+    try {
+      await createCommand.parseAsync(
+        [
+          CONTAINER,
+          '--engine',
+          'mysql',
+          '--from',
+          dumpPath,
+          '--json',
+          '--with-privileges',
+        ],
+        { from: 'user' },
+      )
+    } catch (error) {
+      if (!(error instanceof ProcessExited)) throw error
+    }
+
+    assert.equal(calls.exitCode, 1, 'the create refuses to run')
+    assert.deepEqual(calls.created, [], 'nothing was created')
+    assert.match(String(jsonOutput().error), /--with-privileges/)
   })
 })

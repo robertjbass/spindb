@@ -66,6 +66,10 @@ export const restoreCommand = new Command('restore')
     '--pre-sql <file>',
     'Run a SQL file against the target database after it is created and BEFORE the restore. For compatibility shims a dump needs and the target lacks: a missing extension, roles the dump grants to, a function a column default calls. Runs inside the same rollback scope as the restore.',
   )
+  .option(
+    '--with-privileges',
+    'Replay the GRANT/REVOKE statements in the dump instead of dropping them. PostgreSQL only, and only for custom/tar/directory dumps (a plain-SQL dump is replayed as written, so its grants always ran). Object ownership is still stripped. A grant to a role this container does not have becomes a reported object error rather than silence.',
+  )
   .option('-j, --json', 'Output result as JSON')
   .action(
     async (
@@ -77,6 +81,7 @@ export const restoreCommand = new Command('restore')
         force?: boolean
         intoExisting?: boolean
         preSql?: string
+        withPrivileges?: boolean
         json?: boolean
       },
     ) => {
@@ -206,6 +211,18 @@ export const restoreCommand = new Command('restore')
             }
             process.exit(1)
           }
+        }
+
+        // --with-privileges only means anything where the restore tool can be
+        // told to drop privileges in the first place, which is pg_restore.
+        if (options.withPrivileges && engineName !== Engine.PostgreSQL) {
+          const msg = `--with-privileges is not supported for ${engineName}. It is available for postgresql, whose restore drops the dump's GRANT/REVOKE statements by default.`
+          if (options.json) {
+            console.log(JSON.stringify({ error: msg }))
+          } else {
+            console.error(uiError(msg))
+          }
+          process.exit(1)
         }
 
         // Check if container needs to be running for restore
@@ -842,6 +859,7 @@ export const restoreCommand = new Command('restore')
             // Object-level clean so an in-place restore is a faithful REPLACE
             // (not a merge into the existing contents).
             ...(options.intoExisting ? { clean: true } : {}),
+            ...(options.withPrivileges ? { withPrivileges: true } : {}),
           })
 
           // What the restore tool actually did. The old rule here failed only
@@ -916,6 +934,7 @@ export const restoreCommand = new Command('restore')
               sourceType: options.fromUrl ? 'remote' : 'file',
               ...(remoteSource ? { remoteSource } : {}),
               ...(preSqlApplied ? { preSqlApplied: true } : {}),
+              ...(options.withPrivileges ? { privilegesRestored: true } : {}),
               ...(outcome ? restoreDiagnosticsJson(outcome) : {}),
               connectionString,
               overwritten: databaseExists,

@@ -70,6 +70,42 @@ describe('PostgreSQL Restore Module', () => {
       const unset = buildPgRestoreCommand(base)
       assert(!unset.includes(' -j '), 'no jobs stays single-stream')
     })
+
+    it('drops the dump privileges by default', () => {
+      // Unchanged behaviour: every GRANT/REVOKE in the dump is discarded, which
+      // is why a restore never fails on a role the target does not have.
+      const cmd = buildPgRestoreCommand(base)
+      assert(cmd.includes('--no-privileges'), 'privileges are stripped')
+      assert(cmd.includes('--no-owner'), 'ownership is stripped')
+    })
+
+    it('keeps the dump privileges with withPrivileges, and still strips ownership', () => {
+      // --with-privileges: pg_restore replays the GRANT/REVOKE statements, so a
+      // grant to a role this server does not have surfaces as an object error
+      // in the diagnostics instead of being dropped silently. Ownership stays
+      // stripped either way - the owning role does not exist locally.
+      const cmd = buildPgRestoreCommand({ ...base, withPrivileges: true })
+      assert(!cmd.includes('--no-privileges'), 'privileges are replayed')
+      assert(cmd.includes('--no-owner'), 'ownership is still stripped')
+      assert(cmd.includes('-Fc'), 'still passes the format flag')
+      assert(cmd.includes('"/tmp/backup.dump"'), 'still quotes the backup path')
+    })
+
+    it('combines withPrivileges with the --into-existing clean flags', () => {
+      const cmd = buildPgRestoreCommand({
+        ...base,
+        withPrivileges: true,
+        clean: true,
+        jobs: 4,
+      })
+      assert(!cmd.includes('--no-privileges'), 'privileges are replayed')
+      assert(cmd.includes('--clean --if-exists'), 'keeps the clean flags')
+      assert(cmd.includes(' -j 4 '), 'keeps the parallel flag')
+      assert(
+        cmd.indexOf('--no-owner') < cmd.indexOf('--clean --if-exists'),
+        'ownership flags precede the clean flags',
+      )
+    })
   })
 
   describe('detectBackupFormat (directory dumps)', () => {
