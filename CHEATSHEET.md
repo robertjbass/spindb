@@ -280,6 +280,55 @@ rejects is dropped. What was converted is printed, and reported under
 server's own error rather than silently changed. PostgreSQL already worked this
 way, swapping in a `pg_dump` that can read the remote major version.
 
+### Redis and Valkey migrate across engine families
+
+`spindb restore <container> --from-url redis://...` copies the keyspace with
+`SCAN` + `DUMP` -> `RESTORE`, which moves the source server's own serialization
+and is exact and fast. That only works while the target understands the source's
+RDB version, and Redis and Valkey have stopped sharing one:
+
+| Server | RDB version its `DUMP` stamps |
+| --- | --- |
+| Redis 7.2 | 11 |
+| Redis 8.x | 12 |
+| Upstash (reports `redis_version:8.4.0`) | 14 |
+| Valkey 8.0 | 11 |
+| Valkey 9.0 | 80 |
+
+`RESTORE` refuses a payload outside the format it knows, so a Valkey 9 source
+cannot be moved byte for byte into any Redis, and a Redis 8 or Upstash source
+cannot be moved into Redis 7.2 or into Valkey. There is no version you can pick
+to fix that.
+
+When the target refuses the payload format - or the source does not implement
+`DUMP`, which a serverless provider may not - the copy switches for the rest of
+the run to a type-aware walk that reads each key with `TYPE`/`GET`/`HSCAN`/
+`SSCAN`/`ZSCAN`/`LRANGE`/`XRANGE`/`PTTL` and rewrites it with `SET`/`HSET`/
+`SADD`/`ZADD`/`RPUSH`/`XADD`/`PEXPIRE`. Strings, hashes, lists, sets, sorted
+sets and streams cross over with their values, order, stream ids and TTLs
+intact, and binary keys and values stay binary. Module types (`ReJSON-RL`,
+`TSDB-TYPE`, `MBbloom--`) have no portable read/write pair and are reported
+rather than dropped silently.
+
+```bash
+spindb restore mykv --from-url "rediss://default:pw@host:6379" --json
+```
+
+```json
+{
+  "success": true,
+  "keysCopied": 1252,
+  "strategy": "logical",
+  "skipped": 2,
+  "skippedTypes": ["ReJSON-RL"]
+}
+```
+
+`strategy` is `dump-restore` when the fast path was used and `logical` when it
+fell back; `skipped`/`skippedTypes` appear only when something could not be
+carried. The container must be RUNNING, and the copy REPLACES the keys it
+carries without emptying the rest of the target first.
+
 ### A restore that lost objects says so
 
 `pg_restore` keeps going past an object it cannot create. A dump that references
@@ -325,13 +374,11 @@ spindb restore mydb ./supabase.dump -d app --force --json
 A PostgreSQL custom/tar/directory dump is restored by `pg_restore`, which spindb
 gives `--no-owner --no-privileges`, so every GRANT and REVOKE in the dump is
 discarded without a word: the roles they name do not exist in a fresh local
-container, and failing on that would make most dumps unrestorable. (A plain-SQL
-dump has no such switch - `psql` replays the file as written, so whatever
-ownership and grant statements `pg_dump -Fp` put in it run, and fail on their own
-if the roles are missing. `--with-privileges` is a no-op there.) `--with-privileges` drops the `--no-privileges` half (ownership is
-still stripped, since the owning role does not exist locally) and replays them,
-which is the honest option: a grant to a role this server does not have fails as
-an object-level error and is reported in the diagnostics above, rather than
+container, and failing on that would make most dumps unrestorable.
+`--with-privileges` drops the `--no-privileges` half (ownership is still
+stripped, since the owning role does not exist locally) and replays them, which
+is the honest option: a grant to a role this server does not have fails as an
+object-level error and is reported in the diagnostics above, rather than
 vanishing. Create the roles with `--pre-sql` and both halves succeed:
 
 ```bash
@@ -344,6 +391,32 @@ spindb restore mydb ./prod.dump -d app --force --pre-sql roles.sql --with-privil
 
 `spindb create <name> --from <dump> --with-privileges` accepts the same flag on
 the restore it runs.
+
+A plain-SQL dump has no such switch: `psql` replays the file as written, so
+whatever ownership and grant statements `pg_dump -Fp` put in it run, and fail on
+their own if the roles are missing. `--with-privileges` is a no-op there.
+
+### `--force` drops the target first, and says why if it cannot
+
+Without `--into-existing`, a restore over an existing database DROPS and
+recreates it. On PostgreSQL 13+ that drop is `DROP DATABASE ... WITH (FORCE)`,
+which terminates whatever is attached (a pooler holding a server connection, an
+open query console, your app) inside the same statement, so a restore no longer
+fails with `database "x" is being accessed by other users`. Older servers
+terminate the sessions in a separate statement and retry the drop once.
+
+A drop that still cannot happen reports the server's own reason and stops before
+anything is destroyed:
+
+```json
+{
+  "error": "Failed to drop database \"app\": ERROR:  cannot drop a template database",
+  "phase": "drop-target"
+}
+```
+
+`phase: "drop-target"` says the restore never started: the existing database is
+untouched. Without `--json` the same label and detail are written to stderr.
 
 The usual fix for a partial restore is to create the missing pieces first:
 
