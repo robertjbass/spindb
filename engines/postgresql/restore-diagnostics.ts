@@ -18,9 +18,15 @@ const PG_RESTORE_WARNING = /^pg_restore:\s+warning:\s+/
 /**
  * The plain-SQL restore branch runs `psql -f`, which reports failures as
  * `psql:/tmp/dump.sql:214: ERROR:  relation "public.staff" does not exist`.
+ * psql echoes the filename exactly as it received it, so on Windows the path
+ * carries a drive letter and its own colon
+ * (`psql:C:\Users\me\dump.sql:214: ERROR:  ...`). The path segment therefore
+ * has to be allowed to contain colons: stopping at the first one made every
+ * Windows psql error invisible, so a partial restore reported a clean success
+ * there while reporting the truth everywhere else.
  * A bare `ERROR:` covers a server message psql echoed without its own prefix.
  */
-const PSQL_ERROR = /^psql:[^:]*:\d+:\s*ERROR:/
+const PSQL_ERROR = /^psql:.+:\d+:\s*ERROR:/
 const BARE_ERROR = /^ERROR:/
 
 /**

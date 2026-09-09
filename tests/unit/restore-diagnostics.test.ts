@@ -82,6 +82,39 @@ describe('parsePgRestoreDiagnostics', () => {
     assertEqual(d.restoreErrors.length, 2, 'both are distinct')
   })
 
+  it('reports psql ERROR lines when the dump path carries a drive letter', () => {
+    // What psql prints on Windows: the filename is echoed as given, so the
+    // path holds its own colon and CRLF ends every line. Both used to hide
+    // the errors, which made a partial restore look clean on Windows only.
+    const stderr = [
+      'psql:C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pg-partial.sql:1: ERROR:  extension "does_not_exist_ext" is not available',
+      'psql:C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pg-partial.sql:2: ERROR:  function shim_label() does not exist',
+      'psql:C:/Users/runneradmin/AppData/Local/Temp/pg-partial.sql:3: NOTICE:  table "x" does not exist, skipping',
+    ].join('\r\n')
+
+    const d = parsePgRestoreDiagnostics(stderr)
+    assertEqual(
+      d.restoreErrorCount,
+      2,
+      'both ERROR lines count, NOTICE does not',
+    )
+    assert(
+      d.restoreErrors.some((l) => l.includes('does_not_exist_ext')),
+      'the failing object is named',
+    )
+
+    const outcome = classifyRestoreOutcome({
+      format: 'sql',
+      stderr,
+      code: 0,
+    })
+    assertEqual(
+      outcome.status,
+      'completed_with_errors',
+      'a partial Windows restore is not a clean success',
+    )
+  })
+
   it('is empty for a clean restore and for empty input', () => {
     const clean = parsePgRestoreDiagnostics('')
     assertEqual(clean.restoreErrorCount, 0, 'no errors')
