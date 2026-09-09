@@ -325,13 +325,11 @@ spindb restore mydb ./supabase.dump -d app --force --json
 A PostgreSQL custom/tar/directory dump is restored by `pg_restore`, which spindb
 gives `--no-owner --no-privileges`, so every GRANT and REVOKE in the dump is
 discarded without a word: the roles they name do not exist in a fresh local
-container, and failing on that would make most dumps unrestorable. (A plain-SQL
-dump has no such switch - `psql` replays the file as written, so whatever
-ownership and grant statements `pg_dump -Fp` put in it run, and fail on their own
-if the roles are missing. `--with-privileges` is a no-op there.) `--with-privileges` drops the `--no-privileges` half (ownership is
-still stripped, since the owning role does not exist locally) and replays them,
-which is the honest option: a grant to a role this server does not have fails as
-an object-level error and is reported in the diagnostics above, rather than
+container, and failing on that would make most dumps unrestorable.
+`--with-privileges` drops the `--no-privileges` half (ownership is still
+stripped, since the owning role does not exist locally) and replays them, which
+is the honest option: a grant to a role this server does not have fails as an
+object-level error and is reported in the diagnostics above, rather than
 vanishing. Create the roles with `--pre-sql` and both halves succeed:
 
 ```bash
@@ -344,6 +342,10 @@ spindb restore mydb ./prod.dump -d app --force --pre-sql roles.sql --with-privil
 
 `spindb create <name> --from <dump> --with-privileges` accepts the same flag on
 the restore it runs.
+
+A plain-SQL dump has no such switch: `psql` replays the file as written, so
+whatever ownership and grant statements `pg_dump -Fp` put in it run, and fail on
+their own if the roles are missing. `--with-privileges` is a no-op there.
 
 The usual fix for a partial restore is to create the missing pieces first:
 
