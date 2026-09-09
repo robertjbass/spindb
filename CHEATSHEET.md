@@ -322,10 +322,13 @@ spindb restore mydb ./supabase.dump -d app --force --json
 - `preSqlApplied: true` appears when `--pre-sql` ran.
 - `privilegesRestored: true` appears when `--with-privileges` ran.
 
-By default a restore is given `--no-owner --no-privileges`, so every GRANT and
-REVOKE in the dump is discarded without a word: the roles they name do not exist
-in a fresh local container, and failing on that would make most dumps
-unrestorable. `--with-privileges` drops the `--no-privileges` half (ownership is
+A PostgreSQL custom/tar/directory dump is restored by `pg_restore`, which spindb
+gives `--no-owner --no-privileges`, so every GRANT and REVOKE in the dump is
+discarded without a word: the roles they name do not exist in a fresh local
+container, and failing on that would make most dumps unrestorable. (A plain-SQL
+dump has no such switch - `psql` replays the file as written, so whatever
+ownership and grant statements `pg_dump -Fp` put in it run, and fail on their own
+if the roles are missing. `--with-privileges` is a no-op there.) `--with-privileges` drops the `--no-privileges` half (ownership is
 still stripped, since the owning role does not exist locally) and replays them,
 which is the honest option: a grant to a role this server does not have fails as
 an object-level error and is reported in the diagnostics above, rather than

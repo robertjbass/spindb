@@ -147,6 +147,10 @@ function jsonOutput(): Record<string, unknown> {
 
 describe('create --from rollback', () => {
   beforeEach(() => {
+    // `createCommand` is a module-level commander instance and keeps the option
+    // values of the previous parse, so a flag one test passes would still be
+    // set for the next one that omits it.
+    createCommand.setOptionValue('withPrivileges', undefined)
     dumpPath = join(tmpdir(), `spindb-create-rollback-${process.pid}.dump`)
     writeFileSync(dumpPath, 'PGDMP fake dump')
     calls = {
