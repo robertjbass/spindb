@@ -1147,7 +1147,12 @@ export class MariaDBEngine extends BaseEngine {
 
   async runScript(
     container: ContainerConfig,
-    options: { file?: string; sql?: string; database?: string },
+    options: {
+      file?: string
+      sql?: string
+      database?: string
+      quiet?: boolean
+    },
   ): Promise<void> {
     const { name, port } = container
     const db = options.database || container.database || 'mysql'
@@ -1162,7 +1167,9 @@ export class MariaDBEngine extends BaseEngine {
       args.push('-e', options.sql)
 
       const spawnOptions: SpawnOptions = {
-        stdio: 'inherit',
+        // quiet keeps result output off stdout (a caller owns it) while the
+        // client's errors still reach stderr.
+        stdio: options.quiet ? ['inherit', 'ignore', 'inherit'] : 'inherit',
         env: buildMariaDbEnv(auth.password),
       }
 
@@ -1180,7 +1187,7 @@ export class MariaDBEngine extends BaseEngine {
       })
     } else if (options.file) {
       const spawnOptions: SpawnOptions = {
-        stdio: ['pipe', 'inherit', 'inherit'],
+        stdio: ['pipe', options.quiet ? 'ignore' : 'inherit', 'inherit'],
         env: buildMariaDbEnv(auth.password),
       }
 

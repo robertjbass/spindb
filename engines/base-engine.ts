@@ -317,6 +317,16 @@ export abstract class BaseEngine {
       sql?: string
       database?: string
       transactionType?: 'read' | 'write' | 'schema'
+      /**
+       * Keep the client's chatter off STDOUT. Its stderr still goes to stderr,
+       * so a failing statement stays visible. Required by any caller that owns
+       * stdout, such as `spindb restore --pre-sql ... --json`, where a stray
+       * `CREATE FUNCTION` line from psql makes the JSON unparseable. Honored by
+       * the SQL engines (PostgreSQL, MySQL, MariaDB); engines that ignore it
+       * still print, which is why `--pre-sql` is limited to the engines that
+       * honor it.
+       */
+      quiet?: boolean
     },
   ): Promise<void>
 

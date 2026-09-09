@@ -986,7 +986,12 @@ export class PostgreSQLEngine extends BaseEngine {
 
   async runScript(
     container: ContainerConfig,
-    options: { file?: string; sql?: string; database?: string },
+    options: {
+      file?: string
+      sql?: string
+      database?: string
+      quiet?: boolean
+    },
   ): Promise<void> {
     const { port } = container
     const db = options.database || container.database || 'postgres'
@@ -1004,7 +1009,7 @@ export class PostgreSQLEngine extends BaseEngine {
       )
       try {
         const { stdout, stderr } = await execAsync(cmd)
-        if (stdout) process.stdout.write(stdout)
+        if (stdout && !options.quiet) process.stdout.write(stdout)
         if (stderr) process.stderr.write(stderr)
         return
       } catch (error) {
@@ -1034,7 +1039,10 @@ export class PostgreSQLEngine extends BaseEngine {
     }
 
     const spawnOptions: SpawnOptions = {
-      stdio: 'inherit',
+      // quiet: drop psql's per-statement chatter (stdout) but keep its errors
+      // (stderr), so a caller that owns stdout - `--json` - stays parseable
+      // without losing the reason a statement failed.
+      stdio: options.quiet ? ['inherit', 'ignore', 'inherit'] : 'inherit',
     }
 
     return new Promise((resolve, reject) => {

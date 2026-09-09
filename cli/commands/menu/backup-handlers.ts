@@ -21,6 +21,10 @@ import {
   checkBackupSize,
 } from '../../../core/backup-restore'
 import {
+  classifyRestoreOutcome,
+  restoreErrorReportLines,
+} from '../../../core/restore-outcome'
+import {
   promptCreateOptions,
   promptContainerName,
   promptContainerSelect,
@@ -918,18 +922,29 @@ export async function handleRestore(): Promise<void> {
         await pressEnterToContinue()
         return
       } else {
-        // Other restore errors - show warnings
-        restoreSpinner.warn('Restore completed with warnings')
-        if (result.stderr) {
+        // Everything else: say how many objects failed rather than dumping the
+        // first 20 lines of stderr and calling them "warnings".
+        const outcome = classifyRestoreOutcome(result)
+        restoreSpinner.warn(outcome.summary)
+        const reportLines = outcome.hadObjectErrors
+          ? restoreErrorReportLines(outcome.diagnostics, 20)
+          : (result.stderr || '').split('\n').filter((l) => l.trim())
+        if (reportLines.length > 0) {
           console.log()
-          console.log(chalk.yellow('  Warnings/Errors:'))
-          const lines = result.stderr.split('\n').filter((l) => l.trim())
-          const displayLines = lines.slice(0, 20)
-          for (const line of displayLines) {
+          console.log(
+            chalk.yellow(
+              outcome.hadObjectErrors
+                ? '  Objects that failed to restore:'
+                : '  Warnings/Errors:',
+            ),
+          )
+          for (const line of reportLines.slice(0, 20)) {
             console.log(chalk.gray(`  ${line}`))
           }
-          if (lines.length > 20) {
-            console.log(chalk.gray(`  ... and ${lines.length - 20} more lines`))
+          if (reportLines.length > 20) {
+            console.log(
+              chalk.gray(`  ... and ${reportLines.length - 20} more lines`),
+            )
           }
         }
       }
@@ -1493,17 +1508,27 @@ export async function handleRestoreForContainer(
       }
       console.log()
     } else {
-      restoreSpinner.warn('Restore completed with warnings')
-      if (result.stderr) {
+      const outcome = classifyRestoreOutcome(result)
+      restoreSpinner.warn(outcome.summary)
+      const reportLines = outcome.hadObjectErrors
+        ? restoreErrorReportLines(outcome.diagnostics, 10)
+        : (result.stderr || '').split('\n').filter((l) => l.trim())
+      if (reportLines.length > 0) {
         console.log()
-        console.log(chalk.yellow('  Warnings/Errors:'))
-        const lines = result.stderr.split('\n').filter((l) => l.trim())
-        const displayLines = lines.slice(0, 10)
-        for (const line of displayLines) {
+        console.log(
+          chalk.yellow(
+            outcome.hadObjectErrors
+              ? '  Objects that failed to restore:'
+              : '  Warnings/Errors:',
+          ),
+        )
+        for (const line of reportLines.slice(0, 10)) {
           console.log(chalk.gray(`  ${line}`))
         }
-        if (lines.length > 10) {
-          console.log(chalk.gray(`  ... and ${lines.length - 10} more lines`))
+        if (reportLines.length > 10) {
+          console.log(
+            chalk.gray(`  ... and ${reportLines.length - 10} more lines`),
+          )
         }
       }
     }

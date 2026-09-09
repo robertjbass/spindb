@@ -176,6 +176,7 @@ spindb connect mydb
 spindb backup mydb
 spindb restore mydb backup.dump
 spindb restore mydb backup.dump --into-existing  # In-place restore (no DROP DATABASE)
+spindb restore mydb backup.dump --pre-sql shims.sql  # Create missing extensions/roles first
 spindb clone mydb mydb-copy
 spindb delete mydb -f
 

@@ -16,6 +16,10 @@ import { containerManager } from './container-manager'
 import { getMissingDependencies } from './dependency-manager'
 import { platformService } from './platform-service'
 import { getEngine } from '../engines'
+import {
+  classifyRestoreOutcome,
+  restoreErrorReportLines,
+} from './restore-outcome'
 import { createSpinner } from '../cli/ui/spinner'
 import { uiSuccess, uiError, formatBytes } from '../cli/ui/theme'
 import {
@@ -262,9 +266,16 @@ export async function performRestore(
       database: databaseName,
     })
 
+    // Same classifier the CLI restore uses, so a partial restore reads the
+    // same way here: the objects that failed, not the first 10 lines of
+    // whatever the tool printed.
+    const outcome = classifyRestoreOutcome(result)
     const warnings: string[] = []
 
-    if (result.code === 0) {
+    if (outcome.hadObjectErrors) {
+      spinner?.warn(outcome.summary)
+      warnings.push(...restoreErrorReportLines(outcome.diagnostics, 10))
+    } else if (result.code === 0) {
       spinner?.succeed('Restore completed successfully')
     } else {
       spinner?.warn('Restore completed with warnings')

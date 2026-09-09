@@ -366,7 +366,15 @@ async function restoreSqlBackup(
   return {
     format: 'sql',
     stdout: message,
+    // The per-table failures belong on stderr: that is where every caller
+    // looks for what went wrong, and it is what the restore classifier reports
+    // as object errors.
+    stderr: errors.join('\n'),
     code: errors.length > 0 ? 1 : 0,
+    // Some tables landed and some did not. Saying so keeps the restore from
+    // being read as an unexplained failure and rolled back, which would drop a
+    // database holding most of the data.
+    partial: errors.length > 0 && totalRecords > 0,
   }
 }
 

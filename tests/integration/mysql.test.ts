@@ -458,6 +458,11 @@ describe('MySQL Integration Tests', () => {
         result.code === 0 && !result.stderr?.includes('FATAL'),
         'restore should exit 0 with no fatal error',
       )
+      assertEqual(
+        result.diagnostics?.restoreErrorCount ?? 0,
+        0,
+        'a clean restore reports no object errors',
+      )
 
       // Extra row gone -> contents REPLACED, not merged.
       const after = await executeQuery(
