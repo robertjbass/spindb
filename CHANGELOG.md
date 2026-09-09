@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.1] - 2026-09-09
+
+### Fixed
+
+- **`spindb create --from` no longer leaves a container behind when the restore fails outright.** Creating a container is transactional: every failure between the container being created and the final commit rolls the transaction back, so the container, its data directory and its running server are cleaned up. The failed-restore verdict added in 0.69.0 threw from inside that transaction without rolling it back first, and the outer handler only reports the error (the transaction is scoped to the block that threw), so a `FATAL` restore - a connection that died mid-import, a server that went away - exited non-zero while leaving a running container holding a half-imported database, and the next `create` of that name refused to run without `--force`. The rollback now runs before the error propagates, exactly as the container-create, data-dir-init, start and create-database failures beside it already did. Rolling back twice is harmless (the rollback drains its own stack), so the paths that were already correct are unchanged. A PARTIAL restore still keeps the container on purpose: the objects that landed are usable, `status` is `completed_with_errors`, and the diagnostics say what did not arrive.
+
 ## [0.69.0] - 2026-09-09
 
 ### Added

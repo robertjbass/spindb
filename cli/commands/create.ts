@@ -1229,9 +1229,17 @@ export const createCommand = new Command('create')
 
           if (restoreOutcome.failed) {
             restoreSpinner.fail('Restore failed')
+            // The outer catch only reports the error, it does not roll back
+            // (`tx` is scoped to this try block), so a fatal restore would
+            // otherwise leave the running container and its data directory
+            // behind. Every other failure path here rolls back the same way,
+            // and rollback drains its own stack, so a second call is a no-op.
+            await tx.rollback()
             throw new Error(restoreFailureMessage(result))
           }
 
+          // A partial restore keeps the container: the objects that did land
+          // are usable, and the diagnostics above say what did not.
           if (restoreOutcome.hadObjectErrors) {
             restoreSpinner.warn(restoreOutcome.summary)
             if (!options.json) {
