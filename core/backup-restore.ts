@@ -19,6 +19,7 @@ import { getEngine } from '../engines'
 import {
   classifyRestoreOutcome,
   restoreErrorReportLines,
+  restoreFailureMessage,
 } from './restore-outcome'
 import { createSpinner } from '../cli/ui/spinner'
 import { uiSuccess, uiError, formatBytes } from '../cli/ui/theme'
@@ -271,6 +272,22 @@ export async function performRestore(
     // whatever the tool printed.
     const outcome = classifyRestoreOutcome(result)
     const warnings: string[] = []
+
+    // A restore the classifier calls FAILED (a `FATAL`, or a non-zero exit
+    // with no object errors to explain it) is not a warning. Reporting it as
+    // `success: true` is the same swallow the classifier exists to end - the
+    // engine's restore() resolves rather than throwing, so nothing below
+    // would have caught it.
+    if (outcome.failed) {
+      const error = restoreFailureMessage(result)
+      spinner?.fail('Restore failed')
+      if (interactive) {
+        console.log()
+        console.log(uiError(error))
+        console.log()
+      }
+      return { success: false, error }
+    }
 
     if (outcome.hadObjectErrors) {
       spinner?.warn(outcome.summary)

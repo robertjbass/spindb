@@ -558,6 +558,11 @@ export const createCommand = new Command('create')
       // restore instead of a clean success.
       let restoreStatus: 'completed' | 'completed_with_errors' | undefined
       let restoreDiagnostics: Record<string, unknown> = {}
+      // What the remote dump rewrote on its way in (a MariaDB source dumped
+      // for a MySQL target, say). Human text in `--json` mode would sit ahead
+      // of the JSON object and make stdout unparseable, so it is carried in
+      // the payload instead of printed.
+      let remoteDumpWarnings: string[] = []
 
       try {
         let containerName = name
@@ -1147,8 +1152,11 @@ export const createCommand = new Command('create')
                 )
                 dumpSpinner.succeed('Dump created from remote database')
                 if (dumpResult.warnings?.length) {
-                  for (const warning of dumpResult.warnings) {
-                    console.log(chalk.yellow(`  ${warning}`))
+                  remoteDumpWarnings = dumpResult.warnings
+                  if (!options.json) {
+                    for (const warning of dumpResult.warnings) {
+                      console.log(chalk.yellow(`  ${warning}`))
+                    }
                   }
                 }
                 backupPath = tempDumpPath
@@ -1260,6 +1268,9 @@ export const createCommand = new Command('create')
                 status: finalConfig.status,
                 restored: !!restoreLocation,
                 ...(restoreStatus ? { restoreStatus } : {}),
+                ...(remoteDumpWarnings.length > 0
+                  ? { remoteDumpWarnings }
+                  : {}),
                 ...restoreDiagnostics,
                 ...metadata,
               }),

@@ -288,7 +288,7 @@ spindb restore mydb ./supabase.dump -d app --force --json
 {
   "success": true,
   "status": "completed_with_errors",
-  "restoreErrorCount": 819,
+  "restoreErrorCount": 9,
   "restoreErrors": ["pg_restore: error: could not execute query: ERROR:  extension \"uuid-ossp\" is not available"],
   "restoreWarningCount": 1,
   "restoreIgnoredErrors": 819,
@@ -298,7 +298,13 @@ spindb restore mydb ./supabase.dump -d app --force --json
 
 - `status` is `completed` or `completed_with_errors`, and is always present.
 - The five `restore*` fields appear ONLY when objects failed. `restoreErrors` is
-  deduplicated and capped at 200 entries; `restoreErrorCount` is the real total.
+  deduplicated and capped at 200 entries; `restoreErrorCount` is the uncapped
+  total of the error lines the tool printed, so it is the number to trust over
+  the length of the list.
+- `restoreIgnoredErrors` is a different number: `pg_restore`'s own
+  `errors ignored on restore: N` summary, which counts every ignored failure
+  rather than the lines it chose to print. It is normally the larger of the two,
+  and is `null` when the tool printed no summary.
 - `success` stays `true` and the exit code stays 0 for a partial restore: the
   database exists and holds what could be restored. Check `status`, not the exit
   code, when you need to know whether everything arrived.
