@@ -16,6 +16,10 @@ import {
   loadCredentials,
 } from '../../core/credential-manager'
 import { getValkeyCliPath, VALKEY_CLI_NOT_FOUND_ERROR } from './cli-utils'
+// valkey-cli is a redis-cli fork and answers with the same error codes, so the
+// reply classifier is shared rather than duplicated (the same reason the
+// `restore --from-url` keyspace copy uses the Redis RESP client).
+import { hasRedisCliError } from '../redis/cli-common'
 import { Engine, type BackupFormat, type RestoreResult } from '../../types'
 
 type ValkeyCliAuth = {
@@ -283,7 +287,14 @@ async function restoreTextBackup(
         return
       }
 
-      if (code === 0) {
+      // The exit code is NOT the verdict. valkey-cli reading commands from
+      // stdin prints whatever the server answered and still exits 0, so a
+      // restore every command of which was refused - `OOM command not allowed
+      // when used memory > 'maxmemory'`, `NOAUTH`, `MISCONF` - used to resolve
+      // as a success with an empty database behind it. The reply text decides.
+      const hasCliError = hasRedisCliError(stdout, stderr, true)
+
+      if (code === 0 && !hasCliError) {
         resolve({
           format: 'text',
           stdout: stdout || 'Valkey commands executed successfully',
@@ -291,9 +302,11 @@ async function restoreTextBackup(
           code: 0,
         })
       } else {
+        const combinedOutput = `${stdout}\n${stderr}`.trim()
         reject(
           new Error(
-            `valkey-cli exited with code ${code}${stderr ? `: ${stderr}` : ''}`,
+            combinedOutput ||
+              `valkey-cli exited with code ${code}${stderr ? `: ${stderr}` : ''}`,
           ),
         )
       }
