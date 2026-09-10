@@ -467,6 +467,35 @@ export function shouldFallBackToLogicalCopy(message: string): boolean {
   return isPayloadFormatRefusal(message) || isCommandUnavailable(message)
 }
 
+// The TARGET is full: it has a `maxmemory` and the copy reached it.
+//
+// This is NOT a fallback case. Neither strategy can write a key the server has
+// refused to store, so retrying with the logical path would only walk into the
+// same wall more slowly. It is also the one copy failure whose fix belongs to
+// the operator rather than to spindb, so it gets said plainly instead of being
+// handed over as a bare server code.
+//
+// `MISCONF` is included because it fails writes identically from the caller's
+// side (the server refusing writes after a failed background save), and a
+// restore that dies at either one leaves the same half-populated keyspace.
+function isTargetOutOfMemory(message: string): boolean {
+  return /^(?:\(error\)\s*)?(?:OOM|MISCONF)\b/m.test(message.trim())
+}
+
+/**
+ * Restate a target-side write refusal in terms the person running the copy can
+ * act on, leaving every other error exactly as the server sent it.
+ */
+export function describeTargetWriteFailure(error: Error): Error {
+  if (!isTargetOutOfMemory(error.message)) return error
+  return new Error(
+    `The target database is out of memory and refused the write, so only part ` +
+      `of the keyspace was copied. Its maxmemory is smaller than the source's ` +
+      `data. Raise the target's memory limit, or reduce what is being copied, ` +
+      `then run the copy again. (${error.message.trim()})`,
+  )
+}
+
 // Value types the logical path knows how to read and rewrite.
 const LOGICAL_COPY_TYPES = new Set([
   'string',
@@ -784,7 +813,16 @@ async function copyBatchLogically(
     copied++
   }
   for (const part of chunk(writes, ELEMENT_CHUNK)) {
-    await dst.pipeline(part)
+    try {
+      await dst.pipeline(part)
+    } catch (error) {
+      // Same restatement as the DUMP/RESTORE path: the logical walk hits the
+      // target's ceiling in exactly the same way, and this is the strategy
+      // there is no falling back FROM.
+      throw describeTargetWriteFailure(
+        error instanceof Error ? error : new Error(String(error)),
+      )
+    }
   }
   return { copied, skipped, skippedTypes }
 }
@@ -825,7 +863,7 @@ async function copyBatchWithDumpRestore(
   const failures = results.filter((r): r is Error => r instanceof Error)
   if (failures.length === 0) return restoreCmds.length
   if (failures.every((f) => shouldFallBackToLogicalCopy(f.message))) return null
-  throw failures[0]
+  throw describeTargetWriteFailure(failures[0])
 }
 
 // Binary-safe keyspace copy: SCAN the source, move each batch into the target,

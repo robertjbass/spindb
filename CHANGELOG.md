@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.3] - 2026-09-10
+
+### Fixed
+
+- **A Redis or Valkey text restore reported success when the server had refused every command.** `redis-cli` and `valkey-cli` reading commands from stdin print whatever the server answered and still exit 0, so the exit code says nothing about whether anything was written. The Redis path did inspect the reply text, but its marker list only knew `ERR`, `NOAUTH`, `WRONGPASS`, `NOPERM` and `ACL` - and the most common refusal does not start with any of them: `(error) OOM command not allowed when used memory > 'maxmemory'.` A restore into a server with a `maxmemory` set therefore resolved with `code: 0` and an empty or half-populated database behind it. The Valkey path was worse: it inspected the reply text not at all and treated exit 0 as success unconditionally, so every server-side refusal - auth, OOM, wrong type - was swallowed. Both now judge the reply, and the marker list covers the write-refusal classes that fail this way (`OOM`, `MISCONF`, `READONLY`, `WRONGTYPE`, `NOSCRIPT`, `EXECABORT`, `LOADING`, `BUSY`, `MOVED`, `ASK` and the rest), matched as a reply LINE with or without the `(error) ` prefix the cli prints. The original unanchored markers are kept exactly as they were, so nothing that used to be caught stops being caught.
+- **A `restore --from-url` copy that filled the target now says so in words.** Both copy strategies write to the same server, so a target that is out of memory is the one failure there is no falling back FROM - retrying with the logical walk only reaches the same ceiling more slowly. An `OOM` or `MISCONF` refusal from the target is now restated as "the target database is out of memory and refused the write, so only part of the keyspace was copied", naming `maxmemory` as the thing to change, with the server's own message kept in parentheses. Every other error is passed through exactly as the server sent it, and the DUMP-payload-format fallback is unchanged.
+
 ## [0.69.2] - 2026-09-09
 
 ### Fixed
