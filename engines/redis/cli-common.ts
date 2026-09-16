@@ -7,8 +7,53 @@ type RedisCliAuth = {
   password?: string
 }
 
+// The error codes a Redis-family server answers with. `redis-cli` reading
+// commands from stdin EXITS 0 even when every one of them was refused - it
+// prints the server's reply and moves on - so the reply text is the only
+// verdict available, and a marker list that misses a code silently turns a
+// failed restore into a reported success.
+//
+// `OOM` is why this list grew: `(error) OOM command not allowed when used
+// memory > 'maxmemory'.` does not start with `ERR`, so a text restore into a
+// Redis with a `maxmemory` set resolved with `code: 0` and an empty database.
+// `MISCONF` (the server refusing writes after a failed background save) and
+// `READONLY` (a replica) fail the same way, for the same reason.
+const REDIS_ERROR_CODES = [
+  'ERR',
+  'OOM',
+  'MISCONF',
+  'READONLY',
+  'NOAUTH',
+  'WRONGPASS',
+  'NOPERM',
+  'WRONGTYPE',
+  'NOSCRIPT',
+  'EXECABORT',
+  'LOADING',
+  'BUSY',
+  'MASTERDOWN',
+  'NOREPLICAS',
+  'UNKILLABLE',
+  'CROSSSLOT',
+  'CLUSTERDOWN',
+  'TRYAGAIN',
+  'MOVED',
+  'ASK',
+  'DENIED',
+].join('|')
+
 function getRedisCliErrorMarkers(): RegExp[] {
-  return [/^ERR\b/m, /\bNOAUTH\b/, /\bWRONGPASS\b/, /\bNOPERM\b/, /\bACL\b/]
+  return [
+    // A reply LINE that is an error, with or without redis-cli's `(error) `
+    // prefix (it prints the prefix interactively and bare when piped).
+    new RegExp(`^(?:\\(error\\)\\s*)?(?:${REDIS_ERROR_CODES})\\b`, 'm'),
+    // The original unanchored markers, kept exactly as they were so nothing
+    // that used to be caught stops being caught.
+    /\bNOAUTH\b/,
+    /\bWRONGPASS\b/,
+    /\bNOPERM\b/,
+    /\bACL\b/,
+  ]
 }
 
 // Decide whether a resolved username is a real ACL user worth passing to

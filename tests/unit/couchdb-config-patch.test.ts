@@ -11,7 +11,10 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { patchCouchDBConfig } from '../../engines/couchdb/index'
+import {
+  generateCouchDBConfig,
+  patchCouchDBConfig,
+} from '../../engines/couchdb/index'
 
 const adminLines = (config: string): string[] =>
   config.split('\n').filter((l) => /^admin\s*=/.test(l))
@@ -194,5 +197,80 @@ describe('patchCouchDBConfig data-path re-pointing', () => {
     const once = patchCouchDBConfig(parent, { port: 11500, dataDir: BRANCH })
     const twice = patchCouchDBConfig(once, { port: 11500, dataDir: BRANCH })
     assert.equal(once, twice)
+  })
+})
+
+/**
+ * Log writer.
+ *
+ * CouchDB's default log writer is stderr, and spindb spawns the server with
+ * stderr set to 'ignore' - so a config that names a `[log] file` but never sets
+ * `writer = file` sends every line to /dev/null. That is why the query-server
+ * 500s on `_users` writes left no trace anywhere. New configs declare the
+ * writer, and an older container's config gains it on its next start.
+ */
+describe('CouchDB [log] writer', () => {
+  it('generateCouchDBConfig declares writer = file', () => {
+    const config = generateCouchDBConfig({
+      port: 5984,
+      dataDir: '/c/data',
+      logDir: '/c/log',
+    })
+    assert.match(config, /^writer = file$/m)
+    assert.match(config, /^file = \/c\/log\/couchdb\.log$/m)
+    // The writer must sit inside [log], before the next section.
+    const logSection = config.split('[log]')[1].split('\n[')[0]
+    assert.match(logSection, /^writer = file$/m)
+  })
+
+  it('adds writer = file to an older container config that lacks it', () => {
+    const existing = [
+      '[chttpd]',
+      'port = 5984',
+      '',
+      '[log]',
+      'file = /c/log/couchdb.log',
+      'level = info',
+    ].join('\n')
+
+    const patched = patchCouchDBConfig(existing, { port: 11500 })
+    assert.match(patched, /\[log\]\nwriter = file\n/)
+    assert.equal(
+      patched.split('\n').filter((l) => /^writer =/.test(l)).length,
+      1,
+    )
+  })
+
+  it('is idempotent - a second start adds no second writer line', () => {
+    const existing = ['[log]', 'file = /c/log/couchdb.log'].join('\n')
+    const once = patchCouchDBConfig(existing, { port: 11500 })
+    const twice = patchCouchDBConfig(once, { port: 11500 })
+    assert.equal(once, twice)
+    assert.equal(once.split('\n').filter((l) => /^writer =/.test(l)).length, 1)
+  })
+
+  it('leaves a deliberate writer choice alone', () => {
+    const existing = ['[log]', 'writer = stderr', 'level = debug'].join('\n')
+    const patched = patchCouchDBConfig(existing, { port: 11500 })
+    assert.match(patched, /^writer = stderr$/m)
+    assert.doesNotMatch(patched, /^writer = file$/m)
+  })
+
+  it('creates a [log] section when the config has none and a logDir is known', () => {
+    const existing = ['[chttpd]', 'port = 5984'].join('\n')
+    const patched = patchCouchDBConfig(existing, {
+      port: 11500,
+      dataDir: '/c/data',
+      logDir: '/c/log',
+    })
+    assert.match(patched, /^\[log\]$/m)
+    assert.match(patched, /^writer = file$/m)
+    assert.match(patched, /^file = \/c\/log\/couchdb\.log$/m)
+  })
+
+  it('adds no [log] section when no logDir is known', () => {
+    const existing = ['[chttpd]', 'port = 5984'].join('\n')
+    const patched = patchCouchDBConfig(existing, { port: 11500 })
+    assert.doesNotMatch(patched, /\[log\]/)
   })
 })

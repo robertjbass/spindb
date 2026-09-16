@@ -467,6 +467,56 @@ export function shouldFallBackToLogicalCopy(message: string): boolean {
   return isPayloadFormatRefusal(message) || isCommandUnavailable(message)
 }
 
+// The TARGET is full: it has a `maxmemory` and the copy reached it.
+//
+// This is NOT a fallback case. Neither strategy can write a key the server has
+// refused to store, so retrying with the logical path would only walk into the
+// same wall more slowly. It is also the one copy failure whose fix belongs to
+// the operator rather than to spindb, so it gets said plainly instead of being
+// handed over as a bare server code.
+//
+// `MISCONF` refuses writes identically from the caller's side and leaves the
+// same half-populated keyspace, so it is handled here too - but its CAUSE is
+// persistence, not memory, and telling the operator to raise `maxmemory` sends
+// them at the wrong setting. The two are classified apart and worded apart.
+function isTargetOutOfMemory(message: string): boolean {
+  return /^(?:\(error\)\s*)?OOM\b/m.test(message.trim())
+}
+
+function isTargetPersistenceFailure(message: string): boolean {
+  return /^(?:\(error\)\s*)?MISCONF\b/m.test(message.trim())
+}
+
+/** Either way the target refused the write and the copy is partial. */
+function isTargetWriteRefusal(message: string): boolean {
+  return isTargetOutOfMemory(message) || isTargetPersistenceFailure(message)
+}
+
+/**
+ * Restate a target-side write refusal in terms the person running the copy can
+ * act on, leaving every other error exactly as the server sent it.
+ */
+export function describeTargetWriteFailure(error: Error): Error {
+  const raw = error.message.trim()
+  if (isTargetOutOfMemory(error.message)) {
+    return new Error(
+      `The target database is out of memory and refused the write, so only part ` +
+        `of the keyspace was copied. Its maxmemory is smaller than the source's ` +
+        `data. Raise the target's memory limit, or reduce what is being copied, ` +
+        `then run the copy again. (${raw})`,
+    )
+  }
+  if (isTargetPersistenceFailure(error.message)) {
+    return new Error(
+      `The target database refused the write because its RDB/AOF persistence is ` +
+        `failing (MISCONF), so only part of the keyspace was copied. Check the ` +
+        `target server's disk space and its stop-writes-on-bgsave-error / save ` +
+        `settings, fix the background save, then run the copy again. (${raw})`,
+    )
+  }
+  return error
+}
+
 // Value types the logical path knows how to read and rewrite.
 const LOGICAL_COPY_TYPES = new Set([
   'string',
@@ -784,7 +834,16 @@ async function copyBatchLogically(
     copied++
   }
   for (const part of chunk(writes, ELEMENT_CHUNK)) {
-    await dst.pipeline(part)
+    try {
+      await dst.pipeline(part)
+    } catch (error) {
+      // Same restatement as the DUMP/RESTORE path: the logical walk hits the
+      // target's ceiling in exactly the same way, and this is the strategy
+      // there is no falling back FROM.
+      throw describeTargetWriteFailure(
+        error instanceof Error ? error : new Error(String(error)),
+      )
+    }
   }
   return { copied, skipped, skippedTypes }
 }
@@ -825,7 +884,12 @@ async function copyBatchWithDumpRestore(
   const failures = results.filter((r): r is Error => r instanceof Error)
   if (failures.length === 0) return restoreCmds.length
   if (failures.every((f) => shouldFallBackToLogicalCopy(f.message))) return null
-  throw failures[0]
+  // A pipeline can carry several kinds of failure at once. A target-side write
+  // refusal (OOM / MISCONF) is the one the operator has to act on, and it is
+  // the reason the copy is partial, so it wins over an earlier per-key error
+  // that would otherwise be reported just for arriving first.
+  const refusal = failures.find((f) => isTargetWriteRefusal(f.message))
+  throw describeTargetWriteFailure(refusal ?? failures[0])
 }
 
 // Binary-safe keyspace copy: SCAN the source, move each batch into the target,

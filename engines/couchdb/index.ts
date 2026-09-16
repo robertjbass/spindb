@@ -1,5 +1,5 @@
 import { spawn, type SpawnOptions } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join, dirname } from 'path'
 import { BaseEngine } from '../base-engine'
@@ -75,7 +75,7 @@ function getCouchDBExtension(): string {
  * Generate CouchDB local.ini configuration content
  * CouchDB 3.x requires at least one admin account to start
  */
-function generateCouchDBConfig(options: {
+export function generateCouchDBConfig(options: {
   port: number
   dataDir: string
   logDir: string
@@ -103,6 +103,11 @@ require_valid_user = false
 require_valid_user = false
 
 [log]
+; Without an explicit writer CouchDB logs to stderr, and spindb spawns the
+; server with stderr set to 'ignore' - so every line, including the reason a
+; request failed, went to /dev/null. The writer below is what makes the file
+; setting mean anything.
+writer = file
 file = ${options.logDir}/couchdb.log
 level = info
 
@@ -149,6 +154,127 @@ function repointCouchDBPaths(
   return out
 }
 
+/**
+ * Guarantee the `[log]` section actually writes to the file it names.
+ *
+ * CouchDB's default log writer is stderr, and spindb spawns the server with
+ * stderr set to 'ignore' - so a config that sets `[log] file` but never
+ * `writer = file` throws every line away. Containers created before this fix
+ * have exactly that config on disk, which is why a failing request (a 500 from
+ * the query server, for one) left nothing behind to read. An existing `writer`
+ * line is a deliberate choice and is left alone; the insert is idempotent.
+ */
+function ensureCouchDBLogWriter(config: string, logDir?: string): string {
+  if (/^\s*writer\s*=/m.test(config)) return config
+  if (/^\[log\]/m.test(config)) {
+    return config.replace(
+      /^\[log\][^\n]*\n?/m,
+      (header) => `${header}writer = file\n`,
+    )
+  }
+  if (logDir === undefined) return config
+  return `${config.trimEnd()}\n\n[log]\nwriter = file\nfile = ${logDir}/couchdb.log\nlevel = info\n`
+}
+
+/** A resolved CouchDB query-server command, as the launcher's env vars want it. */
+export type CouchDBQueryServer = {
+  /** `COUCHDB_QUERY_SERVER_JAVASCRIPT`, or undefined to keep the launcher default. */
+  javascript?: string
+  /** `COUCHDB_QUERY_SERVER_COFFEESCRIPT`, or undefined to keep the launcher default. */
+  coffeescript?: string
+}
+
+/**
+ * Work out which JavaScript query server this CouchDB install can actually run.
+ *
+ * CouchDB runs `validate_doc_update` / map functions in an external query
+ * server process, so any write to `_users` (whose `_design/_auth` has one) fails
+ * with a 500 `internal_server_error` when that process cannot start. That is how
+ * `spindb users create` broke on Linux.
+ *
+ * spindb used to set `COUCHDB_QUERY_SERVER_JAVASCRIPT` to the bare
+ * `<binDir>/bin/couchjs` binary, which is wrong three times over: the launcher's
+ * own default is a binary PLUS a script (`./bin/couchjs ./share/server/main.js`)
+ * and the bare binary just prints usage and exits; the Linux hostdb tarballs
+ * ship a `bin/couchjs` linked against a `libmozjs-78.so.0` they do not ship; and
+ * the macOS 3.5.2 artifact has no `bin/couchjs` at all.
+ *
+ * CouchDB 3.5 bundles a self-contained QuickJS query server instead, at
+ * `<binDir>/lib/couch_quickjs-<version>/priv/couchjs_mainjs` (coffee twin
+ * `couchjs_coffee`), with no mozjs dependency. It is found by GLOBBING the lib
+ * directory rather than by interpolating the container's version, so a build
+ * whose bundled `couch_quickjs` version does not match the CouchDB version
+ * cannot silently break it.
+ *
+ * When no QuickJS build is present, nothing is returned and the launcher's own
+ * relative default applies (the launcher `cd`s to the install root first, so its
+ * relative paths resolve correctly). The bare-binary value is never produced.
+ */
+/**
+ * Order two `couch_quickjs-<version>` directory names NUMERICALLY.
+ *
+ * A lexical sort ranks `couch_quickjs-3.10.0` BELOW `couch_quickjs-3.9.0`, so
+ * an install carrying both would pick the older build. Each version component
+ * is compared as a number; a component that is not a plain integer (a `-rc1`
+ * suffix, anything unparsable) sorts LAST, so a prerelease never outranks the
+ * release it precedes.
+ */
+function compareQuickJSVersions(a: string, b: string): number {
+  const parts = (dir: string) =>
+    dir
+      .slice('couch_quickjs-'.length)
+      .split('.')
+      .map((part) => (/^\d+$/.test(part) ? Number(part) : -1))
+
+  const left = parts(a)
+  const right = parts(b)
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const l = left[i] ?? -1
+    const r = right[i] ?? -1
+    if (l !== r) return l - r
+  }
+  return 0
+}
+
+export function resolveCouchDBQueryServer(options: {
+  binDir: string
+  /** Injected for tests; defaults to `fs.existsSync`. */
+  exists?: (path: string) => boolean
+  /** Injected for tests; defaults to `fs.readdirSync`, empty on any error. */
+  readDir?: (path: string) => string[]
+}): CouchDBQueryServer {
+  const exists = options.exists ?? existsSync
+  const readDir = options.readDir ?? readdirSync
+
+  // A missing or unreadable lib directory is "no QuickJS", never a throw: the
+  // caller is `start()`, and an install-tree quirk must not abort a startup
+  // that the launcher default can still handle.
+  let libEntries: string[] = []
+  try {
+    libEntries = readDir(join(options.binDir, 'lib'))
+  } catch {
+    libEntries = []
+  }
+
+  const quickjsDirs = libEntries
+    .filter((entry) => entry.startsWith('couch_quickjs-'))
+    .sort((a, b) => compareQuickJSVersions(b, a))
+
+  for (const dir of quickjsDirs) {
+    const priv = join(options.binDir, 'lib', dir, 'priv')
+    const main = ['couchjs_mainjs', 'couchjs_mainjs.exe']
+      .map((name) => join(priv, name))
+      .find((candidate) => exists(candidate))
+    if (!main) continue
+    const coffee = ['couchjs_coffee', 'couchjs_coffee.exe']
+      .map((name) => join(priv, name))
+      .find((candidate) => exists(candidate))
+    return { javascript: main, coffeescript: coffee }
+  }
+
+  return {}
+}
+
 export function patchCouchDBConfig(
   existingConfig: string,
   options: {
@@ -176,6 +302,7 @@ export function patchCouchDBConfig(
 ): string {
   let config = existingConfig
   config = config.replace(/^port = \d+/m, `port = ${options.port}`)
+  config = ensureCouchDBLogWriter(config, options.logDir)
   if (options.dataDir !== undefined) {
     config = repointCouchDBPaths(config, options.dataDir, options.logDir)
   }
@@ -733,13 +860,30 @@ export class CouchDBEngine extends BaseEngine {
     // CouchDB uses COUCHDB_INI_FILES to load config files in order
     // COUCHDB_ARGS_FILE specifies custom vm.args with unique node name
     // On Windows, CouchDB may need additional paths set
+    // The JavaScript query server runs every validate_doc_update and map
+    // function, so a wrong value here turns any write to _users into a 500.
+    const queryServer = resolveCouchDBQueryServer({ binDir })
+    if (queryServer.javascript) {
+      logDebug(`Using CouchDB query server: ${queryServer.javascript}`)
+    } else {
+      logDebug(
+        'No bundled QuickJS query server found; using the launcher default',
+      )
+    }
+
     const env: Record<string, string | undefined> = {
       ...process.env,
       COUCHDB_INI_FILES: `${defaultIni} ${configPath}`,
       COUCHDB_ARGS_FILE: vmArgsPath,
       // Set CouchDB binary directory for Windows
       COUCHDB_BINDIR: join(binDir, 'bin'),
-      COUCHDB_QUERY_SERVER_JAVASCRIPT: join(binDir, 'bin', 'couchjs'),
+    }
+
+    if (queryServer.javascript) {
+      env.COUCHDB_QUERY_SERVER_JAVASCRIPT = queryServer.javascript
+    }
+    if (queryServer.coffeescript) {
+      env.COUCHDB_QUERY_SERVER_COFFEESCRIPT = queryServer.coffeescript
     }
 
     // On Windows, use sys.config to disable os_mon before it starts

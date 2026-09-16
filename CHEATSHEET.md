@@ -310,6 +310,18 @@ intact, and binary keys and values stay binary. Module types (`ReJSON-RL`,
 `TSDB-TYPE`, `MBbloom--`) have no portable read/write pair and are reported
 rather than dropped silently.
 
+A target with a `maxmemory` smaller than the source's data is the one failure
+neither strategy can work around: both write to the same server, so the copy
+stops partway with the target's `OOM` refusal restated as a sentence naming
+`maxmemory`, and the keyspace is left half-copied. Raise the target's limit, or
+reduce what is being copied, before running it again.
+
+A text (`.redis`) restore is judged by the SERVER's replies, not by the cli's
+exit code - `redis-cli` and `valkey-cli` reading from stdin exit 0 even when
+every command was refused. An `OOM`, `MISCONF`, `READONLY`, `NOAUTH` or other
+refusal in the reply stream fails the restore instead of reporting a success
+over a database that took nothing.
+
 ```bash
 spindb restore mykv --from-url "rediss://default:pw@host:6379" --json
 ```
