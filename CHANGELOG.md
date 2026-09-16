@@ -5,6 +5,13 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.4] - 2026-09-16
+
+### Fixed
+
+- **`spindb users create` on a CouchDB container failed with a 500 on Linux, and nothing was logged.** CouchDB runs `validate_doc_update` and map functions in an external JavaScript query server, and the `_users` database ships a `_design/_auth` that has one, so a query server that cannot start turns every write to `_users` into an `internal_server_error`. spindb pointed `COUCHDB_QUERY_SERVER_JAVASCRIPT` at the bare `<binDir>/bin/couchjs` binary, which is a value CouchDB's own launcher never uses: its default is the binary PLUS a script (`./bin/couchjs ./share/server/main.js`), and the bare binary just prints usage and exits. On top of that the Linux tarballs' `bin/couchjs` is linked against a `libmozjs-78.so.0` that is not shipped with them, and the macOS 3.5.2 artifact has no `bin/couchjs` at all. CouchDB 3.5 bundles a self-contained QuickJS query server instead, at `<binDir>/lib/couch_quickjs-<version>/priv/couchjs_mainjs`, with no mozjs dependency, and spindb now points at that (plus `couchjs_coffee` for the CoffeeScript slot). It is found by globbing the `lib` directory rather than by interpolating the container's version, so a build whose bundled `couch_quickjs` version differs from the CouchDB version cannot silently break it. An install with no QuickJS build sets neither variable and inherits the launcher's own default, which resolves correctly because the launcher changes into the install root first; the bare-binary value is never produced again.
+- **CouchDB threw away its own log.** The generated `local.ini` set `[log] file` but never `writer = file`, and CouchDB's default writer is stderr - which spindb redirects to `/dev/null` when it spawns the server. Every line, including the reason a request failed, was lost, which is why the 500 above left no trace anywhere. New containers declare `writer = file`, and an existing container's config gains it on its next start (a `writer` line that is already there is a deliberate choice and is left alone).
+
 ## [0.69.3] - 2026-09-10
 
 ### Fixed
