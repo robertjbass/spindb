@@ -248,6 +248,46 @@ describe('Redis keyspace copy: falling back to the type-aware path', () => {
       `a real failure must surface verbatim, got: ${error.message}`,
     )
   })
+
+  it('reports the target write refusal even when another failure came first', async () => {
+    // One pipeline, two failures: a per-key format complaint on the first
+    // RESTORE and the refusal that actually stopped the copy on the second.
+    // Reporting whichever arrived first would hand the operator the wrong
+    // cause.
+    let restores = 0
+    const source: FakeRespHandler = (request) => {
+      switch (request.name) {
+        case 'SCAN':
+          return respScan('0', ['k1', 'k2'])
+        case 'DUMP':
+          return respBulk(Buffer.from([0x00, 0x01, 0x76, 0x0b, 0x00]))
+        case 'PTTL':
+          return respInteger(-1)
+        default:
+          return respOk()
+      }
+    }
+    const error = await expectCopyToThrow({
+      dbsize: 2,
+      source,
+      target: (request) => {
+        if (request.name !== 'RESTORE') return respOk()
+        restores++
+        return restores === 1
+          ? respError(RDB_REFUSAL)
+          : respError('MISCONF Errors writing to the RDB snapshots.')
+      },
+    })
+
+    assert(
+      /MISCONF/.test(error.message),
+      `the target refusal must be reported, got: ${error.message}`,
+    )
+    assert(
+      /persistence is failing/i.test(error.message),
+      `the refusal must be restated for the operator, got: ${error.message}`,
+    )
+  })
 })
 
 describe('Redis keyspace copy: type-aware reads and writes', () => {

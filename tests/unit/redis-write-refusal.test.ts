@@ -112,11 +112,34 @@ describe('describeTargetWriteFailure', () => {
     )
   })
 
-  it('restates MISCONF the same way', () => {
+  it('restates MISCONF as a persistence failure, not a memory one', () => {
+    // MISCONF stops writes the same way an OOM does, but the fix is on the
+    // disk/persistence side - pointing the operator at maxmemory would send
+    // them to the wrong setting entirely.
     const restated = describeTargetWriteFailure(
       new Error('MISCONF Errors writing to the RDB snapshots.'),
     )
-    assert(/out of memory/i.test(restated.message), 'MISCONF should restate')
+    assert(
+      /persistence is failing/i.test(restated.message),
+      'should name persistence as the cause',
+    )
+    assert(
+      /disk space/i.test(restated.message) &&
+        /stop-writes-on-bgsave-error/i.test(restated.message),
+      'should name what to check on the target',
+    )
+    assert(
+      /only part of the keyspace/i.test(restated.message),
+      'should still say the copy is partial',
+    )
+    assert(
+      !/maxmemory/i.test(restated.message),
+      'must not suggest a maxmemory change',
+    )
+    assert(
+      restated.message.includes('MISCONF Errors writing to the RDB snapshots.'),
+      'should keep the raw server error',
+    )
   })
 
   it('leaves every other error exactly as the server sent it', () => {
