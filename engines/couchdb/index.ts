@@ -210,6 +210,32 @@ export type CouchDBQueryServer = {
  * relative default applies (the launcher `cd`s to the install root first, so its
  * relative paths resolve correctly). The bare-binary value is never produced.
  */
+/**
+ * Order two `couch_quickjs-<version>` directory names NUMERICALLY.
+ *
+ * A lexical sort ranks `couch_quickjs-3.10.0` BELOW `couch_quickjs-3.9.0`, so
+ * an install carrying both would pick the older build. Each version component
+ * is compared as a number; a component that is not a plain integer (a `-rc1`
+ * suffix, anything unparsable) sorts LAST, so a prerelease never outranks the
+ * release it precedes.
+ */
+function compareQuickJSVersions(a: string, b: string): number {
+  const parts = (dir: string) =>
+    dir
+      .slice('couch_quickjs-'.length)
+      .split('.')
+      .map((part) => (/^\d+$/.test(part) ? Number(part) : -1))
+
+  const left = parts(a)
+  const right = parts(b)
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const l = left[i] ?? -1
+    const r = right[i] ?? -1
+    if (l !== r) return l - r
+  }
+  return 0
+}
+
 export function resolveCouchDBQueryServer(options: {
   binDir: string
   /** Injected for tests; defaults to `fs.existsSync`. */
@@ -232,8 +258,7 @@ export function resolveCouchDBQueryServer(options: {
 
   const quickjsDirs = libEntries
     .filter((entry) => entry.startsWith('couch_quickjs-'))
-    .sort()
-    .reverse()
+    .sort((a, b) => compareQuickJSVersions(b, a))
 
   for (const dir of quickjsDirs) {
     const priv = join(options.binDir, 'lib', dir, 'priv')

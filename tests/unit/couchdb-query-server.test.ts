@@ -78,6 +78,20 @@ describe('resolveCouchDBQueryServer', () => {
     assert.match(resolved.javascript ?? '', /couch_quickjs-3\.5\.2/)
   })
 
+  it('compares versions numerically, so 3.10.0 outranks 3.9.0', () => {
+    // A lexical sort puts "3.10.0" below "3.9.0" and would pick the older
+    // build.
+    const resolved = resolveCouchDBQueryServer({
+      binDir: BIN_DIR,
+      ...fakeFs([...quickjsTree('3.9.0'), ...quickjsTree('3.10.0')]),
+    })
+
+    assert.equal(
+      resolved.javascript,
+      join(BIN_DIR, 'lib', 'couch_quickjs-3.10.0', 'priv', 'couchjs_mainjs'),
+    )
+  })
+
   it('omits coffeescript when only the main QuickJS binary ships', () => {
     const resolved = resolveCouchDBQueryServer({
       binDir: BIN_DIR,
