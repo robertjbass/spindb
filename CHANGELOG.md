@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.6] - 2026-09-17
+
+### Added
+
+- **`SPINDB_BRAND` sets the interactive menu's title.** A wrapper CLI that hands the terminal to spindb (the `layerbase` CLI does) can set `SPINDB_BRAND=Layerbase` in the child environment and the main menu header reads "Layerbase - Local Database Manager" instead of "SpinDB - Local Database Manager". It is display only and scoped to that one title: command names, hints, paths, and `--json` output are unchanged, and with the variable unset or blank nothing changes at all.
+
 ## [0.69.5] - 2026-09-17
 
 ### Fixed

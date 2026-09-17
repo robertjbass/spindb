@@ -44,6 +44,13 @@ export function header(text: string): string {
   return `${chalk.bold(text)}\n${chalk.gray('─'.repeat(40))}`
 }
 
+// A wrapper CLI (the `layerbase` CLI) sets SPINDB_BRAND so the main menu reads
+// as its own product. Display only: commands, paths, and --json are unchanged.
+export function mainMenuTitle(): string {
+  const brand = process.env.SPINDB_BRAND?.trim() || 'SpinDB'
+  return `${brand} - Local Database Manager`
+}
+
 export function uiSuccess(message: string): string {
   return `${theme.icons.success} ${message}`
 }
