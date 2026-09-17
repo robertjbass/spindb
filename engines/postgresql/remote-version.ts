@@ -45,36 +45,11 @@ export async function detectRemotePostgresVersion(
 
   try {
     const { stdout } = await execAsync(cmd, { timeout: 30000 })
-    const parts = stdout.trim().split('|||')
+    const result = parseRemoteVersionOutput(stdout)
 
-    if (parts.length < 2) {
-      throw new Error(`Unexpected version output format: ${stdout}`)
-    }
+    logDebug('Remote PostgreSQL version detected', result)
 
-    const [versionString, serverVersion] = parts
-
-    // Parse version from server_version (e.g., "16.1", "17.0", or a
-    // prerelease such as "19beta3", which has no minor).
-    const parsed = parsePostgresVersionToken(serverVersion)
-    if (!parsed) {
-      throw new Error(`Could not parse server version: ${serverVersion}`)
-    }
-
-    const majorVersion = parsed.major
-    const minorVersion = parsed.minor
-    const fullVersion = parsed.full
-
-    // Detect server type from version() output
-    const serverType = detectServerType(versionString)
-
-    logDebug('Remote PostgreSQL version detected', {
-      majorVersion,
-      minorVersion,
-      fullVersion,
-      serverType,
-    })
-
-    return { majorVersion, minorVersion, fullVersion, serverType }
+    return result
   } catch (error) {
     const e = error as Error & { code?: string; killed?: boolean }
 
@@ -121,6 +96,39 @@ export async function detectRemotePostgresVersion(
 
     // Re-throw with context
     throw new Error(`Failed to detect remote PostgreSQL version: ${e.message}`)
+  }
+}
+
+/**
+ * Parse the raw psql output of
+ * `SELECT version(), current_setting('server_version')` (tuples-only,
+ * unaligned, `|||` as the field separator) into the remote version result.
+ * Pure, so the prerelease path (`19beta3`, which has no minor) is testable
+ * without a server. Throws on output that is not two fields or whose
+ * server_version carries no recognizable version.
+ */
+export function parseRemoteVersionOutput(stdout: string): RemoteVersionResult {
+  const parts = stdout.trim().split('|||')
+
+  if (parts.length < 2) {
+    throw new Error(`Unexpected version output format: ${stdout}`)
+  }
+
+  const [versionString, serverVersion] = parts
+
+  // Parse version from server_version (e.g., "16.1", "17.0", or a
+  // prerelease such as "19beta3", which has no minor).
+  const parsed = parsePostgresVersionToken(serverVersion)
+  if (!parsed) {
+    throw new Error(`Could not parse server version: ${serverVersion}`)
+  }
+
+  return {
+    majorVersion: parsed.major,
+    minorVersion: parsed.minor,
+    fullVersion: parsed.full,
+    // Detect server type from version() output
+    serverType: detectServerType(versionString),
   }
 }
 
