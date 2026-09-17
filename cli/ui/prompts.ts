@@ -21,6 +21,10 @@ import { containerManager } from '../../core/container-manager'
 import { getEngineDependencies } from '../../config/os-dependencies'
 import { getEngineIcon, getPageSize } from '../constants'
 import {
+  getMajorVersionMarkers,
+  resolveDefaultMajorVersion,
+} from './version-picker-defaults'
+import {
   BACKUP_FORMATS,
   supportsFormatChoice,
   getDefaultFormat,
@@ -609,10 +613,19 @@ export async function promptVersion(
   )
   const allMajors = [...majorVersions, ...prereleaseMajors]
 
+  // Labels are applied after the loop: the preselected entry depends on which
+  // lines survive the deprecation filter, which is only known once it has run.
+  type MajorEntry = {
+    major: string
+    countLabel: string
+    deprecatedLabel: string
+    prereleaseLabel: string
+  }
+  const majorEntries: MajorEntry[] = []
+
   for (const major of allMajors) {
     const fullVersions = availableVersions[major] || []
     const versionCount = fullVersions.length
-    const isLatestMajor = major === latestMajor
     const allDeprecated =
       fullVersions.length > 0 &&
       fullVersions.every((v) => deprecatedVersions.has(v))
@@ -641,14 +654,33 @@ export async function promptVersion(
       allPrerelease && firstPrerelease
         ? chalk.yellow(` [${prereleaseVersions.get(firstPrerelease)}]`)
         : ''
-    const label = isLatestMajor
-      ? `${engine.displayName} ${major} ${countLabel} ${chalk.green('← latest')}`
-      : `${engine.displayName} ${major} ${countLabel}${deprecatedLabel}${prereleaseLabel}`
+
+    majorEntries.push({ major, countLabel, deprecatedLabel, prereleaseLabel })
+  }
+
+  const selectableMajors = majorEntries.map((entry) => entry.major)
+  // Preselect the engine's configured default line (spindb policy), which is
+  // not always the newest line hostdb offers - see version-picker-defaults.ts.
+  const defaultMajor = resolveDefaultMajorVersion({
+    selectableMajors,
+    // engine.name is canonical: engineName may be an alias ('pg', 'sqld').
+    configuredDefault: getEngineDefaults(engine.name).defaultVersion,
+    prereleaseMajors,
+  })
+
+  for (const entry of majorEntries) {
+    const markers = getMajorVersionMarkers({
+      major: entry.major,
+      newestMajor: latestMajor,
+      defaultMajor,
+    })
+    const latestLabel = markers.isNewest ? ` ${chalk.green('← latest')}` : ''
+    const defaultLabel = markers.isDefault ? ` ${chalk.cyan('← default')}` : ''
 
     majorChoices.push({
-      name: label,
-      value: major,
-      short: `${engine.displayName} ${major}`,
+      name: `${engine.displayName} ${entry.major} ${entry.countLabel}${entry.deprecatedLabel}${entry.prereleaseLabel}${latestLabel}${defaultLabel}`,
+      value: entry.major,
+      short: `${engine.displayName} ${entry.major}`,
     })
   }
 
@@ -679,7 +711,7 @@ export async function promptVersion(
       name: 'majorVersion',
       message: 'Select major version:',
       choices: majorChoices,
-      default: latestMajor, // Default to latest major
+      default: defaultMajor ?? latestMajor, // Engine's configured default line
     },
   ])
 

@@ -5,6 +5,20 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-09-17
+
+### Added
+
+- **MariaDB 12.3 (LTS) and 13.0 (GA rolling) support** via the hostdb `0.43.0` pin, on all 5 platforms (linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64). `spindb create -e mariadb --db-version 12.3` resolves to `12.3.3` and `--db-version 13.0` to `13.0.2`, and both lines appear in the interactive version picker (13.0 as the newest line).
+- **MariaDB 10.11.19, 11.4.13, and 11.8.9 patch refresh** from the same pin, all 5 platforms. The `10.11`, `11.4`, and `11.8` lines now resolve to those patches (were 10.11.16, 11.4.10, and 11.8.8). Every earlier patch stays resolvable, and existing containers keep the full version pinned in their `container.json`, so nothing already created moves.
+- Note: MariaDB's `defaultVersion` deliberately stays `11.8`. 11.8 is the current long-term line spindb recommends, so a bare `spindb create -e mariadb` and the picker's preselection still land there even though 13.0 is newer.
+- Note: the hostdb MariaDB archives deliberately do NOT ship the DuckDB or VIDEX storage engine plugins on any platform. Neither is loadable in a spindb MariaDB container, and `SHOW ENGINES` / `SHOW PLUGINS` lists neither.
+
+### Changed
+
+- **Pin `hostdb` to `0.43.0`** (was 0.42.0).
+- **The interactive version picker now preselects the engine's configured default version line** rather than always landing on the newest one. The list is still newest-first and the newest line keeps its `latest` label, but the cursor starts on `getEngineDefaults(engine).defaultVersion` - MySQL 8.4 (LTS) rather than 9.x, MongoDB 8.0, MariaDB 11.8 - and that entry carries a `default` label whenever it is not also the newest. A line that exists only as a prerelease is never preselected, and an engine whose configured default is missing from the offered list falls back to the previous newest-line behavior.
+
 ## [0.69.6] - 2026-09-17
 
 ### Added

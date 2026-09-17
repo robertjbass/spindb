@@ -44,12 +44,10 @@ The binary manager checks for both names: `['mariadbd', 'mysqld']`
 
 ### Version Map Sync
 
-```typescript
-export const MARIADB_VERSION_MAP: Record<string, string> = {
-  '10.11': '10.11.15',
-  '11.4': '11.4.5',
-  '11.8': '11.8.5',
-}
+`MARIADB_VERSION_MAP` and `SUPPORTED_MAJOR_VERSIONS` in `engines/mariadb/version-maps.ts` are rebuilt at module load from the pinned `hostdb` npm package - there are no hand-written version entries. To add or move a version, bump the `hostdb` pin in `package.json`; never edit the map by hand. To see what the current pin offers:
+
+```bash
+node --import tsx -e "import { listVersions } from 'hostdb'; console.log(listVersions('mariadb'))"
 ```
 
 ## Implementation Details
