@@ -789,6 +789,16 @@ spindb config update-check on           # Enable update checks
 spindb config update-check off          # Disable update checks
 ```
 
+### Environment variables
+
+```bash
+SPINDB_HOME=/path/to/dir spindb         # Use this directory instead of ~/.spindb
+SPINDB_BRAND=Layerbase spindb           # Main menu title reads "Layerbase - Local Database Manager"
+```
+
+`SPINDB_BRAND` is for wrapper CLIs (the `layerbase` CLI sets it). It changes the
+interactive menu title only: commands, paths, and `--json` output are unchanged.
+
 ## Doctor
 
 ```bash

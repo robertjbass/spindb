@@ -25,7 +25,14 @@ import {
   escapeablePrompt,
   EscapeError,
 } from '../../ui/prompts'
-import { header, keyValue, uiError, uiSuccess, uiWarning } from '../../ui/theme'
+import {
+  header,
+  keyValue,
+  mainMenuTitle,
+  uiError,
+  uiSuccess,
+  uiWarning,
+} from '../../ui/theme'
 import { MissingToolError } from '../../../core/error-handler'
 import {
   handleCreate,
@@ -46,7 +53,7 @@ let cachedUpdateResult: UpdateCheckResult | null = null
 
 async function showMainMenu(): Promise<void> {
   console.clear()
-  console.log(header('SpinDB - Local Database Manager'))
+  console.log(header(mainMenuTitle()))
   console.log()
 
   // Parallelize container list and config loading for faster startup
