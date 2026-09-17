@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.5] - 2026-09-17
+
+### Fixed
+
+- **Migrating from a PostgreSQL prerelease server failed before it started.** `spindb migrate` against a PostgreSQL 19 beta source died with `Failed to detect remote database version: Cannot parse version from: pg_dump (PostgreSQL) 19beta3`. The tool-version parser only recognized `X.Y`, and a prerelease binary reports `19beta3` with no minor; the remote `server_version` parser and the dump-header parser had the same gap. All three now share one version pattern that accepts `X.Y`, `X.Y.Z`, and `X<alpha|beta|rc>N`, reporting a prerelease as major `X` with minor and patch 0 and the tag in a new optional `prerelease` field. A bare number with neither a dot nor a tag is still rejected, so a stray digit elsewhere in the line cannot pass for the version.
+
 ## [0.69.4] - 2026-09-16
 
 ### Fixed

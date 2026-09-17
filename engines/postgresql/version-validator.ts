@@ -23,19 +23,7 @@ import {
   detectRemotePostgresVersion,
   type RemoteVersionResult,
 } from './remote-version'
-
-const execAsync = promisify(exec)
-
-// =============================================================================
-// Types
-// =============================================================================
-
-export type VersionInfo = {
-  major: number
-  minor: number
-  patch: number
-  full: string
-}
+import { parsePostgresVersionToken, type VersionInfo } from './version-token'
 
 export type CompatibilityResult = {
   compatible: boolean
@@ -44,6 +32,18 @@ export type CompatibilityResult = {
   warning?: string
   error?: string
 }
+
+const execAsync = promisify(exec)
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export {
+  POSTGRES_VERSION_PATTERN,
+  parsePostgresVersionToken,
+  type VersionInfo,
+} from './version-token'
 
 // =============================================================================
 // Version Parsing
@@ -57,16 +57,21 @@ export type CompatibilityResult = {
  *   "pg_dump (PostgreSQL) 17.0"
  */
 export function parseToolVersion(output: string): VersionInfo {
-  const match = output.match(/(\d+)\.(\d+)(?:\.(\d+))?/)
-  if (!match) {
+  const version = parsePostgresVersionToken(output)
+  if (!version) {
     throw new Error(`Cannot parse version from: ${output}`)
   }
-  return {
-    major: parseInt(match[1], 10),
-    minor: parseInt(match[2], 10),
-    patch: parseInt(match[3] || '0', 10),
-    full: match[0],
-  }
+  return version
+}
+
+/**
+ * Parse the version a dump header records, from either the plain-SQL comment
+ * or the `pg_restore -l` TOC line: "Dumped from database version 16.1" (a
+ * prerelease server writes "19beta3" there too).
+ */
+export function parseDumpHeaderVersion(header: string): VersionInfo | null {
+  const line = header.match(/Dumped from database version\s+(\S+)/)
+  return line ? parsePostgresVersionToken(line[1]) : null
 }
 
 async function readFirstLines(
@@ -114,31 +119,13 @@ export async function parseDumpVersion(
         `"${restorePath}" -l "${dumpPath}" 2>&1 | head -20`,
       )
       // Look for: "; Dumped from database version 16.1"
-      const match = stdout.match(
-        /Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/,
-      )
-      if (match) {
-        return {
-          major: parseInt(match[1], 10),
-          minor: parseInt(match[2], 10),
-          patch: parseInt(match[3] || '0', 10),
-          full: `${match[1]}.${match[2]}${match[3] ? `.${match[3]}` : ''}`,
-        }
-      }
+      const version = parseDumpHeaderVersion(stdout)
+      if (version) return version
     } else {
       // Plain SQL format - read first 50 lines
       const header = await readFirstLines(dumpPath, 50)
-      const match = header.match(
-        /Dumped from database version (\d+)\.(\d+)(?:\.(\d+))?/,
-      )
-      if (match) {
-        return {
-          major: parseInt(match[1], 10),
-          minor: parseInt(match[2], 10),
-          patch: parseInt(match[3] || '0', 10),
-          full: `${match[1]}.${match[2]}${match[3] ? `.${match[3]}` : ''}`,
-        }
-      }
+      const version = parseDumpHeaderVersion(header)
+      if (version) return version
     }
   } catch (error) {
     logDebug('Failed to parse dump version', {
