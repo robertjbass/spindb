@@ -10,6 +10,8 @@ import { promisify } from 'util'
 import { configManager } from '../../core/config-manager'
 import { logDebug } from '../../core/error-handler'
 
+import { parsePostgresVersionToken } from './version-token'
+
 const execAsync = promisify(exec)
 
 export type RemoteVersionResult = {
@@ -51,15 +53,16 @@ export async function detectRemotePostgresVersion(
 
     const [versionString, serverVersion] = parts
 
-    // Parse version from server_version (e.g., "16.1", "17.0")
-    const match = serverVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/)
-    if (!match) {
+    // Parse version from server_version (e.g., "16.1", "17.0", or a
+    // prerelease such as "19beta3", which has no minor).
+    const parsed = parsePostgresVersionToken(serverVersion)
+    if (!parsed) {
       throw new Error(`Could not parse server version: ${serverVersion}`)
     }
 
-    const majorVersion = parseInt(match[1], 10)
-    const minorVersion = parseInt(match[2], 10)
-    const fullVersion = match[0]
+    const majorVersion = parsed.major
+    const minorVersion = parsed.minor
+    const fullVersion = parsed.full
 
     // Detect server type from version() output
     const serverType = detectServerType(versionString)

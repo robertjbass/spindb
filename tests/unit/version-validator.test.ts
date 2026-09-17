@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import {
   parseToolVersion,
+  parseDumpHeaderVersion,
   checkVersionCompatibility,
   type VersionInfo,
 } from '../../engines/postgresql/version-validator'
@@ -40,6 +41,30 @@ describe('parseToolVersion', () => {
 
     assertEqual(version.major, 17, 'Major version should be 17')
     assertEqual(version.minor, 0, 'Minor version should be 0')
+  })
+
+  it('should parse a prerelease such as 19beta3 with no minor', () => {
+    const version = parseToolVersion('pg_dump (PostgreSQL) 19beta3')
+
+    assertEqual(version.major, 19, 'Major version should be 19')
+    assertEqual(version.minor, 0, 'Prerelease has no minor')
+    assertEqual(version.patch, 0, 'Prerelease has no patch')
+    assertEqual(version.full, '19beta3', 'Full version keeps the tag')
+    assertEqual(version.prerelease, 'beta3', 'Prerelease tag is exposed')
+
+    const rc = parseToolVersion('psql (PostgreSQL) 19rc1 (Debian 19~rc1-1)')
+    assertEqual(rc.major, 19, 'rc major')
+    assertEqual(rc.prerelease, 'rc1', 'rc tag')
+  })
+
+  it('should not take a bare number for a version', () => {
+    let threw = false
+    try {
+      parseToolVersion('build 2026 of something')
+    } catch {
+      threw = true
+    }
+    assert(threw, 'A bare number is not a version')
   })
 
   it('should throw on invalid version string', () => {
@@ -230,5 +255,26 @@ describe('checkVersionCompatibility', () => {
         'Should have warning when version unknown',
       )
     })
+  })
+})
+
+describe('parseDumpHeaderVersion', () => {
+  it('reads a release and a prerelease from the dump header line', () => {
+    const release = parseDumpHeaderVersion(
+      '-- Dumped from database version 16.4\n-- Dumped by pg_dump version 16.4',
+    )
+    assertEqual(release?.major, 16, 'release major')
+    assertEqual(release?.minor, 4, 'release minor')
+    assertEqual(release?.full, '16.4', 'release full')
+
+    const beta = parseDumpHeaderVersion(
+      ';     Dumped from database version 19beta3\n;     Dumped by pg_dump version 19beta3',
+    )
+    assertEqual(beta?.major, 19, 'beta major')
+    assertEqual(beta?.prerelease, 'beta3', 'beta tag')
+  })
+
+  it('returns null when the header carries no version', () => {
+    assertEqual(parseDumpHeaderVersion('-- nothing here'), null, 'no header')
   })
 })
