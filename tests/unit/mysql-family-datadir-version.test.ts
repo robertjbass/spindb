@@ -165,7 +165,10 @@ describe('assertDataDirVersionMatches', () => {
         assert.match(error.message, /the 11\.8 line/)
         // Names the file the claim came from and the data dir at risk.
         assert.match(error.message, /mariadb_upgrade_info/)
-        assert.match(error.message, new RegExp(dataDir.replace(/\./g, '\\.')))
+        assert.ok(
+          error.message.includes(dataDir),
+          `message names the data dir: ${error.message}`,
+        )
         // States the consequence and the fix.
         assert.match(error.message, /cannot be undone/)
         assert.match(error.message, /no cross-major downgrade/)
