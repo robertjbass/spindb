@@ -20,7 +20,7 @@ Every engine runs on **5 runners**, with darwin-x64 reduced to a smoke set:
 |---------------|--------|-------|
 | linux-x64 | ubuntu-22.04 | Older glibc (2.35) — catches binary compatibility issues |
 | linux-x64 | ubuntu-24.04 | Newer glibc (2.39) — catches library renames (e.g., libaio) |
-| linux-arm64 | Docker + QEMU | **Manual dispatch only** — the QEMU smoke job runs only via workflow_dispatch (too slow under emulation for PRs/nightly). Run it when bumping hostdb: that's when arm64 binaries change. Not in `CI Success`, so it can never block a release |
+| linux-arm64 | `ubuntu-24.04-arm` + Docker | **Native arm64, runs on every PR and the nightly cron** (no emulation since the 0.70.x cycle). Full engine set, same image and timeouts as the x64 Docker job. In the `CI Success` gate since 0.70.2, so a red arm64 leg blocks the PR - still worth reading by name on hostdb bumps |
 | darwin-x64 | macos-15-intel | **Smoke set only**: PostgreSQL + Redis (see below) |
 | darwin-arm64 | macos-14 | Apple Silicon |
 | win32-x64 | windows-latest | |
@@ -45,7 +45,18 @@ runtime. Full sunset (hostdb builds, spindb support table, desktop Intel
 build) is a coordinated ecosystem decision for when GitHub retires Intel
 runners — see the OS Coverage Strategy header in `ci.yml`.
 
-The linux-arm64 QEMU job reuses the Docker E2E image (`tests/docker/Dockerfile`) and `run-e2e.sh` in smoke test mode. It's slow (~30-45 min under emulation), so it is **gated to `workflow_dispatch`** — trigger CI manually from the Actions tab to run it. The intended cadence is per hostdb bump (step 8 of the bump workflow in CLAUDE.md), since linux-arm64 risk lives in hostdb binaries, not spindb code.
+### linux-arm64 runs natively, not under QEMU
+
+The `Docker Linux ARM64` job reuses the Docker E2E image (`tests/docker/Dockerfile`) and `run-e2e.sh` in smoke test mode, exactly like the x64 leg, on GitHub's hosted native arm64 runner (`ubuntu-24.04-arm`, free for public repositories). Because it is real hardware rather than emulation it runs on every PR and on the nightly cron with no special timeouts and no skipped engines.
+
+It replaced a QEMU-emulated, dispatch-only version of the same job that **failed every dispatch it ever had**: TigerBeetle requires io_uring and QEMU user-mode emulation does not implement io_uring at all (`error(io): io_uring is not available ... SystemOutdated`). 16 of 17 engines passed, the job was permanently red, and a hostdb bump shipped against it. Emulation also forced SurrealDB and ClickHouse to be skipped and the startup timeouts inflated roughly 5x; none of that is needed now.
+
+Two details that matter if you touch this job:
+
+- **It stays inside Docker.** The container is the test environment, not an emulation wrapper: a minimal Ubuntu 22.04 with no preinstalled database tooling, pinned to 22.04 because hostdb's PostgreSQL binaries link against ICU 70 and 24.04 ships the ABI-incompatible ICU 74. Inside the container the runner's own distro is irrelevant, so the arm64 and x64 legs differ by architecture only. The build is a plain `docker build` (no buildx, no binfmt, no `--platform`) because the runner is natively arm64.
+- **`--security-opt seccomp=unconfined` is still required**, identically to the x64 Docker job. Docker's default seccomp profile does not allow the io_uring syscalls, which is a container policy question rather than an architecture one; the arm64 runner's kernel supports io_uring natively.
+
+It is in the `CI Success` needs list as of 0.70.2, after passing on consecutive runs across the full engine set, so a red arm64 leg fails the PR. Still read it by name on hostdb bumps: linux-arm64 risk lives in hostdb binaries rather than spindb code, so that is when this job earns its keep.
 
 ### Exceptions
 

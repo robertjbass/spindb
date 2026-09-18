@@ -5,6 +5,26 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.2] - 2026-09-18
+
+### Fixed
+
+- **MariaDB refuses to start a server from a different release line than its data directory.** `start()` picked the server binary from `container.json`'s `version` alone, so a container.json edited, restored, or hand-repaired onto another line pointed mariadbd at a data directory it would upgrade IN PLACE on first boot - irreversible, because MariaDB has no cross-major downgrade. Both MariaDB and MySQL record the last server version that opened a data directory in a one-line file at its root (`data/mariadb_upgrade_info` on MariaDB 11+, `data/mysql_upgrade_info` on MariaDB 10.x and MySQL 5.7 and older), so start now reads it and refuses when the two name different major.minor lines, naming the pinned version, the recorded version, the data directory, the file the claim came from, and the fix (put the version back on the recorded line, or restore a backup into a new container on the other line - spindb cannot move a data directory across lines). A newer PATCH on the same line is still fine (11.8.8 data under an 11.8.9 server), a data directory with no such file starts exactly as before (which is every MySQL 8+ container: 8.0 moved that state into the data dictionary and writes no file), and a legacy container.json pinned to a bare major compares majors only, so an unknowable minor cannot produce a false refusal. Same check on both engines: `core/mysql-family-datadir-version.ts`.
+
+### Changed
+
+- **`Docker Linux ARM64` is now part of the `CI Success` gate.** The native arm64 job (0.70.1) has passed on consecutive runs across the full 20-engine set, so it is in the `ci-success` needs list and a red arm64 leg fails the PR instead of only reporting. CLAUDE.md's hostdb-bump checklist and TESTING_STRATEGY.md say so; reading the job by name on a hostdb bump is still worthwhile, since that is when arm64 binaries change.
+
+### Testing
+
+- **The integration suites no longer leak containers.** The MariaDB and MySQL memory-budget tests each left a `<engine>-memory-budget_<hex>` container behind on every run, and the CLI git-branching e2e left a `gitbase_<hex>` one, because none of those names match the prefix pattern `cleanupTestContainers()` reaps - 18 of them had piled up on one dev machine. Each suite now tracks every container it creates through a `createContainerLeakGuard()` helper, force-deletes them in `after()` (which runs even when a test threw), and then FAILS the suite if any survived, so a future leak is a red suite rather than silent disk growth. The shared cleanup pattern also recognizes those three prefixes now, which reaps leftovers from earlier runs.
+
+## [0.70.1] - 2026-09-18
+
+### Changed
+
+- **CI: the linux-arm64 smoke job now runs on a native arm64 runner instead of QEMU, on every PR and the nightly cron.** `Docker Linux ARM64` moved from `docker/setup-qemu-action` + `--platform linux/arm64` on an x64 runner to GitHub's hosted `ubuntu-24.04-arm` runner, which is free for public repositories. The QEMU version had failed **every dispatch since it was enabled**: TigerBeetle requires io_uring and QEMU user-mode emulation does not implement io_uring at all (`error(io): io_uring is not available ... SystemOutdated`), so 16 of 17 engines passed and the job was permanently red - unable to show a real regression, and the hostdb 0.43.0 bump shipped against it. First run on the native runner (PR #340): all 20 engines passed, TigerBeetle included, in under five minutes. On real hardware the engine matrix is identical to the x64 Docker leg: TigerBeetle is included, the SurrealDB and ClickHouse emulation skips are gone, and the 5x-inflated `START_TIMEOUT`/`STARTUP_TIMEOUT` overrides are gone. The tests still run inside the Ubuntu 22.04 E2E image (that image is the minimal-Linux test environment, pinned to 22.04 for hostdb's ICU 70 PostgreSQL binaries), and still with `--security-opt seccomp=unconfined`, which is what Docker's default seccomp profile needs for io_uring regardless of architecture. Because it has no green history yet it is still outside the `CI Success` gate, so it reports on every PR without being able to block a release; the hostdb-bump checklist in CLAUDE.md now says to read it by name rather than to dispatch CI by hand.
+
 ## [0.70.0] - 2026-09-17
 
 ### Added

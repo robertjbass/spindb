@@ -153,7 +153,13 @@ export async function cleanupTestContainers(): Promise<string[]> {
   // Match test naming pattern: containers containing "-test" followed by _uuid
   // Examples: pg-test_12345678, mysql-test-clone_abcd1234, redis-test-renamed_12345678
   // Also matches legacy patterns: clipg_12345678, test_abcd1234
-  const testPattern = /(-test|^cli|^test)[a-z-]*_[a-f0-9]+$/i
+  //
+  // The second alternative covers generateTestName() prefixes that carry no
+  // "test" in the name at all and so used to leak one container per run:
+  // mariadb-memory-budget_abcd1234, mysql-memory-budget_abcd1234,
+  // gitbase_abcd1234 (and the git branch DBs it spawns, gitbase_x__feature-y).
+  const testPattern =
+    /((-test|^cli|^test)[a-z-]*_[a-f0-9]+$)|(^(gitbase|[a-z]+-memory-budget)_[a-f0-9]+(__[a-z0-9-]+)?$)/i
   let testContainers = containers.filter((c) => testPattern.test(c.name))
 
   // On Windows, skip CockroachDB, SurrealDB, and QuestDB containers during cleanup
@@ -231,6 +237,83 @@ export async function cleanupTestContainers(): Promise<string[]> {
   }
 
   return deleted
+}
+
+/**
+ * Force-delete a single container by name, stopping it first if it is running.
+ * Never throws: teardown must not mask the real test failure.
+ */
+export async function forceDeleteContainer(name: string): Promise<boolean> {
+  try {
+    const config = await containerManager.getConfig(name)
+    if (!config) return false
+    try {
+      const running = await processManager.isRunning(name, {
+        engine: config.engine,
+      })
+      if (running) {
+        await getEngine(config.engine).stop(config)
+      }
+    } catch {
+      // Stop is best effort; delete --force handles a stubborn process.
+    }
+    await containerManager.delete(name, { force: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Tracks every container a suite creates so teardown can force-delete them and
+ * then FAIL the suite if any survived.
+ *
+ * `cleanupTestContainers()` only reaps names that match its pattern, so a suite
+ * whose generateTestName() prefix falls outside it (mariadb-memory-budget_,
+ * mysql-memory-budget_, gitbase_) leaked one container per run - 18 of them
+ * accumulated on a dev machine before this guard existed. Track every name at
+ * the point it is created, call `cleanup()` from `after()` (it runs even when a
+ * test threw), and the assertion turns a future leak into a red suite instead
+ * of silent disk growth.
+ */
+export type ContainerLeakGuard = {
+  /** Register a name; returns it so it can wrap generateTestName(). */
+  track: (name: string) => string
+  /** Force-delete everything tracked, then throw if anything still exists. */
+  cleanup: () => Promise<void>
+}
+
+export function createContainerLeakGuard(): ContainerLeakGuard {
+  const tracked = new Set<string>()
+  return {
+    track(name: string): string {
+      tracked.add(name)
+      return name
+    },
+    async cleanup(): Promise<void> {
+      for (const name of tracked) {
+        await forceDeleteContainer(name)
+      }
+      const survivors: string[] = []
+      for (const name of tracked) {
+        try {
+          if (await containerManager.exists(name)) {
+            survivors.push(name)
+          }
+        } catch {
+          // An unreadable registry entry is itself a leftover.
+          survivors.push(name)
+        }
+      }
+      tracked.clear()
+      if (survivors.length > 0) {
+        throw new Error(
+          `Test container leak: ${survivors.length} container(s) created by this suite still exist after teardown: ${survivors.join(', ')}. ` +
+            'Delete them with `spindb delete <name> --force --yes` and fix the suite teardown.',
+        )
+      }
+    },
+  }
 }
 
 /**

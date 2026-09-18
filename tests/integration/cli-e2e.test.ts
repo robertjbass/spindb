@@ -16,6 +16,7 @@ import { rm, mkdir, mkdtemp } from 'fs/promises'
 import {
   generateTestName,
   cleanupTestContainers,
+  createContainerLeakGuard,
   findConsecutiveFreePorts,
   TEST_PORTS,
   waitForReady,
@@ -1008,13 +1009,17 @@ describe('CLI Git Branching (PostgreSQL)', () => {
   let base: string
   let testPort: number
   let repo: string
+  // gitbase_* does not match the cleanupTestContainers() legacy pattern, so
+  // this suite used to leak its base container (and any branch DB left behind)
+  // on every run. Tracked here and force-deleted with a leak assertion.
+  const leakGuard = createContainerLeakGuard()
 
   before(async () => {
     console.log('\n Cleaning up test containers...')
     await cleanupTestContainers()
     const ports = await findConsecutiveFreePorts(1, TEST_PORTS.postgresql.base)
     testPort = ports[0]
-    base = generateTestName('gitbase')
+    base = leakGuard.track(generateTestName('gitbase'))
     // Minimal git repo on the default branch with one commit (so we can branch).
     repo = await mkdtemp(join(tmpdir(), 'spindb-gitrepo-'))
     await execAsync('git init -q', { cwd: repo })
@@ -1030,6 +1035,9 @@ describe('CLI Git Branching (PostgreSQL)', () => {
     if (existsSync(repo)) {
       await rm(repo, { recursive: true, force: true })
     }
+    // Throws if the base container or its git branch DB survived, including
+    // on a mid-suite failure (after() runs regardless).
+    await leakGuard.cleanup()
   })
 
   it('starts the base container and enables git branching', async () => {
@@ -1065,6 +1073,9 @@ describe('CLI Git Branching (PostgreSQL)', () => {
       `${base}__feature-login`,
       'computed branch container name',
     )
+    // The branch DB is a container too: track it so teardown reaps it if the
+    // prune test below never runs (for example after an earlier failure).
+    leakGuard.track(result.container)
 
     assert(
       await processManager.isRunning(result.container, {

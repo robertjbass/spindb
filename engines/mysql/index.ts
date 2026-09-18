@@ -57,6 +57,7 @@ import {
   type MysqlFamilyServer,
 } from '../../core/server-handshake'
 import { resolveBundledMysqlFamilyBinary } from '../../core/mysql-family-binary-resolver'
+import { assertDataDirVersionMatches } from '../../core/mysql-family-datadir-version'
 import {
   Engine,
   Platform,
@@ -590,6 +591,18 @@ export class MySQLEngine extends BaseEngine {
       }
     }
 
+    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
+
+    // Same hazard as MariaDB: a newer mysqld upgrades the data directory in
+    // place on first boot. MySQL 8+ records no mysql_upgrade_info file, so
+    // this is a no-op there and covers 5.7-era data directories.
+    await assertDataDirVersionMatches({
+      engineLabel: 'MySQL',
+      containerName: name,
+      configuredVersion: version,
+      dataDir,
+    })
+
     const binPath = this.getBinaryPath(version)
     const ext = platformService.getExecutableExtension()
     const mysqld = join(binPath, 'bin', `mysqld${ext}`)
@@ -601,7 +614,6 @@ export class MySQLEngine extends BaseEngine {
       )
     }
 
-    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
     const { platform } = platformService.getPlatformInfo()
