@@ -39,7 +39,8 @@ const EXPECTED_ROW_COUNT = 5
 
 // Get default version from engine defaults
 const engineDef = getEngineDefaults('mariadb')
-const DEFAULT_VERSION = engineDef.defaultVersion
+const DEFAULT_VERSION =
+  process.env.SPINDB_TEST_MARIADB_VERSION || engineDef.defaultVersion
 
 describe('MariaDB Integration Tests', () => {
   let testPorts: number[]
