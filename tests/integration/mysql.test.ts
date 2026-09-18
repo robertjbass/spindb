@@ -14,6 +14,7 @@ import {
   generateTestName,
   findConsecutiveFreePorts,
   cleanupTestContainers,
+  createContainerLeakGuard,
   getRowCount,
   waitForReady,
   waitForStopped,
@@ -42,6 +43,10 @@ describe('MySQL Integration Tests', () => {
   let clonedContainerName: string
   let renamedContainerName: string
   let portConflictContainerName: string
+  // Every container this suite creates, force-deleted in after() with a
+  // leak assertion. mysql-memory-budget_* does not match the
+  // cleanupTestContainers() legacy pattern and used to leak one per run.
+  const leakGuard = createContainerLeakGuard()
 
   before(async () => {
     console.log('\n🧹 Cleaning up any existing test containers...')
@@ -54,10 +59,14 @@ describe('MySQL Integration Tests', () => {
     testPorts = await findConsecutiveFreePorts(3, TEST_PORTS.mysql.base)
     console.log(`   Using ports: ${testPorts.join(', ')}`)
 
-    containerName = generateTestName('mysql-test')
-    clonedContainerName = generateTestName('mysql-test-clone')
-    renamedContainerName = generateTestName('mysql-test-renamed')
-    portConflictContainerName = generateTestName('mysql-test-conflict')
+    containerName = leakGuard.track(generateTestName('mysql-test'))
+    clonedContainerName = leakGuard.track(generateTestName('mysql-test-clone'))
+    renamedContainerName = leakGuard.track(
+      generateTestName('mysql-test-renamed'),
+    )
+    portConflictContainerName = leakGuard.track(
+      generateTestName('mysql-test-conflict'),
+    )
   })
 
   after(async () => {
@@ -66,6 +75,9 @@ describe('MySQL Integration Tests', () => {
     if (deleted.length > 0) {
       console.log(`   Deleted: ${deleted.join(', ')}`)
     }
+    // Throws if anything this suite created survived, including on a
+    // mid-suite failure (after() runs regardless).
+    await leakGuard.cleanup()
   })
 
   it('should create container without starting (--no-start)', async () => {
@@ -136,7 +148,7 @@ describe('MySQL Integration Tests', () => {
 
   it('should apply a memory budget (performance_schema OFF, boots clean)', async () => {
     console.log(`\n🧠 Testing --memory-budget-mb...`)
-    const budgetName = generateTestName('mysql-memory-budget')
+    const budgetName = leakGuard.track(generateTestName('mysql-memory-budget'))
     const [budgetPort] = await findConsecutiveFreePorts(
       1,
       TEST_PORTS.mysql.base + 100,

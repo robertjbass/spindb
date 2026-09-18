@@ -56,6 +56,7 @@ import {
 } from '../../types'
 import { parseTSVToQueryResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
+import { assertDataDirVersionMatches } from '../../core/mysql-family-datadir-version'
 
 const ENGINE = 'mariadb'
 const engineDef = getEngineDefaults(ENGINE)
@@ -445,6 +446,18 @@ export class MariaDBEngine extends BaseEngine {
       }
     }
 
+    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
+
+    // mariadbd upgrades a data directory in place when it is opened by a newer
+    // major, and MariaDB has no cross-major downgrade. Refuse before spawning
+    // when the pinned version and the data directory disagree on the line.
+    await assertDataDirVersionMatches({
+      engineLabel: 'MariaDB',
+      containerName: name,
+      configuredVersion: version,
+      dataDir,
+    })
+
     const binPath = this.getBinaryPath(version)
     const ext = platformService.getExecutableExtension()
 
@@ -461,7 +474,6 @@ export class MariaDBEngine extends BaseEngine {
       )
     }
 
-    const dataDir = paths.getContainerDataPath(name, { engine: ENGINE })
     const logFile = paths.getContainerLogPath(name, { engine: ENGINE })
     const pidFile = paths.getContainerPidPath(name, { engine: ENGINE })
     const { platform } = platformService.getPlatformInfo()

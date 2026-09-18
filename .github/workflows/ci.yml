@@ -28,7 +28,7 @@ permissions:
 #                    Runs on every PR and on the nightly cron like the other
 #                    engine jobs; it replaced a QEMU-emulated job that could
 #                    never pass (QEMU implements no io_uring, so TigerBeetle
-#                    failed every single run). Not yet in the ci-success gate.
+#                    failed every single run). Part of the ci-success gate.
 #   - darwin-x64:    macos-15-intel, SMOKE SET ONLY (see below)
 #   - darwin-arm64:  macos-14 (Apple Silicon)
 #   - win32-x64:     windows-latest
@@ -2776,10 +2776,10 @@ jobs:
   # hosted arm64 runner supports io_uring natively. Safe for an ephemeral test
   # container and it does not affect the host.
   #
-  # Deliberately NOT in the ci-success needs list yet: this job has never had a
-  # green run (see above), so it reports on every PR but cannot block a release
-  # until it has proven itself. Promote it by adding it to ci-success (needs +
-  # names + results) once it has a green history.
+  # In the ci-success gate since 0.70.2: the native job passed on consecutive
+  # runs across the full 20-engine set, so a red arm64 leg now blocks the PR
+  # instead of only reporting. (The QEMU job it replaced could never be gated:
+  # it was permanently red on TigerBeetle.)
   test-docker-linux-arm64:
     name: Docker Linux ARM64
     runs-on: ubuntu-24.04-arm
@@ -2870,6 +2870,7 @@ jobs:
         test-upgrade,
         test-self-update,
         test-docker-linux,
+        test-docker-linux-arm64,
         test-docker-export,
       ]
     if: always()
@@ -2886,7 +2887,8 @@ jobs:
             "test-surrealdb" "test-questdb" "test-typedb"
             "test-influxdb" "test-weaviate" "test-tigerbeetle" "test-libsql" "test-cli-e2e" "test-rename-clone"
             "test-clickhouse-rename" "test-fresh-install" "test-upgrade"
-            "test-self-update" "test-docker-linux" "test-docker-export"
+            "test-self-update" "test-docker-linux" "test-docker-linux-arm64"
+            "test-docker-export"
           )
           results=(
             "${{ needs.unit-tests.result }}"
@@ -2921,6 +2923,7 @@ jobs:
             "${{ needs.test-upgrade.result }}"
             "${{ needs.test-self-update.result }}"
             "${{ needs.test-docker-linux.result }}"
+            "${{ needs.test-docker-linux-arm64.result }}"
             "${{ needs.test-docker-export.result }}"
           )
           failed=0
