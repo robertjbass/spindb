@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **CI: the linux-arm64 smoke job now runs on a native arm64 runner instead of QEMU, on every PR and the nightly cron.** `Docker Linux ARM64` moved from `docker/setup-qemu-action` + `--platform linux/arm64` on an x64 runner to GitHub's hosted `ubuntu-24.04-arm` runner, which is free for public repositories. The QEMU version had failed **every dispatch since it was enabled**: TigerBeetle requires io_uring and QEMU user-mode emulation does not implement io_uring at all (`error(io): io_uring is not available ... SystemOutdated`), so 16 of 17 engines passed and the job was permanently red - unable to show a real regression, and the hostdb 0.43.0 bump shipped against it. On real hardware the engine matrix is identical to the x64 Docker leg: TigerBeetle is included, the SurrealDB and ClickHouse emulation skips are gone, and the 5x-inflated `START_TIMEOUT`/`STARTUP_TIMEOUT` overrides are gone. The tests still run inside the Ubuntu 22.04 E2E image (that image is the minimal-Linux test environment, pinned to 22.04 for hostdb's ICU 70 PostgreSQL binaries), and still with `--security-opt seccomp=unconfined`, which is what Docker's default seccomp profile needs for io_uring regardless of architecture. Because it has no green history yet it is still outside the `CI Success` gate, so it reports on every PR without being able to block a release; the hostdb-bump checklist in CLAUDE.md now says to read it by name rather than to dispatch CI by hand.
+
 ## [0.70.0] - 2026-09-17
 
 ### Added

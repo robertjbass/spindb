@@ -111,7 +111,7 @@ The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the author
 5. `pnpm test:unit` passes (version maps auto-rebuild from new snapshot).
 6. Commit: `chore(deps): bump hostdb 0.31.0 → 0.32.0` describing new versions / deprecations.
 7. Standard feature → dev → main PR flow.
-8. Trigger the CI workflow manually (Actions tab → CI → Run workflow) on the bump branch: the `Docker Linux ARM64 (QEMU)` smoke job runs ONLY on manual dispatch and is the sole automated linux-arm64 coverage. hostdb bumps are exactly when arm64 binaries change, so this is the moment to run it.
+8. Read the `Docker Linux ARM64` job's result on the bump PR. It is the sole automated linux-arm64 coverage, and a hostdb bump is exactly when arm64 binaries change, so it is the job to check first. **No manual dispatch any more:** it moved off QEMU emulation onto GitHub's hosted native arm64 runner (`ubuntu-24.04-arm`, free for public repos), so it now runs automatically on every PR to `main` and on the nightly cron, takes minutes instead of 30-45, and covers the full engine set including TigerBeetle, SurrealDB and ClickHouse (all three were unrunnable under emulation). It is deliberately still outside the `CI Success` gate until it has a green history, so a red arm64 leg does NOT fail the PR - read it deliberately rather than trusting the overall green check. The old dispatch-only rule existed because the QEMU job was too slow for PRs, and it was useless in practice: QEMU implements no io_uring, so TigerBeetle failed every dispatch the job ever had, which is how a hostdb bump once shipped against a permanently red job.
 
 ### Container version pinning (eager resolution + auto-migrate)
 

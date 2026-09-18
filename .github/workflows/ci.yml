@@ -23,9 +23,12 @@ permissions:
 # =============================================================================
 # Platform-arch combos we test (all 5 supported):
 #   - linux-x64:     ubuntu-22.04 (older glibc) + ubuntu-24.04 (newer glibc)
-#   - linux-arm64:   NOT in this workflow - the Docker + QEMU smoke job is
-#                    commented out below (too slow under emulation); run it
-#                    manually/periodically to verify arm64 binaries
+#   - linux-arm64:   ubuntu-24.04-arm (GitHub's hosted NATIVE arm64 runner,
+#                    free for public repos), via the Docker smoke job below.
+#                    Runs on every PR and on the nightly cron like the other
+#                    engine jobs; it replaced a QEMU-emulated job that could
+#                    never pass (QEMU implements no io_uring, so TigerBeetle
+#                    failed every single run). Not yet in the ci-success gate.
 #   - darwin-x64:    macos-15-intel, SMOKE SET ONLY (see below)
 #   - darwin-arm64:  macos-14 (Apple Silicon)
 #   - win32-x64:     windows-latest
@@ -2738,54 +2741,61 @@ jobs:
         timeout-minutes: 30
 
   # ============================================
-  # Docker Linux ARM64 (QEMU) - MANUAL DISPATCH ONLY
+  # Docker Linux ARM64 - NATIVE arm64 runner, no emulation
   # ============================================
-  # Gated to workflow_dispatch: ~30-45 min under QEMU emulation, and the
-  # linux-arm64 risk lives in hostdb BINARIES, not spindb code (macOS ARM64
-  # runners validate ARM code paths in every PR). Run this via the Actions
-  # tab when bumping hostdb - that is the moment arm64 binaries change.
-  # Deliberately NOT in ci-success needs and never on PRs or the nightly
-  # cron, so it can never block or noise a release.
+  # Runs on GitHub's hosted arm64 Linux runner (`ubuntu-24.04-arm`), which is
+  # free for public repositories. This job is the sole automated linux-arm64
+  # coverage, so it runs on every PR to main and on the nightly cron, exactly
+  # like the other engine jobs.
+  #
+  # WHY NOT QEMU ANY MORE: this job used docker/setup-qemu-action plus
+  # `--platform linux/arm64`, and it failed on EVERY dispatch from its
+  # introduction (Aug 2026) onward for one reason - TigerBeetle requires
+  # io_uring, and QEMU user-mode emulation does not implement io_uring at all
+  # (`error(io): io_uring is not available ... SystemOutdated`). 16 of 17
+  # engines passed; the job was permanently red, so it could not show a real
+  # regression, and a hostdb bump shipped against a red job. Emulation also
+  # forced SurrealDB and ClickHouse to be skipped and the startup timeouts to
+  # be inflated 5x, all of which are gone now: the matrix is the SAME set of
+  # engines the x64 Docker job runs, at the same timeouts.
+  #
+  # WHY STILL INSIDE DOCKER: the Docker wrapper was never about emulation. The
+  # image is the test environment - a minimal Ubuntu 22.04 with no preinstalled
+  # database tooling, pinned to 22.04 because hostdb's PostgreSQL binaries link
+  # against ICU 70 (24.04 ships the ABI-incompatible ICU 74; see the header of
+  # tests/docker/Dockerfile). Running bare on the arm64 runner would test a
+  # different, hand-assembled environment and would diverge from the x64 leg.
+  # Inside the container, the host runner's own distro is irrelevant. The build
+  # is a plain `docker build` because the runner is natively arm64: no
+  # buildx, no binfmt, no `--platform`.
+  #
+  # WHY seccomp=unconfined: identical to the x64 Docker job. TigerBeetle needs
+  # the io_uring syscalls, which Docker's DEFAULT seccomp profile blocks
+  # (io_uring_setup/enter/register are not on the allowlist) - this is a
+  # container policy question, not an architecture one, and the kernel on the
+  # hosted arm64 runner supports io_uring natively. Safe for an ephemeral test
+  # container and it does not affect the host.
+  #
+  # Deliberately NOT in the ci-success needs list yet: this job has never had a
+  # green run (see above), so it reports on every PR but cannot block a release
+  # until it has proven itself. Promote it by adding it to ci-success (needs +
+  # names + results) once it has a green history.
   test-docker-linux-arm64:
-    name: Docker Linux ARM64 (QEMU)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    name: Docker Linux ARM64
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Build ARM64 Docker test image
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -t spindb-e2e-arm64 \
-            -f tests/docker/Dockerfile \
-            --load .
+        run: docker build -t spindb-e2e-arm64 -f tests/docker/Dockerfile .
         timeout-minutes: 30
 
-      - name: Run ARM64 smoke tests
-        # QEMU emulation is ~5-10x slower than native; increase timeouts so
-        # engines with 30-90s internal waitForReady don't get killed.
-        # SurrealDB is skipped: its large Rust binary hangs during --version
-        # verification under QEMU user-mode emulation.
-        # ClickHouse is skipped: its heavy binary consistently exceeds startup
-        # timeouts under QEMU (~120s+ native, far longer emulated). Tested
-        # natively on macOS/Linux CI runners instead.
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -e START_TIMEOUT=600 \
-            -e STARTUP_TIMEOUT=180 \
-            -e "SKIP_ENGINES=surrealdb clickhouse" \
-            spindb-e2e-arm64
-        timeout-minutes: 90
+      - name: Run ARM64 Docker E2E tests
+        # --security-opt seccomp=unconfined: TigerBeetle requires io_uring
+        # syscalls which Docker's default seccomp profile blocks
+        run: docker run --rm --security-opt seccomp=unconfined spindb-e2e-arm64
+        timeout-minutes: 30
 
   # ============================================
   # Docker Export Test - Tests the `spindb export docker` functionality
@@ -2803,135 +2813,19 @@ jobs:
     uses: ./.github/workflows/_docker-export.yml
 
   # ============================================
-  # Linux ARM64 Tests (COMMENTED OUT)
+  # Linux ARM64 on a BARE runner (deliberately not done)
   # ============================================
-  # Uncomment this section if GitHub adds free ARM64 runners or if you have
-  # access to paid larger runners. Native ARM64 is much faster than QEMU.
+  # A commented-out per-engine matrix used to live here, waiting on "free ARM64
+  # runners". Those exist now (`ubuntu-24.04-arm` / `ubuntu-22.04-arm`, free for
+  # public repos) and linux-arm64 is covered by the native Docker job above, so
+  # the dead block is gone.
   #
-  # To enable: uncomment the job below.
-  # ============================================
-  #
-  # test-linux-arm64:
-  #   name: Linux ARM64 (${{ matrix.test }})
-  #   # Native ARM64 runner (requires GitHub Teams/Enterprise or larger runners)
-  #   runs-on: ubuntu-24.04-arm64
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       test:
-  #         - unit
-  #         - postgresql
-  #         - mysql
-  #         - mariadb
-  #         - sqlite
-  #         - mongodb
-  #         - redis
-  #         - valkey
-  #         - clickhouse
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v6
-  #
-  #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v6
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v6
-  #       with:
-  #         node-version: '22'
-  #         cache: 'pnpm'
-  #
-  #     - name: Install dependencies
-  #       run: pnpm install --frozen-lockfile
-  #
-  #     # Cache binaries for all engines
-  #     - name: Cache binaries
-  #       uses: actions/cache@v5
-  #       with:
-  #         path: ~/.spindb/bin
-  #         key: spindb-arm64-${{ matrix.test }}-${{ runner.os }}-${{ runner.arch }}
-  #
-  #     # Download engine binaries based on test type
-  #     - name: Download PostgreSQL
-  #       if: matrix.test == 'postgresql' || matrix.test == 'unit'
-  #       run: pnpm start engines download postgresql 18
-  #
-  #     - name: Download MySQL
-  #       if: matrix.test == 'mysql'
-  #       run: pnpm start engines download mysql 8.0
-  #
-  #     - name: Download MariaDB
-  #       if: matrix.test == 'mariadb'
-  #       run: pnpm start engines download mariadb 11.8
-  #
-  #     - name: Download SQLite
-  #       if: matrix.test == 'sqlite'
-  #       run: pnpm start engines download sqlite 3
-  #
-  #     - name: Download MongoDB
-  #       if: matrix.test == 'mongodb'
-  #       run: pnpm start engines download mongodb 8.0
-  #
-  #     - name: Download Redis
-  #       if: matrix.test == 'redis'
-  #       run: pnpm start engines download redis 8
-  #
-  #     - name: Download Valkey
-  #       if: matrix.test == 'valkey'
-  #       run: pnpm start engines download valkey 9
-  #
-  #     - name: Download ClickHouse
-  #       if: matrix.test == 'clickhouse'
-  #       run: pnpm start engines download clickhouse 25.12
-  #
-  #     - name: Show installed engines
-  #       run: pnpm start engines list
-  #
-  #     # Run the appropriate test
-  #     - name: Run unit tests
-  #       if: matrix.test == 'unit'
-  #       run: pnpm test:unit
-  #       timeout-minutes: 10
-  #
-  #     - name: Run PostgreSQL tests
-  #       if: matrix.test == 'postgresql'
-  #       run: pnpm test:engine postgresql
-  #       timeout-minutes: 15
-  #
-  #     - name: Run MySQL tests
-  #       if: matrix.test == 'mysql'
-  #       run: pnpm test:engine mysql
-  #       timeout-minutes: 15
-  #
-  #     - name: Run MariaDB tests
-  #       if: matrix.test == 'mariadb'
-  #       run: pnpm test:engine mariadb
-  #       timeout-minutes: 15
-  #
-  #     - name: Run SQLite tests
-  #       if: matrix.test == 'sqlite'
-  #       run: pnpm test:engine sqlite
-  #       timeout-minutes: 10
-  #
-  #     - name: Run MongoDB tests
-  #       if: matrix.test == 'mongodb'
-  #       run: pnpm test:engine mongodb
-  #       timeout-minutes: 15
-  #
-  #     - name: Run Redis tests
-  #       if: matrix.test == 'redis'
-  #       run: pnpm test:engine redis
-  #       timeout-minutes: 15
-  #
-  #     - name: Run Valkey tests
-  #       if: matrix.test == 'valkey'
-  #       run: pnpm test:engine valkey
-  #       timeout-minutes: 15
-  #
-  #     - name: Run ClickHouse tests
-  #       if: matrix.test == 'clickhouse'
-  #       run: pnpm test:engine clickhouse
-  #       timeout-minutes: 15
+  # Running the engine matrix directly on the arm64 runner instead was
+  # considered and rejected: the hosted image is Ubuntu 24.04 (ICU 74), while
+  # hostdb's PostgreSQL binaries link against ICU 70, and reproducing the
+  # container's library set by hand on the runner would make the arm64 leg test
+  # a different environment from the x64 one. The container keeps the two legs
+  # differing by architecture only.
 
   # ============================================
   # Summary Job - Ensures all tests pass
