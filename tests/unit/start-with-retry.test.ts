@@ -247,3 +247,34 @@ describe('Error Conversion', () => {
     )
   })
 })
+
+describe('strictPort', () => {
+  it('fails on a port error without reassigning or persisting a port', async () => {
+    const { startWithRetry } = await import('../../core/start-with-retry')
+    let attempts = 0
+    let portChanges = 0
+    const config = { name: 'strict-test', engine: 'valkey', port: 10264 }
+    const engine = {
+      name: 'valkey',
+      start: async () => {
+        attempts++
+        throw new Error('Port 10264 is already in use')
+      },
+    }
+
+    const result = await startWithRetry({
+      engine: engine as never,
+      config: config as never,
+      strictPort: true,
+      onPortChange: () => {
+        portChanges++
+      },
+    })
+
+    assertEqual(result.success, false, 'Start should fail')
+    assertEqual(attempts, 1, 'Should not retry')
+    assertEqual(portChanges, 0, 'Should not change the port')
+    assertEqual(result.finalPort, 10264, 'Port should be untouched')
+    assertEqual(config.port, 10264, 'Config port should be untouched')
+  })
+})

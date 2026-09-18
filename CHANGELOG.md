@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.3] - 2026-09-18
+
+### Added
+
+- **`--strict-port` on `spindb start` and `spindb create`.** When a start hits "port in use", spindb retries on a new port from the engine's default range and PERSISTS that port into `container.json`. That is the right call on a desktop, and wrong for any caller that owns port allocation: a managed host publishes one fixed port per database, so the reassigned port is unreachable, and because it is persisted every later start binds it again and the caller's own start then answers "already running" forever. It happened to six Layerbase Cloud databases during a container-recreate race (2026-09-18). With `--strict-port` a port conflict fails the start and `container.json` is never touched. Default behavior is unchanged. Mechanism: `strictPort` in `core/start-with-retry.ts`.
+
 ## [0.70.2] - 2026-09-18
 
 ### Fixed

@@ -37,6 +37,10 @@ export const startCommand = new Command('start')
     '--memory-budget-mb <number>',
     'Soft memory budget in MB; engines run lean within it (0 clears it). Persisted.',
   )
+  .option(
+    '--strict-port',
+    'Fail if the configured port is in use instead of moving to a new port',
+  )
   .action(
     async (
       name: string | undefined,
@@ -46,6 +50,7 @@ export const startCommand = new Command('start')
         bind?: string
         auth?: boolean
         memoryBudgetMb?: string
+        strictPort?: boolean
       },
     ) => {
       try {
@@ -281,6 +286,7 @@ export const startCommand = new Command('start')
         const result = await startWithRetry({
           engine,
           config,
+          strictPort: options.strictPort,
           onPortChange: (oldPort, newPort) => {
             if (spinner) {
               spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
