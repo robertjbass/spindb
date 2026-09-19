@@ -506,6 +506,10 @@ export const createCommand = new Command('create')
   .option('-d, --database <database>', 'Database name')
   .option('-p, --port <port>', 'Port number')
   .option(
+    '--strict-port',
+    'Fail if the port is in use instead of moving to a new port',
+  )
+  .option(
     '--path <path>',
     'Path for SQLite/DuckDB database file (default: ./<name>.sqlite or ./<name>.duckdb)',
   )
@@ -545,6 +549,7 @@ export const createCommand = new Command('create')
         dbVersion?: string
         database?: string
         port?: string
+        strictPort?: boolean
         path?: string
         maxConnections?: string
         memoryBudgetMb?: string
@@ -1079,6 +1084,7 @@ export const createCommand = new Command('create')
             const result = await startWithRetry({
               engine: dbEngine,
               config,
+              strictPort: options.strictPort,
               onPortChange: (oldPort, newPort) => {
                 startSpinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
                 port = newPort

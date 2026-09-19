@@ -17,6 +17,10 @@ export type StartWithRetryOptions = {
   engine: BaseEngine
   config: ContainerConfig
   maxRetries?: number // Default: 3
+  // Never reassign the port. For callers that own port allocation (managed
+  // hosting publishes a fixed port per container), a reassigned port is
+  // unreachable, and persisting it breaks every later start.
+  strictPort?: boolean
   onPortChange?: (oldPort: number, newPort: number) => void
 }
 
@@ -36,7 +40,13 @@ export type StartWithRetryResult = {
 export async function startWithRetry(
   options: StartWithRetryOptions,
 ): Promise<StartWithRetryResult> {
-  const { engine, config, maxRetries = 3, onPortChange } = options
+  const {
+    engine,
+    config,
+    maxRetries = 3,
+    onPortChange,
+    strictPort = false,
+  } = options
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -62,7 +72,7 @@ export async function startWithRetry(
         error: error instanceof Error ? error.message : String(error),
       })
 
-      if (isPortError && attempt < maxRetries) {
+      if (isPortError && !strictPort && attempt < maxRetries) {
         const oldPort = config.port
 
         // Find a new available port, excluding the one that just failed
