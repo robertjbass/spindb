@@ -280,6 +280,23 @@ rejects is dropped. What was converted is printed, and reported under
 server's own error rather than silently changed. PostgreSQL already worked this
 way, swapping in a `pg_dump` that can read the remote major version.
 
+A remote MySQL or MariaDB dump is compressed on the wire. `mysqldump` is run
+with `--compression-algorithms=zlib`, and a source that the greeting identifies
+as MariaDB is dumped with `mariadb-dump --compress`. Row data compresses
+heavily, so a slow or distant source finishes in a fraction of the transfer: a
+23 MB dump measured here moved 342 KB across the connection instead of 23 MB.
+Compression is negotiated, so a server without it is dumped uncompressed as
+before, and it applies only to a dump taken from a connection string, never to
+`spindb backup` on a local container. A non-MariaDB source is never dumped with
+`mariadb-dump --compress`, because that combination can hang instead of
+reporting a connection error.
+
+If a `--from-url` restore is interrupted (Ctrl-C, or a `SIGTERM`/`SIGHUP` from
+whatever is supervising it), the partial dump it was writing to
+`$TMPDIR/spindb-dump-<timestamp>.dump` is deleted, the dump client is killed,
+and spindb exits with the conventional signal code (143 for SIGTERM, 130 for
+SIGINT, 129 for SIGHUP) instead of leaving a large temp file behind.
+
 ### Redis and Valkey migrate across engine families
 
 `spindb restore <container> --from-url redis://...` copies the keyspace with
