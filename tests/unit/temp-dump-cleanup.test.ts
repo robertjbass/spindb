@@ -67,60 +67,72 @@ describe('temp dump cleanup registration', () => {
 })
 
 describe('temp dump cleanup on SIGTERM', () => {
-  it('removes the partial dump and kills the dump client', async () => {
-    const dumpPath = join(tmpdir(), `spindb-dump-sigterm-${Date.now()}.dump`)
+  it(
+    'removes the partial dump and kills the dump client',
+    {
+      // Windows has no catchable SIGTERM: `kill('SIGTERM')` there terminates the
+      // process unconditionally, so no handler runs and there is nothing to
+      // assert. Ctrl-C (SIGINT) is the only one of the three Windows delivers.
+      skip:
+        process.platform === 'win32'
+          ? 'SIGTERM cannot be handled on Windows'
+          : false,
+    },
+    async () => {
+      const dumpPath = join(tmpdir(), `spindb-dump-sigterm-${Date.now()}.dump`)
 
-    const proc = spawn(
-      process.execPath,
-      ['--import', 'tsx', FIXTURE, dumpPath],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    )
-
-    let stdout = ''
-    let stderr = ''
-    proc.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString()
-    })
-    proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString()
-    })
-
-    const exited = new Promise<{ code: number | null }>((res) => {
-      proc.on('close', (code) => res({ code }))
-    })
-
-    try {
-      const ready = await waitFor(() => stdout.includes('ready'), 30000)
-      assert(ready, `fixture never became ready. stderr: ${stderr}`)
-      assert(
-        existsSync(dumpPath),
-        'the fixture must write a partial dump first',
+      const proc = spawn(
+        process.execPath,
+        ['--import', 'tsx', FIXTURE, dumpPath],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
       )
 
-      const childPid = Number(stdout.trim().split(' ')[1])
-      assert(Number.isInteger(childPid), `no child pid in output: ${stdout}`)
+      let stdout = ''
+      let stderr = ''
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
 
-      proc.kill('SIGTERM')
-      const { code } = await exited
+      const exited = new Promise<{ code: number | null }>((res) => {
+        proc.on('close', (code) => res({ code }))
+      })
 
-      assertEqual(
-        code,
-        143,
-        'a terminated restore must exit with the conventional 128 + SIGTERM',
-      )
-      assert(
-        !existsSync(dumpPath),
-        'the partial temp dump must be removed when the process is terminated',
-      )
-      assert(
-        await waitFor(() => !isAlive(childPid), 5000),
-        'the dump client must be killed rather than orphaned',
-      )
-    } finally {
-      if (!proc.killed) proc.kill('SIGKILL')
-      rmSync(dumpPath, { force: true })
-    }
-  })
+      try {
+        const ready = await waitFor(() => stdout.includes('ready'), 30000)
+        assert(ready, `fixture never became ready. stderr: ${stderr}`)
+        assert(
+          existsSync(dumpPath),
+          'the fixture must write a partial dump first',
+        )
+
+        const childPid = Number(stdout.trim().split(' ')[1])
+        assert(Number.isInteger(childPid), `no child pid in output: ${stdout}`)
+
+        proc.kill('SIGTERM')
+        const { code } = await exited
+
+        assertEqual(
+          code,
+          143,
+          'a terminated restore must exit with the conventional 128 + SIGTERM',
+        )
+        assert(
+          !existsSync(dumpPath),
+          'the partial temp dump must be removed when the process is terminated',
+        )
+        assert(
+          await waitFor(() => !isAlive(childPid), 5000),
+          'the dump client must be killed rather than orphaned',
+        )
+      } finally {
+        if (!proc.killed) proc.kill('SIGKILL')
+        rmSync(dumpPath, { force: true })
+      }
+    },
+  )
 })

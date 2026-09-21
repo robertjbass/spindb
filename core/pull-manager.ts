@@ -248,6 +248,12 @@ export class PullManager {
     const tempRemoteDump = join(tmpdir(), `spindb-remote-${timestamp}.dump`)
     // A termination mid-dump skips the transaction rollbacks that delete this
     // file, so it is registered for removal on SIGTERM/SIGINT/SIGHUP too.
+    //
+    // tempOriginalDump is deliberately NOT registered. It is the rollback copy
+    // of the user's own database: a termination while the remote dump is being
+    // restored over the target leaves that file as the only intact copy of
+    // their data, so a leftover file is the safe outcome and a deleted one is
+    // data loss.
     registerTempDump(tempRemoteDump)
 
     // Always create backup if there's a post-script (so it can access original data)

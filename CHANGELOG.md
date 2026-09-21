@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Testing
 
-- `tests/unit/temp-dump-cleanup.test.ts` covers the registration and release contract, and spawns a real child that registers a temp dump plus a slow fake dump client, SIGTERMs it, then asserts the file is gone, the client is dead, and the exit code is 143.
+- `tests/unit/temp-dump-cleanup.test.ts` covers the registration and release contract, and spawns a real child that registers a temp dump plus a slow fake dump client, SIGTERMs it, then asserts the file is gone, the client is dead, and the exit code is 143. That case is skipped on Windows, which has no catchable SIGTERM (a `kill` there ends the process before any handler runs), so on Windows only Ctrl-C triggers the cleanup.
 - The MySQL and MariaDB remote-dump argument tests pin the compression flags, including that `mariadb-dump` compression stays opt-in per source flavor and that the deprecated `--compress` form is never passed to `mysqldump`. A new version-floor test fails if spindb ever ships a mysqldump older than the 8.0.18 that introduced `--compression-algorithms`.
 
 ## [0.70.3] - 2026-09-18

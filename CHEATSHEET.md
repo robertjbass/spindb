@@ -295,7 +295,9 @@ If a `--from-url` restore is interrupted (Ctrl-C, or a `SIGTERM`/`SIGHUP` from
 whatever is supervising it), the partial dump it was writing to
 `$TMPDIR/spindb-dump-<timestamp>.dump` is deleted, the dump client is killed,
 and spindb exits with the conventional signal code (143 for SIGTERM, 130 for
-SIGINT, 129 for SIGHUP) instead of leaving a large temp file behind.
+SIGINT, 129 for SIGHUP) instead of leaving a large temp file behind. On Windows
+only Ctrl-C is covered: a `SIGTERM` there ends the process before any cleanup
+can run.
 
 ### Redis and Valkey migrate across engine families
 
