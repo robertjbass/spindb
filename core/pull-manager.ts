@@ -15,6 +15,7 @@ import { withTransaction } from './transaction-manager'
 import { containerManager } from './container-manager'
 import { getEngine } from '../engines'
 import { logDebug } from './error-handler'
+import { registerTempDump, releaseTempDump } from './temp-dump-cleanup'
 import { Engine } from '../types'
 import type {
   ContainerConfig,
@@ -245,6 +246,15 @@ export class PullManager {
     const backupDatabase = `${targetDatabase}_${timestamp}`
     const tempOriginalDump = join(tmpdir(), `spindb-orig-${timestamp}.dump`)
     const tempRemoteDump = join(tmpdir(), `spindb-remote-${timestamp}.dump`)
+    // A termination mid-dump skips the transaction rollbacks that delete this
+    // file, so it is registered for removal on SIGTERM/SIGINT/SIGHUP too.
+    //
+    // tempOriginalDump is deliberately NOT registered. It is the rollback copy
+    // of the user's own database: a termination while the remote dump is being
+    // restored over the target leaves that file as the only intact copy of
+    // their data, so a leftover file is the safe outcome and a deleted one is
+    // data loss.
+    registerTempDump(tempRemoteDump)
 
     // Always create backup if there's a post-script (so it can access original data)
     // Otherwise, only create backup if --no-backup wasn't specified
@@ -371,6 +381,7 @@ export class PullManager {
       } catch {
         // Ignore errors
       }
+      releaseTempDump(tempRemoteDump)
 
       // Step 10: Run post-script if provided
       if (options.postScript) {
@@ -445,6 +456,9 @@ export class PullManager {
   ): Promise<PullResult> {
     const timestamp = this.generateTimestamp()
     const tempRemoteDump = join(tmpdir(), `spindb-remote-${timestamp}.dump`)
+    // A termination mid-dump skips the transaction rollbacks that delete this
+    // file, so it is registered for removal on SIGTERM/SIGINT/SIGHUP too.
+    registerTempDump(tempRemoteDump)
 
     return withTransaction(async (tx) => {
       // Step 1: Drop target if exists (--force required)
@@ -508,6 +522,7 @@ export class PullManager {
       } catch {
         // Ignore errors
       }
+      releaseTempDump(tempRemoteDump)
 
       // Step 6: Run post-script if provided
       if (options.postScript) {

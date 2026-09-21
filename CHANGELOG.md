@@ -5,6 +5,19 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.4] - 2026-09-21
+
+### Fixed
+
+- **A remote MySQL or MariaDB dump is now compressed on the wire.** `spindb restore --from-url` / `pull` / `create --from` ran `mysqldump` and `mariadb-dump` with no protocol compression, so every byte of a dump crossed the network uncompressed. That is what it costs: a customer's MariaDB 10.11 source in Europe pulled to a US box at about 250 KB/s hit its supervisor's 30-minute deadline with 450 MB written and nothing to show for it (2026-09-21). `mysqldump` now runs with `--compression-algorithms=zlib` (the non-deprecated form; `-C, --compress` has warned on stderr since MySQL 8.0.18, and every mysqldump spindb ships is 8.0.40 or newer), and a source the greeting identifies as MariaDB is dumped with `mariadb-dump --compress`. Measured against a local MariaDB 11.8.9 source, a 23,432,254-byte dump moved 341,890 bytes across the connection instead of 23,453,950, a 68x reduction, with a byte-identical dump file. Compression is negotiated during the handshake, so a server without the capability is dumped uncompressed exactly as before. It applies only to the connection-string path: a local `spindb backup` would spend the CPU for nothing, so those arguments are untouched.
+- **`mariadb-dump --compress` is deliberately NOT used against a non-MariaDB source.** Measured against a MySQL 8.4 source whose `caching_sha2_password` plugin this client cannot load, `--compress` turns a one-second, fully explained `Plugin caching_sha2_password could not be loaded` failure into a process that never returns, which on a deadline is far worse than a slow dump. The MariaDB engine therefore probes the source's greeting (`core/server-handshake.ts`, the same probe MySQL already used) and compresses only a MariaDB server; a source that cannot be probed reports `unknown` and stays uncompressed, so a probe failure can never stop a dump. `mysqldump --compression-algorithms=zlib` needs no such guard: it was verified against both a MySQL and a MariaDB source.
+- **An interrupted `--from-url` restore no longer orphans its partial temp dump.** The temp dump (`$TMPDIR/spindb-dump-<timestamp>.dump`, and `spindb-remote-<timestamp>.dump` for `pull`) was removed in a `finally` block, which a signal skips entirely: the 450 MB partial dump from the incident above was still sitting in the customer's container after the supervisor killed the restore. The path is now registered with `core/temp-dump-cleanup.ts`, which removes it on `SIGTERM`, `SIGINT`, and `SIGHUP`, kills the dump client instead of orphaning it, and exits with the conventional signal code (143 / 130 / 129). The registry is engine-agnostic: every path that writes one of those temp dumps registers it, so this is not a MySQL-family fix. The normal success and failure paths still clean up as before and release the registration.
+
+### Testing
+
+- `tests/unit/temp-dump-cleanup.test.ts` covers the registration and release contract, and spawns a real child that registers a temp dump plus a slow fake dump client, SIGTERMs it, then asserts the file is gone, the client is dead, and the exit code is 143. That case is skipped on Windows, which has no catchable SIGTERM (a `kill` there ends the process before any handler runs), so on Windows only Ctrl-C triggers the cleanup.
+- The MySQL and MariaDB remote-dump argument tests pin the compression flags, including that `mariadb-dump` compression stays opt-in per source flavor and that the deprecated `--compress` form is never passed to `mysqldump`. A new version-floor test fails if spindb ever ships a mysqldump older than the 8.0.18 that introduced `--compression-algorithms`.
+
 ## [0.70.3] - 2026-09-18
 
 ### Added

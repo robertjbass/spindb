@@ -39,6 +39,19 @@ describe('MySQL remote dump args', () => {
     )
   })
 
+  it('compresses the dump on the wire with the non-deprecated flag', () => {
+    const args = buildMysqlRemoteDumpArgs(baseOptions)
+
+    assert(
+      args.includes('--compression-algorithms=zlib'),
+      'a remote dump crosses the internet, so it must be compressed on the wire',
+    )
+    assert(
+      !args.includes('--compress') && !args.includes('-C'),
+      'the short --compress form is deprecated since MySQL 8.0.18 and warns on stderr',
+    )
+  })
+
   it('builds the full argument list in order', () => {
     assertDeepEqual(
       buildMysqlRemoteDumpArgs(baseOptions),
@@ -52,6 +65,7 @@ describe('MySQL remote dump args', () => {
         '--single-transaction',
         '--set-gtid-purged=OFF',
         '--column-statistics=0',
+        '--compression-algorithms=zlib',
         '--result-file',
         '/tmp/appdb.sql',
         'appdb',
@@ -83,6 +97,23 @@ describe('MySQL remote dump args', () => {
 })
 
 describe('MySQL dump flag support', () => {
+  it('ships no mysqldump older than the 8.0.18 that added --compression-algorithms', () => {
+    // The remote dump passes --compression-algorithms=zlib unconditionally.
+    // Before 8.0.18 the only form was the now-deprecated --compress, so a
+    // client older than that would reject the flag outright.
+    for (const version of Object.values(MYSQL_VERSION_MAP)) {
+      const [major, minor, patch] = version.split('.').map(Number)
+      const isSupported =
+        major > 8 ||
+        (major === 8 && (minor > 0 || (minor === 0 && patch >= 18)))
+
+      assert(
+        isSupported,
+        `MySQL ${version} predates --compression-algorithms (8.0.18); the remote dump builder needs a version guard`,
+      )
+    }
+  })
+
   it('ships no mysqldump older than the 8.0.2 that added --column-statistics', () => {
     // The remote dump passes --column-statistics=0 unconditionally, with no
     // version guard. That is only safe while every mysqldump spindb can

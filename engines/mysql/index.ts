@@ -30,6 +30,7 @@ import {
   assertValidDatabaseName,
   assertValidUsername,
 } from '../../core/error-handler'
+import { trackDumpProcess } from '../../core/temp-dump-cleanup'
 import { mysqlBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import {
@@ -173,7 +174,22 @@ export function buildMysqlInlineCommand(
  *   omits histogram statements, which are not restorable into a fresh target
  *   anyway, so nothing is lost when the source really is MySQL.
  *
- * All three flags are mysqldump-only. `--set-gtid-purged` and
+ * `--compression-algorithms=zlib` compresses the dump on the wire. This
+ * builder only serves a dump taken from a connection string, which in
+ * Layerbase Cloud means pulling a customer's source database across the
+ * internet: row data compresses heavily, and an import that could not finish
+ * inside its deadline at 250 KB/s is the reason the flag is here. The local
+ * backup path does not use this builder, so it does not pay the CPU cost for
+ * nothing. Compression is negotiated during the handshake, so a server without
+ * the capability keeps the connection uncompressed rather than failing. The
+ * older `-C, --compress` does the same thing but has been deprecated since
+ * MySQL 8.0.18 and prints a deprecation warning on stderr, which the restore
+ * paths parse; every mysqldump spindb ships is 8.0.40 or newer, so the
+ * non-deprecated form is always available. MariaDB's client has no
+ * `--compression-algorithms` at all, which is why its builder passes
+ * `--compress` instead.
+ *
+ * All four flags are mysqldump-only. `--set-gtid-purged` and
  * `--column-statistics` are both rejected outright by mariadb-dump, so MariaDB
  * builds its own arguments in `engines/mariadb/index.ts` and must never reuse
  * this builder. Every mysqldump spindb ships is 8.0.40 or newer (see
@@ -200,6 +216,7 @@ export function buildMysqlRemoteDumpArgs(options: {
     '--single-transaction', // Consistent snapshot without locking the source
     '--set-gtid-purged=OFF', // Allows restoring to different MySQL instances
     '--column-statistics=0', // Source may be MariaDB, which has no COLUMN_STATISTICS
+    '--compression-algorithms=zlib', // Compress the dump on the wire; negotiated
     '--result-file',
     outputPath,
     // mysqldump requires db-qualified names; qualify bare names with the
@@ -1275,6 +1292,9 @@ export class MySQLEngine extends BaseEngine {
           database,
           outputPath: rawPath,
           excludeTables,
+          // The source is already known to be MariaDB, which is the one case
+          // where mariadb-dump's --compress is safe.
+          compress: true,
         }),
         password,
       })
@@ -1404,6 +1424,9 @@ export class MySQLEngine extends BaseEngine {
 
     return new Promise((resolve, reject) => {
       const proc = spawn(toolPath, args, spawnOptions)
+      // A termination during a long remote dump should take the client down
+      // with it instead of leaving it writing to a file nobody will read.
+      const untrack = trackDumpProcess(proc)
 
       let stdout = ''
       let stderr = ''
@@ -1415,9 +1438,13 @@ export class MySQLEngine extends BaseEngine {
         stderr += data.toString()
       })
 
-      proc.on('error', reject)
+      proc.on('error', (error) => {
+        untrack()
+        reject(error)
+      })
 
       proc.on('close', (code) => {
+        untrack()
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {

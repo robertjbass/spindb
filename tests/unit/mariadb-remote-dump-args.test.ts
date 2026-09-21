@@ -33,6 +33,31 @@ describe('MariaDB remote dump args', () => {
     )
   })
 
+  it('compresses the dump on the wire when asked to', () => {
+    const args = buildMariaDbRemoteDumpArgs({ ...baseOptions, compress: true })
+
+    assert(
+      args.includes('--compress'),
+      'a remote dump crosses the internet, so a MariaDB source must be compressed on the wire',
+    )
+    assert(
+      !args.some((arg) => arg.startsWith('--compression-algorithms')),
+      'mariadb-dump has no --compression-algorithms; only --compress exists',
+    )
+  })
+
+  it('leaves the connection uncompressed by default', () => {
+    // A non-MariaDB source must not be compressed: measured against a MySQL
+    // 8.4 server whose auth plugin this client cannot load, --compress turns a
+    // fast, explained failure into a process that never returns.
+    const args = buildMariaDbRemoteDumpArgs(baseOptions)
+
+    assert(
+      !args.includes('--compress') && !args.includes('-C'),
+      'compression must be opt-in per source flavor, not the default',
+    )
+  })
+
   it('builds the full argument list in order', () => {
     assertDeepEqual(
       buildMariaDbRemoteDumpArgs(baseOptions),

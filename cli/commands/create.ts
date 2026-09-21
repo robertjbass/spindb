@@ -29,6 +29,7 @@ import {
   exitWithError,
   logWarning,
 } from '../../core/error-handler'
+import { registerTempDump, releaseTempDump } from '../../core/temp-dump-cleanup'
 import {
   classifyRestoreOutcome,
   restoreDiagnosticsJson,
@@ -1156,6 +1157,9 @@ export const createCommand = new Command('create')
           if (restoreType === 'connection') {
             const timestamp = Date.now()
             tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+            // A SIGTERM at a supervisor's deadline skips the `finally` below,
+            // so the partial dump needs its own removal path.
+            registerTempDump(tempDumpPath)
 
             let dumpSuccess = false
             let attempts = 0
@@ -1400,6 +1404,7 @@ export const createCommand = new Command('create')
           } catch {
             // Ignore cleanup errors
           }
+          releaseTempDump(tempDumpPath)
         }
       }
     },

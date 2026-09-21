@@ -25,6 +25,8 @@ import {
   assertValidDatabaseName,
   assertValidUsername,
 } from '../../core/error-handler'
+import { trackDumpProcess } from '../../core/temp-dump-cleanup'
+import { probeMysqlFamilyServer } from '../../core/server-handshake'
 import { mariadbBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
@@ -145,6 +147,22 @@ async function runMariaDbBinary(
  * table A before a write and table B after it, which is how a restore ends up
  * with rows that reference rows that are not there.
  *
+ * `compress` adds `--compress`, protocol compression for the client/server
+ * connection. This builder only serves a dump taken from a connection string,
+ * which in Layerbase Cloud means pulling a customer's source database across
+ * the internet: row data compresses heavily, and an import that could not
+ * finish inside its deadline at 250 KB/s is the reason the option is here. The
+ * local backup path does not use this builder, so it does not pay the CPU cost
+ * for nothing. mariadb-dump has no `--compression-algorithms`, which is why
+ * this differs from the MySQL builder.
+ *
+ * The caller passes `compress` only for a source that probed as MariaDB, and
+ * that restriction is deliberate: measured against a MySQL 8.4 source whose
+ * auth plugin this client cannot load, `--compress` turns a one-second, fully
+ * explained `Plugin caching_sha2_password could not be loaded` failure into a
+ * process that never returns. A hang is far worse than a slow dump for a
+ * caller on a deadline, so a non-MariaDB source stays uncompressed.
+ *
  * The MySQL builder in `engines/mysql/index.ts` also passes
  * `--set-gtid-purged=OFF`, and other MySQL paths pass `--column-statistics`.
  * mariadb-dump rejects both outright, so the two builders stay separate and
@@ -157,8 +175,10 @@ export function buildMariaDbRemoteDumpArgs(options: {
   database: string
   outputPath: string
   excludeTables?: string[]
+  compress?: boolean
 }): string[] {
-  const { host, port, user, database, outputPath, excludeTables } = options
+  const { host, port, user, database, outputPath, excludeTables, compress } =
+    options
 
   return [
     '-h',
@@ -168,6 +188,8 @@ export function buildMariaDbRemoteDumpArgs(options: {
     '-u',
     user,
     '--single-transaction', // Consistent snapshot without locking the source
+    // Only for a MariaDB source - see the note above on the MySQL hang
+    ...(compress ? ['--compress'] : []),
     '--result-file',
     outputPath,
     // mariadb-dump requires db-qualified names; qualify bare names with the
@@ -1031,6 +1053,16 @@ export class MariaDBEngine extends BaseEngine {
     const { host, port, user, password, database } =
       parseConnectionString(connectionString)
 
+    // Wire compression pays for itself on a slow remote source, but only a
+    // MariaDB server on the other end may have it: see the note on
+    // buildMariaDbRemoteDumpArgs for the MySQL hang it otherwise causes. The
+    // probe never throws and reports `unknown` when it cannot read a greeting,
+    // which leaves the connection uncompressed, exactly as before.
+    const source = await probeMysqlFamilyServer({
+      host,
+      port: parseInt(port, 10) || engineDef.defaultPort,
+    })
+
     const args = buildMariaDbRemoteDumpArgs({
       host,
       port,
@@ -1038,6 +1070,7 @@ export class MariaDBEngine extends BaseEngine {
       database,
       outputPath,
       excludeTables: options?.excludeTables,
+      compress: source.flavor === 'mariadb',
     })
 
     const spawnOptions: SpawnOptions = {
@@ -1047,6 +1080,9 @@ export class MariaDBEngine extends BaseEngine {
 
     return new Promise((resolve, reject) => {
       const proc = spawn(dumpPath, args, spawnOptions)
+      // A termination during a long remote dump should take the client down
+      // with it instead of leaving it writing to a file nobody will read.
+      const untrack = trackDumpProcess(proc)
 
       let stdout = ''
       let stderr = ''
@@ -1058,9 +1094,13 @@ export class MariaDBEngine extends BaseEngine {
         stderr += data.toString()
       })
 
-      proc.on('error', reject)
+      proc.on('error', (error) => {
+        untrack()
+        reject(error)
+      })
 
       proc.on('close', (code) => {
+        untrack()
         if (code === 0) {
           resolve({
             filePath: outputPath,
