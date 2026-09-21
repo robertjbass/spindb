@@ -27,6 +27,7 @@ import {
   type RemoteDumpSourceInfo,
 } from '../../types'
 import { logDebug, describeThrown } from '../../core/error-handler'
+import { registerTempDump, releaseTempDump } from '../../core/temp-dump-cleanup'
 import {
   classifyRestoreOutcome,
   restoreDiagnosticsJson,
@@ -491,6 +492,9 @@ export const restoreCommand = new Command('restore')
 
           const timestamp = Date.now()
           tempDumpPath = join(tmpdir(), `spindb-dump-${timestamp}.dump`)
+          // A SIGTERM at a supervisor's deadline skips the `finally` below, so
+          // the partial dump needs its own removal path.
+          registerTempDump(tempDumpPath)
 
           let dumpSuccess = false
           let attempts = 0
@@ -1070,6 +1074,7 @@ export const restoreCommand = new Command('restore')
           } catch {
             // Ignore cleanup errors
           }
+          releaseTempDump(tempDumpPath)
         }
       }
     },

@@ -55,6 +55,7 @@ import { getEngineIcon, getPageSize } from '../../constants'
 import { Engine, assertExhaustive } from '../../../types'
 import { pressEnterToContinue } from './shared'
 import { SpinDBError, ErrorCodes } from '../../../core/error-handler'
+import { registerTempDump } from '../../../core/temp-dump-cleanup'
 import { validateTypedbConnectionString } from './validators'
 
 // Strip surrounding quotes from paths (handles drag-and-drop paths)
@@ -548,6 +549,10 @@ export async function handleRestore(): Promise<void> {
         tmpdir(),
         `spindb-dump-${timestamp}${dumpExtension}`,
       )
+      // Ctrl-C during a long remote dump skips every cleanup path below.
+      // Removal is force-based, so a path this handler already deleted stays
+      // harmless in the registry.
+      registerTempDump(tempDumpPath)
 
       let dumpSuccess = false
       let attempts = 0
@@ -1251,6 +1256,8 @@ export async function handleRestoreForContainer(
       tmpdir(),
       `spindb-dump-${timestamp}${dumpExtension}`,
     )
+    // Ctrl-C during a long remote dump skips every cleanup path below.
+    registerTempDump(tempDumpPath)
 
     const dumpSpinner = createSpinner('Creating dump from remote database...')
     dumpSpinner.start()
