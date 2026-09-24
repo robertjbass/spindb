@@ -5,6 +5,25 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.0] - 2026-09-23
+
+### Added
+
+- **`spindb start` reports what it found for the primary database, and no longer recreates a dropped one silently.** Start has always run `CREATE DATABASE IF NOT EXISTS` for the container's primary database, so a primary dropped inside the server came back empty on the next start with nothing said, and every backup after that succeeded on an empty shell (a Layerbase Cloud MariaDB customer, 2026-09-23). Start now probes first on the engines where a database exists even when it holds no data (PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse) and adds `primaryDatabase: { name, state }` to the `--json` success object, with `state` one of `present`, `created`, `recreated`, `missing`, or `unknown`. **Default behavior is unchanged**: a missing primary is still created, now reported as `recreated` with a warning line in human output. `created` is the first start of a container made with `create --no-start` (the database never existed, so creating it is not a recreation). Every other engine keeps the old behavior exactly and reports `unknown`.
+- **`--no-recreate-database` on `spindb start`.** Leaves a missing primary database missing (state `missing`) instead of creating an empty one; the start itself still succeeds. On a durable engine whose listing failed it also skips the create, since that create could be the recreation the caller asked to avoid. It never blocks the first start of a `--no-start` container, and it has no effect on engines that cannot detect a missing database.
+- **`spindb backup` refuses a database the server proves absent with a structured error.** `spindb backup -d <name>` on those same engines now checks the listing before dumping and exits non-zero with `{ "error", "code": "database_not_found", "database", "availableDatabases" }` (system databases excluded), instead of passing through the dump tool's raw error (MariaDB's was `Unknown database ... (1049)`). A listing that fails or cannot speak for the name proceeds exactly as before.
+- **`durableDatabaseExistence` capability and `engine.databaseExists()`.** The per-engine capability in `core/database-capabilities.ts` says whether a successful listing that omits a database proves it is gone (false for MongoDB and FerretDB, which list a database only once it has data, and for every non-SQL engine). `databaseExists(container, name)` on the base engine is built on `listDatabases`, never throws, and returns `'unknown'` rather than `false` whenever the answer is not proof: the capability is off, the listing failed or was malformed, the name is a system database the listing filters out, or it matches only case-insensitively. An empty database counts as present, including a primary literally named `test`.
+- **`containerManager.syncDatabasesWithStatus()`** returns the synced registry list plus `primaryMissing`, true when a durable engine listed successfully without the primary. The registry list itself is unchanged (the primary stays first, which backup and the menus rely on), and `syncDatabases()` still returns just the list, so every existing caller behaves identically.
+
+### Fixed
+
+- **A missing `mariadb-dump` now gets the missing-tool treatment in `spindb backup`.** MariaDB's error (`mariadb-dump or mysqldump not found`) only matched the generic `mysqldump` pattern, so the hint named the wrong tool, and the install hint named PostgreSQL for every engine. The hint now names `mariadb-dump` and the container's own engine.
+
+### Testing
+
+- `tests/unit/primary-database.test.ts` covers the capability for every engine, the presence rules (empty primary and a primary named `test` present, a failed or malformed listing `unknown`, a non-durable engine never listed so a synthetic fallback cannot prove absence, filtered system names and case-only matches `unknown`), every start state including the flag and the first start, the sync `primaryMissing` flag, and the backup refusal.
+- The MariaDB and PostgreSQL integration suites gain a dropped-primary scenario with real binaries, driven through the CLI the way Layerbase Cloud drives it: `create --no-start`, then `start --json` reports `created`, a restart reports `present` for the empty primary, `DROP DATABASE` then `start --json` reports `recreated`, another drop then `start --no-recreate-database --json` reports `missing`, `backup -d <dropped>` returns `database_not_found` listing the sibling database, and a backup of the sibling still succeeds.
+
 ## [0.70.4] - 2026-09-21
 
 ### Fixed

@@ -14,6 +14,10 @@ import type {
   UserCredentials,
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
+import {
+  type DatabasePresence,
+  probeDatabasePresence,
+} from '../core/database-presence'
 import { stopPgweb } from '../core/pgweb-utils'
 import type { ReleaseType } from 'hostdb'
 
@@ -402,6 +406,25 @@ export abstract class BaseEngine {
    */
   async listDatabases(_container: ContainerConfig): Promise<string[]> {
     throw new UnsupportedOperationError('listDatabases', this.displayName)
+  }
+
+  /**
+   * Whether a database exists on the running server, built on listDatabases.
+   * Never throws. Returns 'unknown' for engines without durable database
+   * existence (see core/database-capabilities.ts), when the listing fails,
+   * or when the listing cannot speak for the name (a filtered system
+   * database). An empty database counts as present.
+   */
+  async databaseExists(
+    container: ContainerConfig,
+    name: string,
+  ): Promise<DatabasePresence> {
+    const { presence } = await probeDatabasePresence({
+      engine: this,
+      container,
+      name,
+    })
+    return presence
   }
 
   /**
