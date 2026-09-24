@@ -62,8 +62,11 @@ function classifyDatabasePresence(options: {
  * Resolve with the listing, or LISTING_TIMED_OUT once `timeoutMs` passes. On
  * timeout the listing's signal is aborted, so an engine that honors it kills
  * its client process: a leftover child with piped stdio would otherwise keep
- * the CLI alive after a successful start. The timer is unref'd and always
- * cleared, and a listing that settles after the deadline is ignored.
+ * the CLI alive after a successful start. The timer is deliberately NOT
+ * unref'd: with a listing that never settles, an unref'd timer lets the event
+ * loop drain mid-await. It is always cleared once the race settles, so it
+ * cannot hold the process open afterward. A listing that settles after the
+ * deadline is ignored.
  */
 async function listWithTimeout(options: {
   engine: DatabaseLister
@@ -78,7 +81,6 @@ async function listWithTimeout(options: {
       controller.abort()
       resolve(LISTING_TIMED_OUT)
     }, timeoutMs)
-    timer.unref?.()
   })
   try {
     const listing = Promise.resolve(

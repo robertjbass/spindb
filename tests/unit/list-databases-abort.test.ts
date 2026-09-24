@@ -156,10 +156,16 @@ describe(
 
         const abortedAt = Date.now()
         controller.abort()
+        // A ref'd guard timer, cleared afterward, so the await can never
+        // depend on some other handle keeping the event loop alive
+        let guard: ReturnType<typeof setTimeout> | undefined
         const outcome = await Promise.race([
           settled,
-          new Promise((resolve) => setTimeout(() => resolve('hung'), 3000)),
+          new Promise((resolve) => {
+            guard = setTimeout(() => resolve('hung'), 3000)
+          }),
         ])
+        clearTimeout(guard)
         assertEqual(outcome, 'rejected', 'aborted listing should reject')
         assert(
           await waitFor(() => !isAlive(pid), 3000),
