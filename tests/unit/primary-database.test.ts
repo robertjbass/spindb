@@ -4,6 +4,7 @@ import {
   getDatabaseCapabilities,
 } from '../../core/database-capabilities'
 import {
+  DATABASE_PRESENCE_TIMEOUT_MS,
   classifyDatabasePresence,
   probeDatabasePresence,
 } from '../../core/database-presence'
@@ -202,6 +203,90 @@ describe('probeDatabasePresence / databaseExists', () => {
     })
     assertEqual(probe.presence, 'unknown', 'presence')
     assertEqual(probe.listed, null, 'listed')
+  })
+
+  it('bounds the listing at 10 seconds by default', () => {
+    assertEqual(DATABASE_PRESENCE_TIMEOUT_MS, 10_000, 'default timeout')
+  })
+
+  it('returns unknown within the bound when the listing never resolves', async () => {
+    const started = Date.now()
+    const probe = await probeDatabasePresence({
+      engine: {
+        listDatabases: () => new Promise<string[]>(() => {}),
+      },
+      container: makeConfig(),
+      name: 'app',
+      timeoutMs: 50,
+    })
+    const elapsed = Date.now() - started
+    assertEqual(probe.presence, 'unknown', 'presence')
+    assertEqual(probe.listed, null, 'listed')
+    assert(elapsed < 2000, `should give up near the bound, took ${elapsed}ms`)
+  })
+
+  it('ignores a listing that settles after the deadline', async () => {
+    let settle: (value: string[]) => void = () => {}
+    let rejectLate: (error: Error) => void = () => {}
+    const probe = await probeDatabasePresence({
+      engine: {
+        listDatabases: () =>
+          new Promise<string[]>((resolve) => {
+            settle = resolve
+          }),
+      },
+      container: makeConfig(),
+      name: 'app',
+      timeoutMs: 20,
+    })
+    assertEqual(probe.presence, 'unknown', 'presence at the deadline')
+    // A late empty listing must not turn into a false after the fact
+    settle([])
+    assertEqual(probe.presence, 'unknown', 'presence after a late listing')
+
+    const rejecting = await probeDatabasePresence({
+      engine: {
+        listDatabases: () =>
+          new Promise<string[]>((_resolve, reject) => {
+            rejectLate = reject
+          }),
+      },
+      container: makeConfig(),
+      name: 'app',
+      timeoutMs: 20,
+    })
+    // Must not surface as an unhandled rejection
+    rejectLate(new Error('late failure'))
+    await new Promise((resolve) => setImmediate(resolve))
+    assertEqual(rejecting.presence, 'unknown', 'late rejection ignored')
+  })
+
+  it('leaves a fast listing unaffected by the bound', async () => {
+    const probe = await probeDatabasePresence({
+      engine: {
+        async listDatabases() {
+          return ['other']
+        },
+      },
+      container: makeConfig(),
+      name: 'app',
+      timeoutMs: 1000,
+    })
+    assertEqual(probe.presence, false, 'presence')
+    assertEqual(probe.listed?.join(','), 'other', 'listed')
+  })
+
+  it('returns unknown when listDatabases throws synchronously', async () => {
+    const probe = await probeDatabasePresence({
+      engine: {
+        listDatabases: () => {
+          throw new Error('sync failure')
+        },
+      },
+      container: makeConfig(),
+      name: 'app',
+    })
+    assertEqual(probe.presence, 'unknown', 'presence')
   })
 
   it('returns unknown for a malformed listing', async () => {
