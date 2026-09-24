@@ -22,6 +22,15 @@ import { stopPgweb } from '../core/pgweb-utils'
 import type { ReleaseType } from 'hostdb'
 
 /**
+ * Options for listDatabases. `signal` aborts the listing: engines that honor
+ * it kill the client process and reject. Engines that do not honor it ignore
+ * it, so callers must still bound the wait themselves.
+ */
+export type ListDatabasesOptions = {
+  signal?: AbortSignal
+}
+
+/**
  * Base class for database engines
  * All engines (PostgreSQL, MySQL, SQLite) should extend this class
  */
@@ -401,10 +410,15 @@ export abstract class BaseEngine {
    * - CockroachDB: defaultdb, postgres, system
    *
    * @param container - The container configuration
+   * @param options - Optional abort signal (honored by the engines with
+   *   durable database existence; see core/database-capabilities.ts)
    * @returns Array of database names (excluding system databases)
    * @throws Error if the engine doesn't support multiple databases or listing
    */
-  async listDatabases(_container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    _container: ContainerConfig,
+    _options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     throw new UnsupportedOperationError('listDatabases', this.displayName)
   }
 

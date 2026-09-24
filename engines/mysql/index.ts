@@ -8,7 +8,7 @@ import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
-import { BaseEngine } from '../base-engine'
+import { BaseEngine, type ListDatabasesOptions } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { memoryBudgetArgs } from '../../core/memory-budget'
@@ -1698,7 +1698,10 @@ export class MySQLEngine extends BaseEngine {
    * List all user databases, excluding system databases
    * (information_schema, mysql, performance_schema, sys).
    */
-  async listDatabases(container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    container: ContainerConfig,
+    options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     const { name, port } = container
     const mysql = await this.getMysqlClientPath()
     const auth = await this.getLocalAdminAuth(name)
@@ -1723,6 +1726,7 @@ export class MySQLEngine extends BaseEngine {
       const proc = spawn(mysql, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: buildMysqlEnv(auth.password),
+        signal: options?.signal,
       })
 
       let stdout = ''

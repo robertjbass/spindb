@@ -27,7 +27,10 @@ const DATABASE_PRESENCE_TIMEOUT_MS = 10_000
 const LISTING_TIMED_OUT = Symbol('listing-timed-out')
 
 type DatabaseLister = {
-  listDatabases(container: ContainerConfig): Promise<string[]>
+  listDatabases(
+    container: ContainerConfig,
+    options?: { signal?: AbortSignal },
+  ): Promise<string[]>
 }
 
 /**
@@ -56,9 +59,11 @@ function classifyDatabasePresence(options: {
 }
 
 /**
- * Resolve with the listing, or LISTING_TIMED_OUT once `timeoutMs` passes.
- * The timer is unref'd and always cleared, so it can never hold the process
- * open, and a listing that settles after the deadline is ignored.
+ * Resolve with the listing, or LISTING_TIMED_OUT once `timeoutMs` passes. On
+ * timeout the listing's signal is aborted, so an engine that honors it kills
+ * its client process: a leftover child with piped stdio would otherwise keep
+ * the CLI alive after a successful start. The timer is unref'd and always
+ * cleared, and a listing that settles after the deadline is ignored.
  */
 async function listWithTimeout(options: {
   engine: DatabaseLister
@@ -66,14 +71,21 @@ async function listWithTimeout(options: {
   timeoutMs: number
 }): Promise<string[] | typeof LISTING_TIMED_OUT> {
   const { engine, container, timeoutMs } = options
+  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const deadline = new Promise<typeof LISTING_TIMED_OUT>((resolve) => {
-    timer = setTimeout(() => resolve(LISTING_TIMED_OUT), timeoutMs)
+    timer = setTimeout(() => {
+      controller.abort()
+      resolve(LISTING_TIMED_OUT)
+    }, timeoutMs)
     timer.unref?.()
   })
   try {
-    const listing = Promise.resolve(engine.listDatabases(container))
-    // A late rejection after the deadline must not surface as unhandled
+    const listing = Promise.resolve(
+      engine.listDatabases(container, { signal: controller.signal }),
+    )
+    // A late rejection (including the abort itself) must not surface as
+    // unhandled
     listing.catch(() => {})
     return await Promise.race([listing, deadline])
   } finally {
