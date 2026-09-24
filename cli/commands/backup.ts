@@ -22,11 +22,54 @@ import {
   isValidFormat,
   getValidFormats,
 } from '../../config/backup-formats'
-import type { BackupFormatType } from '../../types'
+import type { BackupFormatType, ContainerConfig } from '../../types'
+import {
+  type DatabaseLister,
+  probeDatabasePresence,
+} from '../../core/database-presence'
 
 function generateTimestamp(): string {
   const now = new Date()
   return now.toISOString().replace(/:/g, '').split('.')[0]
+}
+
+type DatabaseNotFoundResult = {
+  error: string
+  code: 'database_not_found'
+  database: string
+  availableDatabases: string[]
+}
+
+/**
+ * The structured refusal for a backup whose target database the server
+ * proved absent, or null when the backup should proceed. Only engines where a
+ * database exists even when empty can prove absence; a failed or inconclusive
+ * listing ('unknown') proceeds exactly as before. Exported for tests.
+ */
+export async function checkBackupTarget(options: {
+  engine: DatabaseLister
+  container: ContainerConfig
+  database: string
+}): Promise<DatabaseNotFoundResult | null> {
+  const { engine, container, database } = options
+  const probe = await probeDatabasePresence({
+    engine,
+    container,
+    name: database,
+  })
+  if (probe.presence !== false) return null
+
+  const availableDatabases = probe.listed ?? []
+  const available =
+    availableDatabases.length > 0
+      ? `Available databases: ${availableDatabases.join(', ')}. Back up one of those with -d <name>.`
+      : 'The server has no user databases.'
+  return {
+    error: `Database "${database}" does not exist in container "${container.name}". ${available} To refresh the tracked list, run: spindb databases refresh ${container.name}`,
+    code: 'database_not_found',
+    database,
+    availableDatabases,
+  }
 }
 
 function generateDefaultFilename(
@@ -62,6 +105,8 @@ export const backupCommand = new Command('backup')
         json?: boolean
       },
     ) => {
+      // Engine for the missing-tool hint; unknown until the config loads
+      let engineForHint: string | undefined
       try {
         let containerName = containerArg
 
@@ -115,6 +160,7 @@ export const backupCommand = new Command('backup')
         }
 
         const { engine: engineName } = config
+        engineForHint = engineName
 
         // Remote containers: backup not yet supported (engine methods connect to 127.0.0.1)
         if (isRemoteContainer(config)) {
@@ -195,6 +241,23 @@ export const backupCommand = new Command('backup')
           }
         }
 
+        // Engines where a database exists even when empty can prove the target
+        // is gone. Report that directly instead of the dump tool's raw error.
+        // 'unknown' proceeds exactly as before.
+        const notFound = await checkBackupTarget({
+          engine,
+          container: config,
+          database: databaseName,
+        })
+        if (notFound) {
+          if (options.json) {
+            console.log(JSON.stringify(notFound))
+          } else {
+            console.error(uiError(notFound.error))
+          }
+          process.exit(1)
+        }
+
         let format: BackupFormatType = getDefaultFormat(engineName)
 
         if (options.format) {
@@ -270,7 +333,13 @@ export const backupCommand = new Command('backup')
       } catch (error) {
         const e = error as Error
 
-        const missingToolPatterns = ['pg_dump not found', 'mysqldump not found']
+        // Most specific first: MariaDB's message names both tools
+        const missingToolPatterns = [
+          'pg_dump not found',
+          'mariadb-dump or mysqldump not found',
+          'mariadb-dump not found',
+          'mysqldump not found',
+        ]
 
         const matchingPattern = missingToolPatterns.find((p) =>
           e.message.includes(p),
@@ -281,8 +350,13 @@ export const backupCommand = new Command('backup')
             console.log(JSON.stringify({ error: e.message }))
             process.exit(1)
           }
-          const missingTool = matchingPattern.replace(' not found', '')
-          const installed = await promptInstallDependencies(missingTool)
+          const missingTool = matchingPattern
+            .replace(' or mysqldump', '')
+            .replace(' not found', '')
+          const installed = await promptInstallDependencies(
+            missingTool,
+            engineForHint,
+          )
           if (installed) {
             console.log(
               chalk.yellow('  Please re-run your command to continue.'),

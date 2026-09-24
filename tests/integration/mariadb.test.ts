@@ -25,6 +25,7 @@ import {
   runScriptSQL,
   executeQuery,
 } from './helpers'
+import { runDroppedPrimaryScenario } from './primary-database-scenario'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -1028,5 +1029,32 @@ describe('MariaDB Integration Tests', () => {
     assertEqual(testContainers.length, 0, 'No test containers should remain')
 
     console.log('   ✓ All test containers cleaned up')
+  })
+})
+
+// Kept outside the main suite so its "no test containers remaining" check is
+// unaffected; this block owns and tears down its own container.
+describe('MariaDB dropped primary database', () => {
+  const leakGuard = createContainerLeakGuard()
+
+  after(async () => {
+    await leakGuard.cleanup()
+  })
+
+  it('reports created, present, recreated, and missing, and refuses a backup of the dropped database', async () => {
+    console.log(`\n🕳️  Testing a dropped primary database...`)
+    const name = leakGuard.track(generateTestName('mariadb-test-primary'))
+    const [port] = await findConsecutiveFreePorts(
+      1,
+      TEST_PORTS.mariadb.base + 110,
+    )
+    await runDroppedPrimaryScenario({
+      engine: ENGINE,
+      version: DEFAULT_VERSION,
+      port,
+      name,
+      adminDatabase: 'mysql',
+    })
+    console.log('   ✓ start and backup report the dropped primary')
   })
 })
