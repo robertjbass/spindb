@@ -15,6 +15,7 @@ import { portManager } from './port-manager'
 import { isWindows } from './platform-service'
 import { cloneDirectory, type CopyMethod } from './cow-copy'
 import { logDebug, UnsupportedOperationError } from './error-handler'
+import { classifyDatabasePresence } from './database-presence'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
 import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
@@ -875,6 +876,20 @@ export class ContainerManager {
    * @throws Error if the container is not running or doesn't support listing databases
    */
   async syncDatabases(containerName: string): Promise<string[]> {
+    const { databases } = await this.syncDatabasesWithStatus(containerName)
+    return databases
+  }
+
+  /**
+   * syncDatabases plus whether the server's listing lacked the primary
+   * database. The registry list is unchanged either way (the primary stays
+   * first, which backup and the menus rely on); `primaryMissing` is true only
+   * when an engine with durable database existence listed successfully and
+   * the primary was not in it.
+   */
+  async syncDatabasesWithStatus(
+    containerName: string,
+  ): Promise<SyncDatabasesResult> {
     const config = await this.getConfig(containerName)
     if (!config) {
       throw new Error(`Container "${containerName}" not found`)
@@ -882,12 +897,18 @@ export class ContainerManager {
 
     // File-based engines don't have multiple databases to sync
     if (isFileBasedEngine(config.engine)) {
-      return config.databases || [config.database]
+      return {
+        databases: config.databases || [config.database],
+        primaryMissing: false,
+      }
     }
 
     // Remote containers: return current registry (no local process to query)
     if (isRemoteContainer(config)) {
-      return config.databases || [config.database]
+      return {
+        databases: config.databases || [config.database],
+        primaryMissing: false,
+      }
     }
 
     // Container must be running to query databases
@@ -912,29 +933,25 @@ export class ContainerManager {
         logDebug(
           `listDatabases not supported for ${config.engine}, skipping sync`,
         )
-        return config.databases || [config.database]
+        return {
+          databases: config.databases || [config.database],
+          primaryMissing: false,
+        }
       }
       throw error
     }
 
-    // Ensure primary database is always included
-    if (!actualDatabases.includes(config.database)) {
-      actualDatabases = [config.database, ...actualDatabases]
-    }
-
-    // Sort for consistent ordering (primary database first, then alphabetical)
-    const sortedDatabases = [
-      config.database,
-      ...actualDatabases
-        .filter((db) => db !== config.database)
-        .sort((a, b) => a.localeCompare(b)),
-    ]
+    const { databases, primaryMissing } = buildSyncedDatabaseList({
+      engine: config.engine,
+      primary: config.database,
+      listed: actualDatabases,
+    })
 
     // Update the registry
-    config.databases = sortedDatabases
+    config.databases = databases
     await this.saveConfig(containerName, { engine: config.engine }, config)
 
-    return sortedDatabases
+    return { databases, primaryMissing }
   }
 
   getConnectionString(config: ContainerConfig, database?: string): string {
@@ -944,6 +961,33 @@ export class ContainerManager {
 }
 
 export const containerManager = new ContainerManager()
+
+export type SyncDatabasesResult = {
+  databases: string[]
+  primaryMissing: boolean
+}
+
+/**
+ * Registry list after a sync: primary first (always, even when the server no
+ * longer lists it), then the rest alphabetically. `primaryMissing` reports a
+ * listing that proves the primary absent; see classifyDatabasePresence.
+ */
+export function buildSyncedDatabaseList(options: {
+  engine: Engine
+  primary: string
+  listed: readonly string[]
+}): SyncDatabasesResult {
+  const { engine, primary, listed } = options
+  const primaryMissing =
+    classifyDatabasePresence({ engine, name: primary, listed }) === false
+
+  const databases = [
+    primary,
+    ...listed.filter((db) => db !== primary).sort((a, b) => a.localeCompare(b)),
+  ]
+
+  return { databases, primaryMissing }
+}
 
 /**
  * Update tracking after a database rename.

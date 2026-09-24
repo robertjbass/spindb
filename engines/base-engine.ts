@@ -14,8 +14,21 @@ import type {
   UserCredentials,
 } from '../types'
 import { UnsupportedOperationError } from '../core/error-handler'
+import {
+  type DatabasePresence,
+  probeDatabasePresence,
+} from '../core/database-presence'
 import { stopPgweb } from '../core/pgweb-utils'
 import type { ReleaseType } from 'hostdb'
+
+/**
+ * Options for listDatabases. `signal` aborts the listing: engines that honor
+ * it kill the client process and reject. Engines that do not honor it ignore
+ * it, so callers must still bound the wait themselves.
+ */
+export type ListDatabasesOptions = {
+  signal?: AbortSignal
+}
 
 /**
  * Base class for database engines
@@ -397,11 +410,35 @@ export abstract class BaseEngine {
    * - CockroachDB: defaultdb, postgres, system
    *
    * @param container - The container configuration
+   * @param options - Optional abort signal (honored by the engines with
+   *   durable database existence; see core/database-capabilities.ts)
    * @returns Array of database names (excluding system databases)
    * @throws Error if the engine doesn't support multiple databases or listing
    */
-  async listDatabases(_container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    _container: ContainerConfig,
+    _options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     throw new UnsupportedOperationError('listDatabases', this.displayName)
+  }
+
+  /**
+   * Whether a database exists on the running server, built on listDatabases.
+   * Never throws. Returns 'unknown' for engines without durable database
+   * existence (see core/database-capabilities.ts), when the listing fails,
+   * or when the listing cannot speak for the name (a filtered system
+   * database). An empty database counts as present.
+   */
+  async databaseExists(
+    container: ContainerConfig,
+    name: string,
+  ): Promise<DatabasePresence> {
+    const { presence } = await probeDatabasePresence({
+      engine: this,
+      container,
+      name,
+    })
+    return presence
   }
 
   /**

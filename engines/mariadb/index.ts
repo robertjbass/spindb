@@ -7,7 +7,7 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { join } from 'path'
-import { BaseEngine } from '../base-engine'
+import { BaseEngine, type ListDatabasesOptions } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { memoryBudgetArgs } from '../../core/memory-budget'
@@ -1340,7 +1340,10 @@ export class MariaDBEngine extends BaseEngine {
    * List all user databases, excluding system databases
    * (information_schema, mysql, performance_schema, sys).
    */
-  async listDatabases(container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    container: ContainerConfig,
+    options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     const { name, port } = container
     const mariadb = await this.getMariadbClientPath()
     const auth = await this.getLocalAdminAuth(name)
@@ -1365,6 +1368,7 @@ export class MariaDBEngine extends BaseEngine {
       const proc = spawn(mariadb, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: buildMariaDbEnv(auth.password),
+        signal: options?.signal,
       })
 
       let stdout = ''

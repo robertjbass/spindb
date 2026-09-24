@@ -17,6 +17,7 @@ import {
   generateTestName,
   findConsecutiveFreePorts,
   cleanupTestContainers,
+  createContainerLeakGuard,
   getRowCount,
   waitForReady,
   waitForStopped,
@@ -26,6 +27,7 @@ import {
   runScriptSQL,
   executeQuery,
 } from './helpers'
+import { runDroppedPrimaryScenario } from './primary-database-scenario'
 import { assert, assertEqual, assertDeepEqual } from '../utils/assertions'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
@@ -1775,5 +1777,32 @@ describe('PostgreSQL Integration Tests', () => {
     }
 
     console.log('   ✓ All test containers cleaned up')
+  })
+})
+
+// Kept outside the main suite so its "no test containers remaining" check is
+// unaffected; this block owns and tears down its own container.
+describe('PostgreSQL dropped primary database', () => {
+  const leakGuard = createContainerLeakGuard()
+
+  after(async () => {
+    await leakGuard.cleanup()
+  })
+
+  it('reports created, present, recreated, and missing, and refuses a backup of the dropped database', async () => {
+    console.log(`\n🕳️  Testing a dropped primary database...`)
+    const name = leakGuard.track(generateTestName('pg-test-primary'))
+    const [port] = await findConsecutiveFreePorts(
+      1,
+      TEST_PORTS.postgresql.base + 110,
+    )
+    await runDroppedPrimaryScenario({
+      engine: ENGINE,
+      version: '18',
+      port,
+      name,
+      adminDatabase: 'postgres',
+    })
+    console.log('   ✓ start and backup report the dropped primary')
   })
 })

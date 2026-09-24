@@ -3,7 +3,7 @@ import { spawn, exec, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
-import { BaseEngine } from '../base-engine'
+import { BaseEngine, type ListDatabasesOptions } from '../base-engine'
 import { postgresqlBinaryManager } from './binary-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
@@ -1239,7 +1239,10 @@ export class PostgreSQLEngine extends BaseEngine {
   /**
    * List all user databases, excluding system databases (template0, template1, postgres).
    */
-  async listDatabases(container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    container: ContainerConfig,
+    options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     const { port } = container
     const psqlPath = await this.getPsqlPath()
 
@@ -1265,6 +1268,7 @@ export class PostgreSQLEngine extends BaseEngine {
     return new Promise((resolve, reject) => {
       const proc = spawn(psqlPath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        signal: options?.signal,
       })
 
       let stdout = ''

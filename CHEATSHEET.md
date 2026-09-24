@@ -40,6 +40,7 @@ spindb start mydb --bind 0.0.0.0        # Listen on all interfaces, not just loc
 spindb start mydb --auth                # Enable auth: MongoDB --auth, FerretDB SCRAM (persisted)
 spindb start mydb --no-auth             # Disable auth: restore default no-auth mode (persisted)
 spindb start mydb --memory-budget-mb 256  # Run lean within a 256MB budget (0 clears it, persisted)
+spindb start mydb --no-recreate-database  # Leave a dropped primary database missing (default recreates it)
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
@@ -50,6 +51,33 @@ spindb ports mydb                       # Show ports for one container
 spindb ports --running                  # Only running containers
 spindb ports --json                     # JSON output
 ```
+
+### A dropped primary database is reported, not hidden
+
+`spindb start` makes sure the container's primary database exists. On
+PostgreSQL, MySQL, MariaDB, CockroachDB, and ClickHouse (where a database is
+listed even when empty) it first checks whether the database is there, so a
+primary dropped inside the server (`DROP DATABASE appdb`) no longer comes back
+silently. By default start still recreates it, empty, and prints a warning;
+`--no-recreate-database` leaves it missing and start still succeeds. `--json`
+reports what happened:
+
+```json
+{ "success": true, "name": "mydb", "primaryDatabase": { "name": "appdb", "state": "recreated" } }
+```
+
+| `state` | Meaning |
+|---|---|
+| `present` | Listed before start touched it (an empty database counts) |
+| `created` | First start of a container made with `create --no-start`; it never existed |
+| `recreated` | It was missing and start created it again, empty |
+| `missing` | It is missing and start left it (`--no-recreate-database`, or the create failed) |
+| `unknown` | The engine cannot tell (MongoDB, FerretDB, and every non-SQL engine), or the listing failed |
+
+`unknown` never means absent: those engines keep the old behavior exactly, and
+`--no-recreate-database` has no effect on them. On a durable engine whose
+listing failed, `--no-recreate-database` skips the create rather than risk
+recreating a dropped database.
 
 ### Version selection (`--db-version`)
 
@@ -222,6 +250,8 @@ spindb backup mydb --format sql         # Plain SQL backup
 spindb backup mydb --format custom      # PostgreSQL custom format
 spindb backup mydb -o ~/backups         # Custom output directory
 spindb backup mydb -d analytics         # Backup specific database
+                                        # A database the server proves absent fails fast with
+                                        # code "database_not_found" (see below)
 
 spindb backups                          # List backups in current directory
 spindb backups --all                    # Include ~/.spindb/backups
@@ -290,6 +320,24 @@ before, and it applies only to a dump taken from a connection string, never to
 `spindb backup` on a local container. A non-MariaDB source is never dumped with
 `mariadb-dump --compress`, because that combination can hang instead of
 reporting a connection error.
+
+On PostgreSQL, MySQL, MariaDB, CockroachDB, and ClickHouse, `spindb backup -d
+<name>` checks that the database exists before dumping. When the server's
+listing proves it absent, the backup exits non-zero instead of passing the dump
+tool's raw error through:
+
+```json
+{
+  "error": "Database \"appdb\" does not exist in container \"mydb\". Available databases: otherdb. Back up one of those with -d <name>. To refresh the tracked list, run: spindb databases refresh mydb",
+  "code": "database_not_found",
+  "database": "appdb",
+  "availableDatabases": ["otherdb"]
+}
+```
+
+`availableDatabases` excludes system databases. A listing that fails or cannot
+speak for the name (another engine, a system database) never blocks the
+backup: it proceeds exactly as before.
 
 If a `--from-url` restore is interrupted (Ctrl-C, or a `SIGTERM`/`SIGHUP` from
 whatever is supervising it), the partial dump it was writing to

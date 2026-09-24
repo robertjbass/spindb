@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { startWithRetry } from '../../core/start-with-retry'
-import { canCreateDatabase } from '../../core/database-capabilities'
+import { ensurePrimaryDatabase } from '../../core/primary-database'
 import { getEngine } from '../../engines'
 import { postgresqlEngine } from '../../engines/postgresql'
 import { getEngineDefaults } from '../../config/defaults'
@@ -41,6 +41,10 @@ export const startCommand = new Command('start')
     '--strict-port',
     'Fail if the configured port is in use instead of moving to a new port',
   )
+  .option(
+    '--no-recreate-database',
+    'Leave a missing primary database missing instead of recreating it empty (engines that can detect it; reported as primaryDatabase.state)',
+  )
   .action(
     async (
       name: string | undefined,
@@ -51,6 +55,7 @@ export const startCommand = new Command('start')
         auth?: boolean
         memoryBudgetMb?: string
         strictPort?: boolean
+        recreateDatabase?: boolean
       },
     ) => {
       try {
@@ -150,6 +155,10 @@ export const startCommand = new Command('start')
             config.version = fullVersion
           }
         }
+
+        // A container created with --no-start has never run, so its primary
+        // database has never existed and the first start creates it
+        const firstStart = config.status === 'created'
 
         const running = await processManager.isRunning(containerName, {
           engine: engineName,
@@ -319,27 +328,39 @@ export const startCommand = new Command('start')
         // redis, valkey, questdb, tigerbeetle, duckdb): the instance/file IS the
         // database, so createDatabase throws UnsupportedOperationError and
         // surfaces a spurious "Failed to create database" on every start/wake.
-        const defaultDb = engineDefaults.superuser
-        if (
-          canCreateDatabase(config.engine) &&
-          config.database &&
-          config.database !== defaultDb
-        ) {
-          const dbSpinner = options.json
-            ? null
-            : createSpinner(`Ensuring database "${config.database}" exists...`)
-          dbSpinner?.start()
-          try {
-            await engine.createDatabase(config, config.database)
-            dbSpinner?.succeed(`Database "${config.database}" ready`)
-          } catch (error) {
-            const msg = (error as Error).message ?? ''
-            if (/already exists/i.test(msg)) {
-              dbSpinner?.succeed(`Database "${config.database}" ready`)
-            } else {
-              dbSpinner?.fail(`Failed to create database "${config.database}"`)
-              logDebug(`createDatabase error: ${msg}`)
-            }
+        // Engines that can detect a missing database probe first, so a primary
+        // dropped inside the server is reported instead of silently recreated.
+        const dbSpinner = options.json
+          ? null
+          : createSpinner(`Ensuring database "${config.database}" exists...`)
+        const { primaryDatabase, ensure } = await ensurePrimaryDatabase({
+          engine,
+          config,
+          superuser: engineDefaults.superuser,
+          recreate: options.recreateDatabase !== false,
+          firstStart,
+          onEnsureStart: () => dbSpinner?.start(),
+        })
+        if (ensure.kind === 'ready') {
+          dbSpinner?.succeed(`Database "${config.database}" ready`)
+        } else if (ensure.kind === 'failed') {
+          dbSpinner?.fail(`Failed to create database "${config.database}"`)
+          logDebug(`createDatabase error: ${ensure.message}`)
+        }
+
+        if (!options.json) {
+          if (primaryDatabase.state === 'recreated') {
+            console.log(
+              uiWarning(
+                `Database "${primaryDatabase.name}" was missing on the server and has been recreated empty. Its previous data is not in it; restore from a backup if you need it.`,
+              ),
+            )
+          } else if (primaryDatabase.state === 'missing') {
+            console.log(
+              uiWarning(
+                `Database "${primaryDatabase.name}" does not exist on the server. Recreate it with: spindb databases create ${containerName} ${primaryDatabase.name}`,
+              ),
+            )
           }
         }
 
@@ -367,6 +388,7 @@ export const startCommand = new Command('start')
               port: result.finalPort,
               connectionString,
               portChanged: result.retriesUsed > 0,
+              primaryDatabase,
               ...metadata,
             }),
           )

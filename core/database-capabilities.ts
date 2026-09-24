@@ -4,10 +4,82 @@ type DatabaseCapabilities = {
   supportsCreate: boolean
   supportsDrop: boolean
   supportsRename: 'native' | 'backup-restore' | false
+  // A database exists on the server even when it holds no data, so an
+  // authoritative listing that omits it proves it is gone. False where a
+  // database only appears once it has data (MongoDB, FerretDB) or where the
+  // listing is not a server catalog.
+  durableDatabaseExistence: boolean
   unsupportedReason?: string
 }
 
+type DatabaseLifecycleCapabilities = Omit<
+  DatabaseCapabilities,
+  'durableDatabaseExistence'
+>
+
 function getDatabaseCapabilities(engine: Engine): DatabaseCapabilities {
+  return {
+    ...getDatabaseLifecycleCapabilities(engine),
+    durableDatabaseExistence: hasDurableDatabaseExistence(engine),
+  }
+}
+
+function hasDurableDatabaseExistence(engine: Engine): boolean {
+  switch (engine) {
+    case Engine.PostgreSQL:
+    case Engine.MySQL:
+    case Engine.MariaDB:
+    case Engine.CockroachDB:
+    case Engine.ClickHouse:
+      return true
+
+    case Engine.MongoDB:
+    case Engine.FerretDB:
+    case Engine.Meilisearch:
+    case Engine.SurrealDB:
+    case Engine.TypeDB:
+    case Engine.InfluxDB:
+    case Engine.CouchDB:
+    case Engine.Qdrant:
+    case Engine.Weaviate:
+    case Engine.SQLite:
+    case Engine.DuckDB:
+    case Engine.Redis:
+    case Engine.Valkey:
+    case Engine.QuestDB:
+    case Engine.TigerBeetle:
+    case Engine.LibSQL:
+      return false
+
+    default:
+      assertExhaustive(engine, `Unknown engine: ${engine}`)
+  }
+}
+
+/**
+ * System databases that an engine's listDatabases() filters out. A name in
+ * this list is never returned by a listing, so its absence proves nothing.
+ * Keep in sync with the exclusions inside each engine's listDatabases().
+ */
+function getListingHiddenDatabases(engine: Engine): readonly string[] {
+  switch (engine) {
+    case Engine.PostgreSQL:
+      return ['template0', 'template1', 'postgres']
+    case Engine.MySQL:
+    case Engine.MariaDB:
+      return ['information_schema', 'mysql', 'performance_schema', 'sys']
+    case Engine.CockroachDB:
+      return ['defaultdb', 'postgres', 'system']
+    case Engine.ClickHouse:
+      return ['system', 'information_schema', 'INFORMATION_SCHEMA']
+    default:
+      return []
+  }
+}
+
+function getDatabaseLifecycleCapabilities(
+  engine: Engine,
+): DatabaseLifecycleCapabilities {
   switch (engine) {
     // Full support — create, rename (native), drop
     case Engine.PostgreSQL:
@@ -120,6 +192,10 @@ function canDropDatabase(engine: Engine): boolean {
   return getDatabaseCapabilities(engine).supportsDrop
 }
 
+function canDetectMissingDatabase(engine: Engine): boolean {
+  return getDatabaseCapabilities(engine).durableDatabaseExistence
+}
+
 function getUnsupportedCreateMessage(engine: Engine): string {
   const caps = getDatabaseCapabilities(engine)
   if (caps.supportsCreate) return ''
@@ -201,6 +277,8 @@ export {
   canCreateDatabase,
   canRenameDatabase,
   canDropDatabase,
+  canDetectMissingDatabase,
+  getListingHiddenDatabases,
   getUnsupportedCreateMessage,
   getUnsupportedRenameMessage,
   getUnsupportedDropMessage,

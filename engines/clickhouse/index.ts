@@ -2,7 +2,7 @@ import { spawn, type SpawnOptions } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, readFile, unlink, chmod } from 'fs/promises'
 import { join } from 'path'
-import { BaseEngine } from '../base-engine'
+import { BaseEngine, type ListDatabasesOptions } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService } from '../../core/platform-service'
@@ -1407,7 +1407,10 @@ export class ClickHouseEngine extends BaseEngine {
   /**
    * List all user databases, excluding system databases (system, information_schema, INFORMATION_SCHEMA).
    */
-  async listDatabases(container: ContainerConfig): Promise<string[]> {
+  async listDatabases(
+    container: ContainerConfig,
+    options?: ListDatabasesOptions,
+  ): Promise<string[]> {
     const { port, version } = container
     const clickhouse = await this.getClickHouseClientPath(version)
 
@@ -1426,6 +1429,7 @@ export class ClickHouseEngine extends BaseEngine {
 
       const proc = spawn(clickhouse, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
+        signal: options?.signal,
       })
 
       let stdout = ''
