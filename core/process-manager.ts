@@ -1,7 +1,7 @@
 import { exec, spawn, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync } from 'fs'
-import { readFile, rm } from 'fs/promises'
+import { open, readFile, rm, stat } from 'fs/promises'
 import { paths } from '../config/paths'
 import { logDebug } from './error-handler'
 import {
@@ -12,6 +12,85 @@ import {
 import type { ProcessResult, StatusResult } from '../types'
 
 const execAsync = promisify(exec)
+
+const LOG_TAIL_BYTES = 64 * 1024
+
+/**
+ * Pull the most recent FATAL or PANIC entry (plus its DETAIL/HINT/CONTEXT
+ * continuation lines) out of a chunk of PostgreSQL server log text.
+ */
+export function extractPostgresFatal(logText: string): string | null {
+  const lines = logText.split(/\r?\n/)
+  let start = -1
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/\b(FATAL|PANIC):/.test(lines[i])) {
+      start = i
+      break
+    }
+  }
+  if (start === -1) return null
+  const entry = [lines[start].trim()]
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/\b(DETAIL|HINT|CONTEXT):/.test(lines[i])) {
+      entry.push(lines[i].trim())
+    } else {
+      break
+    }
+  }
+  return entry.join('\n')
+}
+
+/** Current size of a log file, or 0 if it cannot be read. Never throws. */
+export async function getLogFileSize(logFile: string): Promise<number> {
+  try {
+    return (await stat(logFile)).size
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Best-effort: read the log written since `fromOffset` (bounded to the last
+ * LOG_TAIL_BYTES) and return the latest FATAL/PANIC entry. Falls back to the
+ * whole bounded tail if nothing new was written. Never throws.
+ */
+export async function readPostgresStartFailure(
+  logFile: string,
+  fromOffset = 0,
+): Promise<string | null> {
+  try {
+    const { size } = await stat(logFile)
+    const readTail = async (from: number): Promise<string> => {
+      const begin = Math.max(from, size - LOG_TAIL_BYTES, 0)
+      const length = size - begin
+      if (length <= 0) return ''
+      const handle = await open(logFile, 'r')
+      try {
+        const buffer = Buffer.alloc(length)
+        await handle.read(buffer, 0, length, begin)
+        return buffer.toString('utf8')
+      } finally {
+        await handle.close()
+      }
+    }
+    const offset = fromOffset <= size ? fromOffset : 0
+    const fresh = extractPostgresFatal(await readTail(offset))
+    if (fresh || offset === 0) return fresh
+    return extractPostgresFatal(await readTail(0))
+  } catch {
+    return null
+  }
+}
+
+async function withPostgresLogReason(
+  message: string,
+  logFile: string | undefined,
+  fromOffset: number,
+): Promise<string> {
+  if (!logFile) return message
+  const fatal = await readPostgresStartFailure(logFile, fromOffset)
+  return fatal ? `${message.trimEnd()}\nPostgreSQL log: ${fatal}` : message
+}
 
 export type InitdbOptions = {
   superuser?: string
@@ -139,6 +218,7 @@ export class ProcessManager {
   ): Promise<ProcessResult> {
     const { port, logFile, bindAddress } = options
     const logDest = logFile || platformService.getNullDevice()
+    const logOffset = logFile ? await getLogFileSize(logFile) : 0
 
     if (isWindows()) {
       // On Windows, start without -w (wait) flag and poll for readiness
@@ -164,7 +244,11 @@ export class ProcessManager {
           if (error) {
             reject(
               new Error(
-                `pg_ctl start failed with code ${error.code}: ${stderr || stdout || error.message}`,
+                await withPostgresLogReason(
+                  `pg_ctl start failed with code ${error.code}: ${stderr || stdout || error.message}`,
+                  logFile,
+                  logOffset,
+                ),
               ),
             )
             return
@@ -183,11 +267,11 @@ export class ProcessManager {
                 logDebug('pg_ctl start completed (Windows)', { attempts })
                 resolve({ stdout, stderr })
               } else if (attempts >= maxAttempts) {
-                reject(
-                  new Error(
-                    `PostgreSQL failed to start within ${maxAttempts} seconds`,
-                  ),
-                )
+                void withPostgresLogReason(
+                  `PostgreSQL failed to start within ${maxAttempts} seconds`,
+                  logFile,
+                  logOffset,
+                ).then((message) => reject(new Error(message)))
               } else {
                 setTimeout(checkReady, pollInterval)
               }
@@ -241,14 +325,18 @@ export class ProcessManager {
         stderr += data.toString()
       })
 
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         logDebug('pg_ctl start completed', { code, stdout, stderr })
         if (code === 0) {
           resolve({ stdout, stderr })
         } else {
           reject(
             new Error(
-              `pg_ctl start failed with code ${code}: ${stderr || stdout}`,
+              await withPostgresLogReason(
+                `pg_ctl start failed with code ${code}: ${stderr || stdout}`,
+                logFile,
+                logOffset,
+              ),
             ),
           )
         }
