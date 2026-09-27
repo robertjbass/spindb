@@ -5,6 +5,16 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.1] - 2026-09-27
+
+### Fixed
+
+- **A failed PostgreSQL start now says why.** When `pg_ctl start` failed, the error carried only pg_ctl's own stderr (`pg_ctl: could not start server` / `Examine the log output.`), while the actual reason sat in the server log passed via `-l`, so callers such as Layerbase Cloud could only show a generic failure. Start now records the log size before spawning, and on failure reads the log written since then (bounded to the last 64KB) and appends the most recent `FATAL:` or `PANIC:` entry plus its `DETAIL:` / `HINT:` / `CONTEXT:` lines, for example `pg_ctl start failed with code 1: pg_ctl: could not start server\nExamine the log output.\nPostgreSQL log: FATAL:  could not access file "auto_explain,pg_stat_statements": No such file or directory`. If this attempt wrote no FATAL line it falls back to the last one in the tail. Applies to the Unix path and both Windows failure paths (pg_ctl error and the readiness timeout). The log read is best-effort and never throws; with no log file or no FATAL line the message is unchanged.
+
+### Testing
+
+- `tests/unit/postgres-start-log.test.ts` covers FATAL/PANIC extraction with continuation lines, the offset (stale entries ignored), the fallback, the bounded tail, a missing log file, and a fake `pg_ctl` end to end.
+
 ## [0.71.0] - 2026-09-23
 
 ### Added
