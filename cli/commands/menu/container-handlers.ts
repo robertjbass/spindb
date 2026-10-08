@@ -26,6 +26,7 @@ import { portManager } from '../../../core/port-manager'
 import { processManager } from '../../../core/process-manager'
 import { getEngine } from '../../../engines'
 import { BaseEngine } from '../../../engines/base-engine'
+import { ensureStartBinaries } from '../../../core/start-binaries'
 import { sqliteRegistry } from '../../../engines/sqlite/registry'
 import { duckdbRegistry } from '../../../engines/duckdb/registry'
 import { defaults } from '../../../config/defaults'
@@ -81,6 +82,7 @@ import {
   UnsupportedOperationError,
   isValidUsername,
   logDebug,
+  describeThrown,
 } from '../../../core/error-handler'
 import { handleRunSql, handleViewLogs } from './sql-handlers'
 import {
@@ -1972,6 +1974,47 @@ async function handleStartContainer(
   }
 
   const engine = getEngine(config.engine)
+
+  // Same pre-start binary check as `spindb start`: offer to download the
+  // pinned version instead of letting engine.start() fail on a missing binary.
+  const downloadSpinner = createSpinner(
+    `Downloading ${engine.displayName} ${config.version}...`,
+  )
+  try {
+    const binaries = await ensureStartBinaries({
+      engine,
+      engineName: config.engine,
+      version: config.version,
+      confirm: (message) => promptConfirm(message, true),
+      onDownloadStart: () => downloadSpinner.start(),
+      onProgress: ({ stage, message }) => {
+        downloadSpinner.text =
+          stage === 'cached'
+            ? `${engine.displayName} ${config.version} ready`
+            : message
+      },
+    })
+    if (binaries.kind === 'declined') {
+      console.log()
+      console.log(
+        uiInfo(`Run "${binaries.manualCommand}" to download manually.`),
+      )
+      return 'back'
+    }
+    if (binaries.kind === 'downloaded') {
+      downloadSpinner.succeed(
+        `${engine.displayName} ${config.version} downloaded`,
+      )
+    }
+  } catch (error) {
+    if (error instanceof EscapeError) throw error
+    downloadSpinner.fail(
+      `Failed to download ${engine.displayName} ${config.version}`,
+    )
+    console.log()
+    console.log(uiError(describeThrown(error).message))
+    return 'back'
+  }
 
   const spinner = createSpinner(`Starting ${containerName}...`)
   spinner.start()

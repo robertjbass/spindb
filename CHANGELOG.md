@@ -5,6 +5,17 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.2] - 2026-10-08
+
+### Fixed
+
+- **`spindb start` offers to download missing binaries for every engine, not only PostgreSQL.** A container pinned to a version whose binaries are not on disk (a MariaDB container pinned to 10.11.16 with only 10.11.15 installed, a restored container whose `~/.spindb/bin` was never repopulated) used to die inside `engine.start()` with `<Engine> server binary not found`, while PostgreSQL alone got a download offer in `cli/commands/start.ts`. That PostgreSQL-only block is replaced by one check for all server engines (`core/start-binaries.ts`, `ensureStartBinaries`), run before `engine.start()` by both `spindb start` and the interactive menu's Start action. On a TTY it asks `<Engine> <version> is not installed. Download now?` (default yes); on no it prints `spindb engines download <engine> <version>` and exits without starting. With `--json`, `--force`, or stdin that is not a TTY (Layerbase Desktop, the layerbase TUI, Docker entrypoints) it downloads without a prompt instead of throwing `Cannot prompt in non-interactive mode`. The download is always the EXACT pinned version: 10.11.15 is never substituted for 10.11.16. A failed download reports `<Engine> <version> not available: <reason>` plus the manual command, the same wording `spindb create` uses, so callers that parse one parse both. File-based engines (SQLite, DuckDB) are untouched, and the throw inside `engine.start()` remains as a backstop.
+- **`BaseEngine.hasStartableBinaries(version)`** is the hook the check asks. Its default is the exact-version `isBinaryInstalled()`. PostgreSQL overrides it with its existing same-major `hasCompatibleBinaries()` because its `start()` self-heals onto same-major binaries and repins the container, so PostgreSQL's start behavior is unchanged for Layerbase Cloud's shared binary store.
+
+### Testing
+
+- `tests/unit/start-binaries.test.ts` covers the skip rules (file-based engines, `unknown`/missing version), installed vs missing, exact-version check and download, prompt wording and the declined path, non-interactive download, the failure message shape, a throwing check falling back to `engine.start()`, and the default hook vs the PostgreSQL override.
+
 ## [0.71.1] - 2026-09-27
 
 ### Fixed
