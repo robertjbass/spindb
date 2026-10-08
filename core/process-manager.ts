@@ -471,18 +471,28 @@ export class ProcessManager {
 
   async getPid(
     containerName: string,
-    options: { engine: string },
+    options: { engine: string; strict?: boolean },
   ): Promise<number | null> {
     const { engine } = options
     const pidFile = paths.getContainerPidPath(containerName, { engine })
-    if (!existsSync(pidFile)) {
+    if (!options.strict && !existsSync(pidFile)) {
       return null
     }
 
     try {
       const content = await readFile(pidFile, 'utf8')
-      return parseInt(content.split('\n')[0], 10)
+      const pid = Number(content.split('\n')[0].trim())
+      if (options.strict && (!Number.isSafeInteger(pid) || pid <= 0)) {
+        throw new Error(`Invalid server PID for "${containerName}"`)
+      }
+      return options.strict ? pid : parseInt(content.split('\n')[0], 10)
     } catch (error) {
+      if (
+        options.strict &&
+        (error as NodeJS.ErrnoException).code !== 'ENOENT'
+      ) {
+        throw error
+      }
       logDebug('Failed to read PID file', {
         pidFile,
         error: error instanceof Error ? error.message : String(error),

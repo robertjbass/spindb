@@ -131,6 +131,19 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function processHasExited(pid: number): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    throw new Error('The server process could not be identified')
+  }
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true
+    throw error
+  }
+}
+
 export type CreateBranchResult = {
   config: ContainerConfig
   /** 'reflink' when the branch was an instant copy-on-write clone, 'copy' for a full byte copy. */
@@ -261,7 +274,7 @@ class BranchManager {
     // state is consistent before we clone it.
     const sourceWasRunning = await processManager.isRunning(source, { engine })
     if (sourceWasRunning) {
-      await this.stopServer(sourceConfig)
+      await this.stopServerForCopy(sourceConfig)
     }
 
     let result: { config: ContainerConfig; method: CopyMethod }
@@ -723,13 +736,21 @@ class BranchManager {
 
     const branchWasRunning = await processManager.isRunning(name, { engine })
     if (branchWasRunning) {
-      await this.stopServer(branchConfig)
+      await this.stopServerForCopy(branchConfig)
     }
     const parentWasRunning = await processManager.isRunning(parentName, {
       engine,
     })
     if (parentWasRunning) {
-      await this.stopServer(parentConfig)
+      try {
+        await this.stopServerForCopy(parentConfig)
+      } catch (error: unknown) {
+        // The existing branch has not been copied or removed yet.
+        if (branchWasRunning) {
+          await this.restartStoppedSource(branchConfig)
+        }
+        throw error
+      }
     }
 
     const preservedPort = branchConfig.port
@@ -908,6 +929,59 @@ class BranchManager {
   }
 
   // ---- server lifecycle helpers ----
+
+  private async restartStoppedSource(config: ContainerConfig): Promise<void> {
+    // Recovery must preserve the published port rather than selecting another.
+    await getEngine(config.engine).start(config)
+    await containerManager.updateConfig(config.name, { status: 'running' })
+  }
+
+  private async stopServerForCopy(config: ContainerConfig): Promise<void> {
+    const pid = await processManager.getPid(config.name, {
+      engine: config.engine,
+      strict: true,
+    })
+    try {
+      await this.stopServer(config)
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error)
+      try {
+        if (!pid || !Number.isSafeInteger(pid) || pid <= 0) {
+          throw new Error('The original server process could not be identified')
+        }
+        // A pg_ctl timeout does not cancel shutdown. Allow a late exit, but
+        // never start over a process that is still shutting down.
+        const deadline = Date.now() + 5_000
+        while (!processHasExited(pid)) {
+          if (Date.now() >= deadline) {
+            throw new Error('The original server process has not exited')
+          }
+          await delay(100)
+        }
+        const currentPid = await processManager.getPid(config.name, {
+          engine: config.engine,
+          strict: true,
+        })
+        if (currentPid && !processHasExited(currentPid)) {
+          throw new Error('A server process is still present')
+        }
+        await this.restartStoppedSource(config)
+      } catch (recoveryError: unknown) {
+        const recoveryDetail =
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : String(recoveryError)
+        throw new Error(
+          `Could not stop "${config.name}" for a consistent copy: ${detail}. Source recovery requires attention: ${recoveryDetail}. No copy was attempted. Check the source status and logs before retrying.`,
+          { cause: error },
+        )
+      }
+      throw new Error(
+        `Could not stop "${config.name}" for a consistent copy: ${detail}. The source has been restarted on its original port; no copy was attempted.`,
+        { cause: error },
+      )
+    }
+  }
 
   private async stopServer(config: ContainerConfig): Promise<void> {
     const engine = getEngine(config.engine)

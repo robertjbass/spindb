@@ -5,6 +5,12 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Branch creation and reset now report source-recovery failures explicitly after a stop error. If the original server exits within a bounded recovery window, it is restarted on its existing port and the copy still fails. A live process, replacement process, invalid PID or unreadable PID file prevents automatic restart. Reset also restores an untouched branch when stopping its parent fails. No force-stop escalation is performed.
+
 ## [0.71.1] - 2026-09-27
 
 ### Fixed
