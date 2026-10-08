@@ -19,11 +19,7 @@ import { dirname, join, relative, isAbsolute, sep } from 'node:path'
 import { paths } from '../../config/paths'
 import { defaults } from '../../config/defaults'
 import { getBundledBinaryPath } from '../../core/pg-binary-resolver'
-import {
-  loadCredentials,
-  listCredentials,
-  saveCredentials,
-} from '../../core/credential-manager'
+import { loadCredentials, listCredentials } from '../../core/credential-manager'
 import {
   registerTempDump,
   trackDumpProcess,
@@ -174,15 +170,34 @@ export async function retargetPostgresBranchCredentials(
     try {
       connection = new URL(credential.connectionString)
     } catch {
-      throw new Error('Cannot rewrite an invalid branch credential URL')
+      // Cloud stores a host:port placeholder alongside the full credential fields.
+      if (
+        !/^(127\.0\.0\.1|localhost):[0-9]+$/.test(credential.connectionString)
+      ) {
+        throw new Error('Cannot rewrite an invalid branch credential URL')
+      }
+      connection = new URL('postgresql://127.0.0.1')
+      connection.username = credential.username
+      connection.password = credential.password
+      connection.pathname = `/${credential.database || container.database}`
     }
     connection.hostname = '127.0.0.1'
     connection.port = String(container.port)
-    await saveCredentials(container.name, Engine.PostgreSQL, {
-      ...credential,
-      connectionString: connection.toString(),
-      container: container.name,
-    })
+    const credentialPath = join(
+      paths.getContainerPath(container.name, { engine: Engine.PostgreSQL }),
+      'credentials',
+      `.env.${username}`,
+    )
+    // Preserve the storage alias: Cloud's .env.spindb can contain another DB_USER.
+    const content = (await readFile(credentialPath, 'utf8'))
+      .split('\n')
+      .filter((line) => !/^\s*DB_(HOST|PORT|URL)\s*=/.test(line))
+      .join('\n')
+    await writeFile(
+      credentialPath,
+      `${content}\nDB_HOST=127.0.0.1\nDB_PORT=${container.port}\nDB_URL=${connection.toString()}\n`,
+      { mode: 0o600 },
+    )
   }
 }
 

@@ -132,6 +132,10 @@ test(
         join(sourcePath, 'credentials', '.env.postgres'),
         `DB_USER=postgres\nDB_PASSWORD=unused\nDB_URL=postgresql://postgres@127.0.0.1:${sourcePort}/postgres\n`,
       )
+      await writeFile(
+        join(sourcePath, 'credentials', '.env.spindb'),
+        `DB_USER=cloud_user\nDB_PASSWORD=test-secret\nDB_NAME=postgres\nDB_URL=127.0.0.1:${sourcePort}\n`,
+      )
       const branch = await branchManager.createBranch({
         source: 'source',
         name: 'child',
@@ -142,6 +146,18 @@ test(
         await readFile(join(childPath, 'credentials', '.env.postgres'), 'utf8'),
         new RegExp(`DB_PORT=${childPort}`),
       )
+      const cloudCredential = await readFile(
+        join(childPath, 'credentials', '.env.spindb'),
+        'utf8',
+      )
+      assert.match(cloudCredential, new RegExp(`DB_PORT=${childPort}`))
+      assert.match(
+        cloudCredential,
+        new RegExp(
+          `DB_URL=postgresql://cloud_user:test-secret@127\\.0\\.0\\.1:${childPort}/postgres`,
+        ),
+      )
+      assert.match(cloudCredential, /DB_USER=cloud_user/)
       assert.equal(branch.method, 'copy')
       assert.equal(branch.config.branchParent, 'source')
       assert.equal(
