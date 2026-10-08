@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Online reset finishes its replacement before stopping the existing child. The parent stays running; the previous child data is retained if starting the replacement fails.
 - Online copies use full backup space, reject external tablespaces/configuration and unsafe archive entries, and disable inherited replication subscriptions, archive commands, and preload background workers. Copied credentials target the child's port. A preflight requires room for three source copies plus 256 MiB; ordinary filesystem copies remain available for stopped sources.
 
+- Branch creation and reset now report source-recovery failures explicitly after a stop error. If the original server exits within a bounded recovery window, it is restarted on its existing port and the copy still fails. A live process, replacement process, invalid PID or unreadable PID file prevents automatic restart. Reset also restores an untouched branch when stopping its parent fails. No force-stop escalation is performed.
+
 ### Testing
 
 - Focused tests cover source continuity, independent writes, logical slot isolation, permission failure, external-path refusal, reset, and archive validation. A disposable PostgreSQL 18.6 reproduction also verifies online branching while a logical receiver withholds flush acknowledgement.
+
 
 ## [0.71.2] - 2026-10-08
 
