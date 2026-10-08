@@ -27,7 +27,10 @@ const basebackup = getBundledBinaryPath('pg_basebackup', '18')
 
 test(
   'online PostgreSQL branch preserves source availability and isolates its data',
-  { skip: !basebackup, timeout: 120_000 },
+  {
+    skip: !basebackup,
+    timeout: process.platform === 'win32' ? 240_000 : 120_000,
+  },
   async (context) => {
     const bin = dirname(basebackup!)
     const root = await mkdtemp(join(tmpdir(), 'pg-online-'))
@@ -74,7 +77,9 @@ test(
           '-c',
           query,
         ])
-      ).stdout.trim()
+      ).stdout
+        .replace(/\r\n/g, '\n')
+        .trim()
     try {
       await mkdir(sourcePath)
       await writeFile(
