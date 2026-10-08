@@ -508,6 +508,8 @@ export class ContainerManager {
     targetName: string
     /** 'cow' uses a copy-on-write reflink where the filesystem supports it; 'copy' is a full byte copy. */
     strategy: 'cow' | 'copy'
+    /** Use the engine's consistent online backup instead of a filesystem copy. */
+    online?: boolean
     /** Lineage to stamp on the new container (typically exactly one is set). */
     lineage: { clonedFrom?: string; branchParent?: string }
     /** Explicit port for the new container; when omitted, the next free port in the engine range is used. */
@@ -546,9 +548,16 @@ export class ContainerManager {
     // Copy the data directory, then write the new config. If anything fails —
     // the copy itself, reading the config back, or the engine fixup hook —
     // clean up the (possibly partial) target directory.
+    let ownsOnlineTarget = false
     try {
       let method: CopyMethod = 'copy'
-      if (strategy === 'cow') {
+      if (options.online) {
+        await mkdir(targetPath, { mode: 0o700 })
+        ownsOnlineTarget = true
+        await getEngine(engine).copyOnlineContainerData(sourceConfig, {
+          targetPath,
+        })
+      } else if (strategy === 'cow') {
         method = (await cloneDirectory(sourcePath, targetPath)).method
       } else {
         await cp(sourcePath, targetPath, { recursive: true })
@@ -608,9 +617,9 @@ export class ContainerManager {
       return { config, method }
     } catch (error) {
       // Clean up the copied directory on failure
-      await rm(targetPath, { recursive: true, force: true }).catch(() => {
-        // Ignore cleanup errors
-      })
+      if (!options.online || ownsOnlineTarget) {
+        await rm(targetPath, { recursive: true, force: true }).catch(() => {})
+      }
       throw error
     }
   }

@@ -7,10 +7,11 @@
  * reflink, ZFS — and a full copy elsewhere) that records its parent so branches
  * form a lineage tree.
  *
- * Live sources are handled with an auto stop -> snapshot -> restart cycle: a
+ * PostgreSQL sources use an online physical backup. Other live server sources
+ * use an auto stop -> snapshot -> restart cycle: a
  * running source is briefly stopped so its on-disk state is consistent, the
  * data dir is duplicated, and the source is restarted immediately to minimize
- * downtime. This works uniformly across all engines and all platforms.
+ * downtime. Online backup failures never fall back to stopping the source.
  *
  * The mechanical copy + config rewrite lives in
  * `containerManager.copyContainerData()` (shared with `clone()`); this module
@@ -270,10 +271,11 @@ class BranchManager {
     const { source, sourceConfig, name, start, port, gitBranch } = opts
     const { engine } = sourceConfig
 
-    // Auto stop -> snapshot -> restart: stop a running source so its on-disk
-    // state is consistent before we clone it.
+    // Use an engine-native online backup when available; otherwise stop first.
     const sourceWasRunning = await processManager.isRunning(source, { engine })
-    if (sourceWasRunning) {
+    const online = sourceWasRunning && getEngine(engine).supportsOnlineBranch
+    const sourceNeedsStop = sourceWasRunning && !online
+    if (sourceNeedsStop) {
       await this.stopServerForCopy(sourceConfig)
     }
 
@@ -283,12 +285,13 @@ class BranchManager {
         sourceName: source,
         targetName: name,
         strategy: 'cow',
+        online,
         lineage: { branchParent: source },
         port,
       })
     } catch (error) {
       // Bring the source back up before surfacing the failure.
-      if (sourceWasRunning) {
+      if (sourceNeedsStop) {
         await this.startServer(sourceConfig).catch((restartError) => {
           logDebug(
             `Failed to restart source "${source}" after failed branch: ${restartError}`,
@@ -300,7 +303,7 @@ class BranchManager {
 
     // Data is cloned — restart the source immediately to minimize its downtime.
     let warning: string | undefined
-    if (sourceWasRunning) {
+    if (sourceNeedsStop) {
       try {
         await this.startServer(sourceConfig)
       } catch (error) {
@@ -734,6 +737,13 @@ class BranchManager {
       return this.resetFileBasedBranch(branchConfig, parentConfig)
     }
 
+    if (
+      getEngine(engine).supportsOnlineBranch &&
+      (await processManager.isRunning(parentName, { engine }))
+    ) {
+      return this.resetFromOnlineParent(branchConfig, parentConfig)
+    }
+
     const branchWasRunning = await processManager.isRunning(name, { engine })
     if (branchWasRunning) {
       await this.stopServerForCopy(branchConfig)
@@ -813,6 +823,84 @@ class BranchManager {
       started,
       connectionString,
       warning,
+    }
+  }
+
+  private async resetFromOnlineParent(
+    branch: ContainerConfig,
+    parent: ContainerConfig,
+  ): Promise<CreateBranchResult> {
+    const { name, engine } = branch
+    const pendingName = `reset_${randomBytes(8).toString('hex')}`
+    const pendingPath = paths.getContainerPath(pendingName, { engine })
+    const branchPath = paths.getContainerPath(name, { engine })
+    const backupRoot = join(dirname(branchPath), '.reset-backups')
+    const previousPath = join(
+      backupRoot,
+      `${name}-${randomBytes(8).toString('hex')}`,
+    )
+    // Complete the replacement before touching the existing branch.
+    const result = await containerManager.copyContainerData({
+      sourceName: parent.name,
+      targetName: pendingName,
+      strategy: 'cow',
+      online: true,
+      lineage: { branchParent: parent.name },
+      port: branch.port,
+    })
+    const wasRunning = await processManager.isRunning(name, { engine })
+    let stopped = false
+    let movedPrevious = false
+    try {
+      result.config.name = name
+      result.config.gitBranch = branch.gitBranch
+      await containerManager.saveConfig(pendingName, { engine }, result.config)
+      await mkdir(backupRoot, { recursive: true })
+      if (wasRunning) {
+        await this.stopServerForCopy(branch)
+        stopped = true
+      }
+      await rename(branchPath, previousPath)
+      movedPrevious = true
+      await rename(pendingPath, branchPath)
+    } catch (error: unknown) {
+      if (movedPrevious) await rename(previousPath, branchPath)
+      await rm(pendingPath, { recursive: true, force: true })
+      if (stopped) {
+        try {
+          await this.startServer(branch)
+        } catch (restartError: unknown) {
+          throw new Error(
+            `Reset failed: ${String(error)}. Original branch data was preserved but restart failed: ${String(restartError)}`,
+          )
+        }
+      }
+      throw error
+    }
+    let started = false
+    let warning: string | undefined
+    if (wasRunning) {
+      try {
+        await this.startServer(result.config)
+        result.config.status = 'running'
+        started = true
+      } catch (error: unknown) {
+        warning = `Reset branch could not start: ${String(error)}. Previous branch data is preserved at ${previousPath}.`
+      }
+    }
+    if (!warning) {
+      try {
+        await rm(previousPath, { recursive: true, force: true })
+      } catch (error: unknown) {
+        warning = `Reset completed, but previous branch data remains at ${previousPath}: ${String(error)}`
+      }
+    }
+    return {
+      config: result.config,
+      method: result.method,
+      started,
+      warning,
+      connectionString: getEngine(engine).getConnectionString(result.config),
     }
   }
 

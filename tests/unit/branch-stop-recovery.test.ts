@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { branchManager } from '../../core/branch-manager'
 import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
-import { postgresqlEngine } from '../../engines/postgresql'
+import { redisEngine } from '../../engines/redis'
 import { Engine, type ContainerConfig } from '../../types'
 
 function setup(
@@ -20,8 +20,8 @@ function setup(
   const events: string[] = []
   const config: ContainerConfig = {
     name: 'source',
-    engine: Engine.PostgreSQL,
-    version: '18.6.0',
+    engine: Engine.Redis,
+    version: '7.2.5',
     port: 5454,
     database: 'diagnostic',
     created: '2026-10-08',
@@ -51,12 +51,12 @@ function setup(
     if (options.live || pid === 654321) return true
     throw Object.assign(new Error('exited'), { code: 'ESRCH' })
   })
-  mock.method(postgresqlEngine, 'stop', async (value: ContainerConfig) => {
+  mock.method(redisEngine, 'stop', async (value: ContainerConfig) => {
     events.push(options.reset ? `stop:${value.name}` : 'stop')
     if (!options.reset || value.name === 'source')
       throw new Error('stop timed out')
   })
-  mock.method(postgresqlEngine, 'start', async (value: ContainerConfig) => {
+  mock.method(redisEngine, 'start', async (value: ContainerConfig) => {
     events.push('start')
     assert.equal(value.port, 5454)
     if (options.restartFails) throw new Error('start failed')
