@@ -36,6 +36,11 @@ import {
 } from './drop-database-sql'
 import { createBackup } from './backup'
 import {
+  copyOnlinePostgresContainer,
+  refreshOnlineBranchPaths,
+  retargetPostgresBranchCredentials,
+} from './online-branch'
+import {
   validateDumpCompatibility,
   type DumpCompatibilityResult,
 } from './version-validator'
@@ -366,6 +371,19 @@ export class PostgreSQLEngine extends BaseEngine {
     return installed !== null
   }
 
+  supportsOnlineBranch = true
+
+  async prepareBranchedDataDir(container: ContainerConfig): Promise<void> {
+    await retargetPostgresBranchCredentials(container)
+  }
+
+  async copyOnlineContainerData(
+    source: ContainerConfig,
+    options: { targetPath: string },
+  ): Promise<void> {
+    await copyOnlinePostgresContainer(source, options)
+  }
+
   async initDataDir(
     containerName: string,
     version: string,
@@ -475,6 +493,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
+
+    await refreshOnlineBranchPaths(dataDir)
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
 

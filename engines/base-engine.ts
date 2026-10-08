@@ -371,6 +371,15 @@ export abstract class BaseEngine {
     // Default: no-op. Override in engines that support connection termination.
   }
 
+  supportsOnlineBranch = false
+
+  async copyOnlineContainerData(
+    _source: ContainerConfig,
+    _options: { targetPath: string },
+  ): Promise<void> {
+    throw new Error('This engine does not support online branching')
+  }
+
   /**
    * Fix up a freshly branched/cloned data directory before its first start.
    *

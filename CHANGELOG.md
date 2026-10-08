@@ -5,6 +5,18 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.3] - 2026-10-08
+
+### Fixed
+
+- Running PostgreSQL sources are branched with a native streamed-WAL backup instead of stop/copy/restart. This prevents a logical replication sender waiting for its final acknowledgement from taking the source offline during branch creation or reset. There is no fallback that stops the source after an online backup failure.
+- Online reset finishes its replacement before stopping the existing child. The parent stays running; the previous child data is retained if starting the replacement fails.
+- Online copies use full backup space, reject external tablespaces/configuration and unsafe archive entries, and disable inherited replication subscriptions, archive commands, and preload background workers. Copied credentials target the child's port. A preflight requires room for three source copies plus 256 MiB; ordinary filesystem copies remain available for stopped sources.
+
+### Testing
+
+- Focused tests cover source continuity, independent writes, logical slot isolation, permission failure, external-path refusal, reset, and archive validation. A disposable PostgreSQL 18.6 reproduction also verifies online branching while a logical receiver withholds flush acknowledgement.
+
 ## [0.71.2] - 2026-10-08
 
 ### Fixed
