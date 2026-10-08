@@ -5,7 +5,7 @@ import { processManager } from '../../core/process-manager'
 import { startWithRetry } from '../../core/start-with-retry'
 import { ensurePrimaryDatabase } from '../../core/primary-database'
 import { getEngine } from '../../engines'
-import { postgresqlEngine } from '../../engines/postgresql'
+import { ensureStartBinaries } from '../../core/start-binaries'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect, promptConfirm } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
@@ -229,62 +229,53 @@ export const startCommand = new Command('start')
         const engineDefaults = getEngineDefaults(engineName)
         const engine = getEngine(engineName)
 
-        // For PostgreSQL, check if compatible binaries are available
-        // Self-healing logic in engine.start() will handle version resolution
-        if (engineName === Engine.PostgreSQL) {
-          const hasCompatible = postgresqlEngine.hasCompatibleBinaries(
-            config.version,
-          )
-          if (!hasCompatible) {
-            const majorVersion = config.version.split('.')[0]
-
-            if (options.json || options.force) {
-              // Auto-download in JSON/force mode (no prompts)
-              await engine.ensureBinaries(majorVersion)
-            } else {
-              console.log(
-                uiWarning(
-                  `No PostgreSQL ${majorVersion}.x binaries found (required by "${containerName}")`,
-                ),
-              )
-              const confirmed = await promptConfirm(
-                `Download PostgreSQL ${majorVersion} now?`,
-                true,
-              )
-              if (!confirmed) {
-                console.log(
-                  chalk.gray(
-                    `  Run "spindb engines download postgresql ${majorVersion}" to download manually.`,
-                  ),
-                )
-                return
-              }
-
-              const downloadSpinner = createSpinner(
-                `Downloading PostgreSQL ${majorVersion}...`,
-              )
-              downloadSpinner.start()
-
-              try {
-                await engine.ensureBinaries(
-                  majorVersion,
-                  ({ stage, message }) => {
-                    if (stage === 'cached') {
-                      downloadSpinner.text = `PostgreSQL ${majorVersion} ready`
-                    } else {
-                      downloadSpinner.text = message
-                    }
-                  },
-                )
-                downloadSpinner.succeed(`PostgreSQL ${majorVersion} downloaded`)
-              } catch (downloadError) {
-                downloadSpinner.fail(
-                  `Failed to download PostgreSQL ${majorVersion} for "${containerName}"`,
-                )
-                throw downloadError
-              }
-            }
+        // Make sure the pinned binaries are on disk before engine.start().
+        // Same check for every server engine: the exact pinned version is
+        // downloaded when missing (a different patch is never substituted).
+        // Interactive (TTY, no --json/--force): ask first. Otherwise download
+        // without a prompt - a prompt on a closed stdin can only throw.
+        const interactive =
+          !options.json && !options.force && Boolean(process.stdin.isTTY)
+        const downloadSpinner = options.json
+          ? null
+          : createSpinner(
+              `${engine.displayName} ${config.version} is not installed, downloading...`,
+            )
+        try {
+          const binaries = await ensureStartBinaries({
+            engine,
+            engineName,
+            version: config.version,
+            confirm: interactive
+              ? (message) => promptConfirm(message, true)
+              : undefined,
+            onDownloadStart: () => downloadSpinner?.start(),
+            onProgress: ({ stage, message }) => {
+              if (!downloadSpinner) return
+              downloadSpinner.text =
+                stage === 'cached'
+                  ? `${engine.displayName} ${config.version} ready`
+                  : message
+            },
+          })
+          if (binaries.kind === 'declined') {
+            console.log(
+              chalk.gray(
+                `  Run "${binaries.manualCommand}" to download manually.`,
+              ),
+            )
+            return
           }
+          if (binaries.kind === 'downloaded') {
+            downloadSpinner?.succeed(
+              `${engine.displayName} ${config.version} downloaded`,
+            )
+          }
+        } catch (downloadError) {
+          downloadSpinner?.fail(
+            `Failed to download ${engine.displayName} ${config.version} for "${containerName}"`,
+          )
+          throw downloadError
         }
 
         const spinner = options.json

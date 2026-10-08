@@ -320,9 +320,20 @@ export class PostgreSQLEngine extends BaseEngine {
   }
 
   /**
+   * PostgreSQL is startable on any same-major binaries, not only the exact
+   * pinned patch: start() resolves through getBinaryPathWithFallback, which
+   * self-heals onto an installed same-major version and repins the container.
+   * Layerbase Cloud's shared binary store relies on that, so the pre-start
+   * check must not demand the exact patch here.
+   */
+  async hasStartableBinaries(version: string): Promise<boolean> {
+    return this.hasCompatibleBinaries(version)
+  }
+
+  /**
    * Check if any compatible binaries are installed for the given version.
    * Returns true if either the exact version OR any same-major-version binaries exist.
-   * This is used by the CLI to determine if it needs to prompt for download.
+   * Backs hasStartableBinaries(), which is what the CLI asks before start.
    */
   hasCompatibleBinaries(version: string): boolean {
     const fullVersion = this.resolveFullVersion(version)

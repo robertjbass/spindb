@@ -239,6 +239,20 @@ export abstract class BaseEngine {
   // Check if binaries are installed
   abstract isBinaryInstalled(version: string): Promise<boolean>
 
+  /**
+   * Whether start() can run this pinned version with the binaries on disk.
+   * `spindb start` and the interactive menu ask this before starting and
+   * offer to download the pinned version when it is false.
+   *
+   * Default: the exact pinned version is installed. A different patch is not
+   * startable: a container pinned to 10.11.16 is never started on 10.11.15.
+   * Override only when start() itself can run other binaries for that
+   * version (PostgreSQL self-heals onto same-major binaries).
+   */
+  async hasStartableBinaries(version: string): Promise<boolean> {
+    return this.isBinaryInstalled(version)
+  }
+
   // Ensure binaries are available, downloading if necessary
   abstract ensureBinaries(
     version: string,
