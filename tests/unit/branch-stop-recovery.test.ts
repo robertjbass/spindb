@@ -1,4 +1,4 @@
-import { test, mock, afterEach } from 'node:test'
+import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import { branchManager } from '../../core/branch-manager'
 import { containerManager } from '../../core/container-manager'
@@ -6,16 +6,17 @@ import { processManager } from '../../core/process-manager'
 import { postgresqlEngine } from '../../engines/postgresql'
 import { Engine, type ContainerConfig } from '../../types'
 
-afterEach(() => mock.restoreAll())
-
 function setup(
+  context: TestContext,
   options: {
     live?: boolean
     unknown?: boolean
     restartFails?: boolean
     replacement?: boolean
+    reset?: boolean
   } = {},
 ) {
+  const mock = context.mock
   const events: string[] = []
   const config: ContainerConfig = {
     name: 'source',
@@ -26,7 +27,11 @@ function setup(
     created: '2026-10-08',
     status: 'running',
   }
-  mock.method(containerManager, 'getConfig', async () => config)
+  mock.method(containerManager, 'getConfig', async (name: string) => ({
+    ...config,
+    name,
+    ...(options.reset && name === 'child' ? { branchParent: 'source' } : {}),
+  }))
   mock.method(containerManager, 'isValidName', () => true)
   mock.method(containerManager, 'exists', async () => false)
   mock.method(processManager, 'isRunning', async () => true)
@@ -46,9 +51,10 @@ function setup(
     if (options.live || pid === 654321) return true
     throw Object.assign(new Error('exited'), { code: 'ESRCH' })
   })
-  mock.method(postgresqlEngine, 'stop', async () => {
-    events.push('stop')
-    throw new Error('stop timed out')
+  mock.method(postgresqlEngine, 'stop', async (value: ContainerConfig) => {
+    events.push(options.reset ? `stop:${value.name}` : 'stop')
+    if (!options.reset || value.name === 'source')
+      throw new Error('stop timed out')
   })
   mock.method(postgresqlEngine, 'start', async (value: ContainerConfig) => {
     events.push('start')
@@ -71,8 +77,8 @@ for (const [name, options] of Object.entries({
   unknown: { unknown: true },
   replacement: { replacement: true },
 })) {
-  test(`does not restart or copy when source liveness is ${name}`, async () => {
-    const events = setup(options)
+  test(`does not restart or copy when source liveness is ${name}`, async (context) => {
+    const events = setup(context, options)
     await assert.rejects(
       branchManager.createBranch({ source: 'source', name: 'child' }),
       /Source recovery requires attention/,
@@ -81,8 +87,8 @@ for (const [name, options] of Object.entries({
   })
 }
 
-test('restarts an exited source on its original port, but still fails the branch', async () => {
-  const events = setup()
+test('restarts an exited source on its original port, but still fails the branch', async (context) => {
+  const events = setup(context)
   await assert.rejects(
     branchManager.createBranch({ source: 'source', name: 'child' }),
     /source has been restarted on its original port/,
@@ -90,8 +96,8 @@ test('restarts an exited source on its original port, but still fails the branch
   assert.deepEqual(events, ['stop', 'start', 'update'])
 })
 
-test('surfaces restart failure without attempting a copy', async () => {
-  const events = setup({ restartFails: true })
+test('surfaces restart failure without attempting a copy', async (context) => {
+  const events = setup(context, { restartFails: true })
   await assert.rejects(
     branchManager.createBranch({ source: 'source', name: 'child' }),
     /Source recovery requires attention: start failed/,
@@ -99,22 +105,8 @@ test('surfaces restart failure without attempting a copy', async () => {
   assert.deepEqual(events, ['stop', 'start'])
 })
 
-test('reset restores the untouched branch when the parent cannot stop', async () => {
-  const events = setup({ live: true })
-  mock.method(containerManager, 'getConfig', async (name: string) => ({
-    name,
-    engine: Engine.PostgreSQL,
-    version: '18.6.0',
-    port: 5454,
-    database: 'diagnostic',
-    created: '2026-10-08',
-    status: 'running',
-    ...(name === 'child' ? { branchParent: 'source' } : {}),
-  }))
-  mock.method(postgresqlEngine, 'stop', async (config: ContainerConfig) => {
-    events.push(`stop:${config.name}`)
-    if (config.name === 'source') throw new Error('stop timed out')
-  })
+test('reset restores the untouched branch when the parent cannot stop', async (context) => {
+  const events = setup(context, { live: true, reset: true })
   await assert.rejects(
     branchManager.resetBranch('child'),
     /Source recovery requires attention/,
