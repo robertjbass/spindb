@@ -36,6 +36,11 @@ import {
 } from './drop-database-sql'
 import { createBackup } from './backup'
 import {
+  copyOnlinePostgresContainer,
+  refreshOnlineBranchPaths,
+  retargetPostgresBranchCredentials,
+} from './online-branch'
+import {
   validateDumpCompatibility,
   type DumpCompatibilityResult,
 } from './version-validator'
@@ -320,9 +325,20 @@ export class PostgreSQLEngine extends BaseEngine {
   }
 
   /**
+   * PostgreSQL is startable on any same-major binaries, not only the exact
+   * pinned patch: start() resolves through getBinaryPathWithFallback, which
+   * self-heals onto an installed same-major version and repins the container.
+   * Layerbase Cloud's shared binary store relies on that, so the pre-start
+   * check must not demand the exact patch here.
+   */
+  async hasStartableBinaries(version: string): Promise<boolean> {
+    return this.hasCompatibleBinaries(version)
+  }
+
+  /**
    * Check if any compatible binaries are installed for the given version.
    * Returns true if either the exact version OR any same-major-version binaries exist.
-   * This is used by the CLI to determine if it needs to prompt for download.
+   * Backs hasStartableBinaries(), which is what the CLI asks before start.
    */
   hasCompatibleBinaries(version: string): boolean {
     const fullVersion = this.resolveFullVersion(version)
@@ -353,6 +369,19 @@ export class PostgreSQLEngine extends BaseEngine {
     )
 
     return installed !== null
+  }
+
+  supportsOnlineBranch = true
+
+  async prepareBranchedDataDir(container: ContainerConfig): Promise<void> {
+    await retargetPostgresBranchCredentials(container)
+  }
+
+  async copyOnlineContainerData(
+    source: ContainerConfig,
+    options: { targetPath: string },
+  ): Promise<void> {
+    await copyOnlinePostgresContainer(source, options)
   }
 
   async initDataDir(
@@ -464,6 +493,8 @@ export class PostgreSQLEngine extends BaseEngine {
     const pgCtlPath = join(binPath, 'bin', `pg_ctl${ext}`)
     const dataDir = paths.getContainerDataPath(name, { engine: this.name })
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
+
+    await refreshOnlineBranchPaths(dataDir)
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
 

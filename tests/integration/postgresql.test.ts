@@ -1806,3 +1806,5 @@ describe('PostgreSQL dropped primary database', () => {
     console.log('   ✓ start and backup report the dropped primary')
   })
 })
+
+import './postgresql-online-branch.test'

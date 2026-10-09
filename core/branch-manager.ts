@@ -7,10 +7,11 @@
  * reflink, ZFS — and a full copy elsewhere) that records its parent so branches
  * form a lineage tree.
  *
- * Live sources are handled with an auto stop -> snapshot -> restart cycle: a
+ * PostgreSQL sources use an online physical backup. Other live server sources
+ * use an auto stop -> snapshot -> restart cycle: a
  * running source is briefly stopped so its on-disk state is consistent, the
  * data dir is duplicated, and the source is restarted immediately to minimize
- * downtime. This works uniformly across all engines and all platforms.
+ * downtime. Online backup failures never fall back to stopping the source.
  *
  * The mechanical copy + config rewrite lives in
  * `containerManager.copyContainerData()` (shared with `clone()`); this module
@@ -129,6 +130,19 @@ const WAL_PAIR_ATTEMPTS = 3
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function processHasExited(pid: number): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    throw new Error('The server process could not be identified')
+  }
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true
+    throw error
+  }
 }
 
 export type CreateBranchResult = {
@@ -257,11 +271,12 @@ class BranchManager {
     const { source, sourceConfig, name, start, port, gitBranch } = opts
     const { engine } = sourceConfig
 
-    // Auto stop -> snapshot -> restart: stop a running source so its on-disk
-    // state is consistent before we clone it.
+    // Use an engine-native online backup when available; otherwise stop first.
     const sourceWasRunning = await processManager.isRunning(source, { engine })
-    if (sourceWasRunning) {
-      await this.stopServer(sourceConfig)
+    const online = sourceWasRunning && getEngine(engine).supportsOnlineBranch
+    const sourceNeedsStop = sourceWasRunning && !online
+    if (sourceNeedsStop) {
+      await this.stopServerForCopy(sourceConfig)
     }
 
     let result: { config: ContainerConfig; method: CopyMethod }
@@ -270,12 +285,13 @@ class BranchManager {
         sourceName: source,
         targetName: name,
         strategy: 'cow',
+        online,
         lineage: { branchParent: source },
         port,
       })
     } catch (error) {
       // Bring the source back up before surfacing the failure.
-      if (sourceWasRunning) {
+      if (sourceNeedsStop) {
         await this.startServer(sourceConfig).catch((restartError) => {
           logDebug(
             `Failed to restart source "${source}" after failed branch: ${restartError}`,
@@ -287,7 +303,7 @@ class BranchManager {
 
     // Data is cloned — restart the source immediately to minimize its downtime.
     let warning: string | undefined
-    if (sourceWasRunning) {
+    if (sourceNeedsStop) {
       try {
         await this.startServer(sourceConfig)
       } catch (error) {
@@ -721,15 +737,30 @@ class BranchManager {
       return this.resetFileBasedBranch(branchConfig, parentConfig)
     }
 
+    if (
+      getEngine(engine).supportsOnlineBranch &&
+      (await processManager.isRunning(parentName, { engine }))
+    ) {
+      return this.resetFromOnlineParent(branchConfig, parentConfig)
+    }
+
     const branchWasRunning = await processManager.isRunning(name, { engine })
     if (branchWasRunning) {
-      await this.stopServer(branchConfig)
+      await this.stopServerForCopy(branchConfig)
     }
     const parentWasRunning = await processManager.isRunning(parentName, {
       engine,
     })
     if (parentWasRunning) {
-      await this.stopServer(parentConfig)
+      try {
+        await this.stopServerForCopy(parentConfig)
+      } catch (error: unknown) {
+        // The existing branch has not been copied or removed yet.
+        if (branchWasRunning) {
+          await this.restartStoppedSource(branchConfig)
+        }
+        throw error
+      }
     }
 
     const preservedPort = branchConfig.port
@@ -792,6 +823,84 @@ class BranchManager {
       started,
       connectionString,
       warning,
+    }
+  }
+
+  private async resetFromOnlineParent(
+    branch: ContainerConfig,
+    parent: ContainerConfig,
+  ): Promise<CreateBranchResult> {
+    const { name, engine } = branch
+    const pendingName = `reset_${randomBytes(8).toString('hex')}`
+    const pendingPath = paths.getContainerPath(pendingName, { engine })
+    const branchPath = paths.getContainerPath(name, { engine })
+    const backupRoot = join(dirname(branchPath), '.reset-backups')
+    const previousPath = join(
+      backupRoot,
+      `${name}-${randomBytes(8).toString('hex')}`,
+    )
+    // Complete the replacement before touching the existing branch.
+    const result = await containerManager.copyContainerData({
+      sourceName: parent.name,
+      targetName: pendingName,
+      strategy: 'cow',
+      online: true,
+      lineage: { branchParent: parent.name },
+      port: branch.port,
+    })
+    const wasRunning = await processManager.isRunning(name, { engine })
+    let stopped = false
+    let movedPrevious = false
+    try {
+      result.config.name = name
+      result.config.gitBranch = branch.gitBranch
+      await containerManager.saveConfig(pendingName, { engine }, result.config)
+      await mkdir(backupRoot, { recursive: true })
+      if (wasRunning) {
+        await this.stopServerForCopy(branch)
+        stopped = true
+      }
+      await rename(branchPath, previousPath)
+      movedPrevious = true
+      await rename(pendingPath, branchPath)
+    } catch (error: unknown) {
+      if (movedPrevious) await rename(previousPath, branchPath)
+      await rm(pendingPath, { recursive: true, force: true })
+      if (stopped) {
+        try {
+          await this.startServer(branch)
+        } catch (restartError: unknown) {
+          throw new Error(
+            `Reset failed: ${String(error)}. Original branch data was preserved but restart failed: ${String(restartError)}`,
+          )
+        }
+      }
+      throw error
+    }
+    let started = false
+    let warning: string | undefined
+    if (wasRunning) {
+      try {
+        await this.startServer(result.config)
+        result.config.status = 'running'
+        started = true
+      } catch (error: unknown) {
+        warning = `Reset branch could not start: ${String(error)}. Previous branch data is preserved at ${previousPath}.`
+      }
+    }
+    if (!warning) {
+      try {
+        await rm(previousPath, { recursive: true, force: true })
+      } catch (error: unknown) {
+        warning = `Reset completed, but previous branch data remains at ${previousPath}: ${String(error)}`
+      }
+    }
+    return {
+      config: result.config,
+      method: result.method,
+      started,
+      warning,
+      connectionString: getEngine(engine).getConnectionString(result.config),
     }
   }
 
@@ -908,6 +1017,59 @@ class BranchManager {
   }
 
   // ---- server lifecycle helpers ----
+
+  private async restartStoppedSource(config: ContainerConfig): Promise<void> {
+    // Recovery must preserve the published port rather than selecting another.
+    await getEngine(config.engine).start(config)
+    await containerManager.updateConfig(config.name, { status: 'running' })
+  }
+
+  private async stopServerForCopy(config: ContainerConfig): Promise<void> {
+    const pid = await processManager.getPid(config.name, {
+      engine: config.engine,
+      strict: true,
+    })
+    try {
+      await this.stopServer(config)
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error)
+      try {
+        if (!pid || !Number.isSafeInteger(pid) || pid <= 0) {
+          throw new Error('The original server process could not be identified')
+        }
+        // A pg_ctl timeout does not cancel shutdown. Allow a late exit, but
+        // never start over a process that is still shutting down.
+        const deadline = Date.now() + 5_000
+        while (!processHasExited(pid)) {
+          if (Date.now() >= deadline) {
+            throw new Error('The original server process has not exited')
+          }
+          await delay(100)
+        }
+        const currentPid = await processManager.getPid(config.name, {
+          engine: config.engine,
+          strict: true,
+        })
+        if (currentPid && !processHasExited(currentPid)) {
+          throw new Error('A server process is still present')
+        }
+        await this.restartStoppedSource(config)
+      } catch (recoveryError: unknown) {
+        const recoveryDetail =
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : String(recoveryError)
+        throw new Error(
+          `Could not stop "${config.name}" for a consistent copy: ${detail}. Source recovery requires attention: ${recoveryDetail}. No copy was attempted. Check the source status and logs before retrying.`,
+          { cause: error },
+        )
+      }
+      throw new Error(
+        `Could not stop "${config.name}" for a consistent copy: ${detail}. The source has been restarted on its original port; no copy was attempted.`,
+        { cause: error },
+      )
+    }
+  }
 
   private async stopServer(config: ContainerConfig): Promise<void> {
     const engine = getEngine(config.engine)

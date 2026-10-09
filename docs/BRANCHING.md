@@ -6,7 +6,7 @@ SpinDB can **branch** a database the way [Neon](https://neon.tech) and Vercel do
 
 Neon makes branching instant by storing data in a custom copy-on-write (CoW) storage layer. We can't rebuild 21 storage engines, so SpinDB gets the same effect from a layer that sits **below** the database and is therefore engine-agnostic: the **filesystem**.
 
-A branch is a copy of the container's data directory created with a filesystem **reflink / clonefile** instead of a byte-for-byte copy. The branch shares disk blocks with its source until one side is written, so creating it is effectively instant and uses almost no extra space — until the branch and its source diverge.
+For stopped sources and engines using filesystem copies, a branch is a copy of the container's data directory created with a filesystem **reflink / clonefile** instead of a byte-for-byte copy. The branch shares disk blocks with its source until one side is written, so creating it is effectively instant and uses almost no extra space — until the branch and its source diverge.
 
 Where the filesystem can't do CoW, SpinDB transparently falls back to a full copy. The result is always correct; only the speed/space benefit depends on the filesystem:
 
@@ -18,9 +18,15 @@ Where the filesystem can't do CoW, SpinDB transparently falls back to a full cop
 
 `spindb branch … --json` reports `"method": "reflink"` (CoW) or `"method": "copy"` (full copy) so you always know which happened.
 
-## Live sources: auto stop → snapshot → restart
+## Live sources
 
-To take a consistent snapshot, a **running** source is briefly stopped, its data directory is cloned, and it is **restarted automatically** — minimizing downtime. This works uniformly across every engine and OS. File-based engines (SQLite/DuckDB) have no server, so there's no stop/restart.
+Running **PostgreSQL** sources use the bundled `pg_basebackup` with streamed WAL. The source stays online, including its replication connections. The result reports `method: "copy"`: it is a full physical backup, even on a reflink filesystem. Preflight requires free space for three copies of the source plus 256 MiB because temporary archives and the extracted cluster coexist. Backup failure never falls back to stopping the source.
+
+Online PostgreSQL branching requires local administrator access and self-contained data/configuration. External tablespaces, symlinks and configuration includes outside the data directory are refused. The child does not inherit replication slots; subscription workers, preload libraries and archive commands are disabled to prevent the fork from consuming or writing the parent's external resources. Applications that require preload extensions must configure those deliberately on the child. Saved credential URLs are updated to the child's port.
+
+Reset from a live PostgreSQL parent creates the replacement first, then stops and replaces only the existing child. A failed replacement start retains the previous child data and reports its location for recovery. Renames refresh the online child's data/authentication paths before startup.
+
+Other running server sources are briefly stopped, copied, and restarted. Stopped PostgreSQL sources retain the filesystem copy path. File-based engines (SQLite/DuckDB) have no server, so there is no stop/restart.
 
 File-based engines have a different consistency hazard instead: SQLite in WAL mode and DuckDB both keep committed-but-not-yet-checkpointed writes in a sibling file (`<db>-wal`, `<db>.wal`), so cloning the backing file alone can produce a branch that opens cleanly and is missing the parent's most recent data. When a source has a pending write-ahead log, SQLite is snapshotted through the online `.backup` API (which needs the sqlite3 binary: run `spindb engines download sqlite` if it is missing, since branching such a source fails rather than falling back to a lossy raw copy) and DuckDB is CHECKPOINTed before the clone. If DuckDB cannot be checkpointed because another process holds its exclusive lock, its WAL is copied alongside the database and the branch result carries a `warning`. On Windows that copy is not possible at all - an open DuckDB file is locked exclusively - so the branch fails with an actionable error naming the container instead of producing a partial one; close the connections (or CHECKPOINT from the session holding them) and branch again. A source with nothing outstanding still takes the instant reflink path.
 
@@ -34,7 +40,7 @@ Both fork a container, but they're different tools:
 ## Command reference
 
 ```bash
-# Create a branch (auto-starts it; auto stop/restart of a running source)
+# Create and start a branch (PostgreSQL sources remain online)
 spindb branch <source> [name]
 spindb branch myapp myapp-feature
 spindb branch myapp myapp-feature --no-start      # create but don't start
@@ -101,7 +107,7 @@ In `spindb` (interactive), a container's action menu includes **Branch container
 
 ## Cloud & desktop
 
-Branching lives entirely in SpinDB so every consumer gets it for free: **layerbase-desktop** calls `spindb branch` over IPC, and **layerbase-cloud** execs it inside the user's container. To deliver *instant* branching in the cloud, provision a copy-on-write filesystem (ZFS/Btrfs/XFS-reflink) for the data volumes — otherwise branches there are full copies.
+Branching lives entirely in SpinDB so every consumer gets it for free: **layerbase-desktop** calls `spindb branch` over IPC, and **layerbase-cloud** execs it inside the user's container. Running PostgreSQL sources use full online backups. For filesystem-copy paths, provision a copy-on-write filesystem (ZFS/Btrfs/XFS-reflink) for the data volumes — otherwise branches there are full copies.
 
 See **[BRANCHING-INTEGRATION.md](BRANCHING-INTEGRATION.md)** for the concrete desktop/cloud playbook — which commands to wrap, the `POST /branch` endpoint shape, port allocation, and the filesystem requirement.
 
