@@ -116,3 +116,40 @@ esac
     }
   },
 )
+
+test(
+  'a failing preload probe does not block start and leaves cron state untouched',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cron-probe-'))
+    try {
+      await mkdir(join(root, 'bin'), { recursive: true })
+      await writeFile(
+        join(root, 'bin/postgres'),
+        '#!/bin/sh\necho "probe failed" >&2\nexit 1\n',
+        { mode: 0o755 },
+      )
+      const markerPath = join(root, '.spindb-pg-cron.json')
+      const autoConfPath = join(root, 'postgresql.auto.conf')
+      const marker = JSON.stringify({ database: 'postgres' })
+      const autoConf = "shared_preload_libraries = 'pg_cron'\n"
+      await writeFile(markerPath, marker)
+      await writeFile(autoConfPath, autoConf)
+      const warnings: string[] = []
+      assert.equal(
+        await configurePostgresCron({
+          binPath: root,
+          dataDir: root,
+          database: 'postgres',
+          onWarning: (message) => warnings.push(message),
+        }),
+        false,
+      )
+      assert.equal(await readFile(markerPath, 'utf8'), marker)
+      assert.equal(await readFile(autoConfPath, 'utf8'), autoConf)
+      assert.deepEqual(warnings, [])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  },
+)

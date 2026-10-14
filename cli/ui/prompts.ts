@@ -24,6 +24,8 @@ import {
   getMajorVersionMarkers,
   resolveDefaultMajorVersion,
 } from './version-picker-defaults'
+import { filterVersionMapForPlatform } from '../../core/version-platforms'
+import { platformService } from '../../core/platform-service'
 import {
   BACKUP_FORMATS,
   supportsFormatChoice,
@@ -572,13 +574,23 @@ export async function promptVersion(
   let availableVersions: Record<string, string[]>
   let deprecatedVersions: Set<string> = new Set()
   let prereleaseVersions: Map<string, ReleaseType> = new Map()
+  let platformHiddenMajors: Set<string> = new Set()
   try {
     const [versions, deprecated, prereleases] = await Promise.all([
       engine.fetchAvailableVersions(),
       getDeprecatedVersions(engineName),
       getPrereleaseVersions(engineName),
     ])
-    availableVersions = versions
+    // Hide versions hostdb does not build for this platform (for example a
+    // Linux-only build revision on macOS): selecting one could only 404.
+    const { platform, arch } = platformService.getPlatformInfo()
+    const filtered = filterVersionMapForPlatform(
+      engine.name,
+      versions,
+      `${platform}-${arch}`,
+    )
+    availableVersions = filtered.versions
+    platformHiddenMajors = filtered.hiddenMajors
     deprecatedVersions = deprecated
     prereleaseVersions = prereleases
     spinner.stop()
@@ -611,7 +623,9 @@ export async function promptVersion(
       !majorVersions.includes(major) &&
       availableVersions[major].some((v) => prereleaseVersions.has(v)),
   )
-  const allMajors = [...majorVersions, ...prereleaseMajors]
+  const allMajors = [...majorVersions, ...prereleaseMajors].filter(
+    (major) => !platformHiddenMajors.has(major),
+  )
 
   // Labels are applied after the loop: the preselected entry depends on which
   // lines survive the deprecation filter, which is only known once it has run.
