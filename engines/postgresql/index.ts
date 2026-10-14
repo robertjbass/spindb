@@ -23,7 +23,11 @@ import {
   normalizeVersion,
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
-import { configurePostgresCron, persistPostgresSettings } from './cron-config'
+import {
+  configurePostgresCron,
+  persistPostgresSettings,
+  waitForCronPause,
+} from './cron-config'
 import {
   DROP_RETRY_DELAY_MS,
   buildDropDatabaseSql,
@@ -567,31 +571,21 @@ export class PostgreSQLEngine extends BaseEngine {
       Engine.PostgreSQL,
       getDefaultUsername(Engine.PostgreSQL),
     )
-    const result = await this.executeQuery(
-      container,
+    const query = (sql: string) =>
+      this.executeQuery(container, sql, {
+        ...credentials,
+        database: 'postgres',
+      })
+    const result = await query(
       "SELECT current_setting('cron.launch_active_jobs', true) AS enabled",
-      { ...credentials, database: 'postgres' },
     )
     if (result.rows[0]?.enabled !== 'on') return
-    // Stop active workers before restoring any definitions or dropping databases.
-    await this.stop(container)
-    try {
-      await persistPostgresSettings(
-        paths.getContainerDataPath(container.name, { engine: this.name }),
-        { 'cron.launch_active_jobs': 'off' },
-      )
-    } catch (error) {
-      try {
-        await this.start(container)
-      } catch (restartError) {
-        throw new AggregateError(
-          [error, restartError],
-          'Could not pause cron or restart PostgreSQL. Restore has not begun; inspect the server log before retrying.',
-        )
-      }
-      throw error
-    }
-    await this.start(container)
+    // cron.launch_active_jobs is a SIGHUP setting, so the pause is persisted
+    // and reloaded without a restart: --into-existing restores keep their live
+    // connections, including those to other databases on this server.
+    await query('ALTER SYSTEM SET cron.launch_active_jobs = off')
+    await query('SELECT pg_reload_conf()')
+    await waitForCronPause(query)
   }
 
   async restore(

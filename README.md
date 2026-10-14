@@ -113,8 +113,10 @@ in `postgresql.conf` instead. If an older artifact lacks pg_cron or max_worker_p
 only that preload and pauses jobs; catalog rows remain, and re-enabling is explicit.
 Copied databases and restored schedules stay paused. Inspect `cron.job`, then
 explicitly reactivate with `ALTER SYSTEM SET cron.launch_active_jobs = on` and
-`SELECT pg_reload_conf()`. A restore with cron enabled restarts the server to stop
-active workers before replacing data. For a temporary export, start with
+`SELECT pg_reload_conf()`. A restore with cron enabled pauses scheduling the same
+way (`ALTER SYSTEM` plus a configuration reload, no restart), waits until the pause
+is in effect and ends any job still running before replacing data, so other
+connections to the server stay open. For a temporary export, start with
 `spindb start myapp --no-scheduled-jobs`, then stop it when finished.
 
 ### MongoDB

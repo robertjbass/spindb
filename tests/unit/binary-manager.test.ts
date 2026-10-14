@@ -389,7 +389,9 @@ describe('PostgreSQL artifact revision verification', () => {
       try {
         for (const [expected, reported] of [
           ['18.6.0-cron.1', '18.6'],
+          ['18.6.0', '18.6'],
           ['19.0.0-beta.3-cron.1', '19beta3'],
+          ['19.0.0-beta.3', '19beta3'],
         ]) {
           await writeFile(
             join(root, 'bin', 'postgres'),
@@ -410,23 +412,36 @@ describe('PostgreSQL artifact revision verification', () => {
             'cache identity must retain build metadata',
           )
         }
-        await writeFile(
-          join(root, 'bin', 'postgres'),
-          "#!/bin/sh\nprintf 'postgres (PostgreSQL) 19beta2\\n'\n",
-          { mode: 0o755 },
-        )
-        let rejected = false
-        try {
-          await postgresqlBinaryManager.verify(
-            '19.0.0-beta.3-cron.1',
-            Platform.Darwin,
-            Arch.ARM64,
+        for (const [expected, reported] of [
+          ['19.0.0-beta.3-cron.1', '19beta1'],
+          ['19.0.0-beta.3-cron.1', '19beta2'],
+          ['19.0.0-beta.3-cron.1', '19rc1'],
+          // A GA 19.0 binary shares major.minor "19.0" with every 19 beta.
+          ['19.0.0-beta.3-cron.1', '19.0'],
+          ['19.0.0-beta.3', '19.0'],
+        ]) {
+          await writeFile(
+            join(root, 'bin', 'postgres'),
+            `#!/bin/sh\nprintf 'postgres (PostgreSQL) ${reported}\\n'\n`,
+            { mode: 0o755 },
           )
-        } catch (error) {
-          rejected =
-            error instanceof Error && error.message.includes('Version mismatch')
+          let rejected = false
+          try {
+            await postgresqlBinaryManager.verify(
+              expected,
+              Platform.Darwin,
+              Arch.ARM64,
+            )
+          } catch (error) {
+            rejected =
+              error instanceof Error &&
+              error.message.includes('Version mismatch')
+          }
+          assert(
+            rejected,
+            `${expected} must reject a binary reporting ${reported}`,
+          )
         }
-        assert(rejected, 'a different upstream beta must still be rejected')
       } finally {
         pathMock.mock.restore()
         await rm(root, { recursive: true, force: true })
