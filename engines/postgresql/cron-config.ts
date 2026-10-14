@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { readFile, writeFile, rename, rm } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { logDebug } from '../../core/error-handler'
 import { getLibraryEnv } from '../../core/library-env'
 
 const execFileAsync = promisify(execFile)
@@ -60,6 +61,7 @@ export async function configurePostgresCron(options: {
   binPath: string
   dataDir: string
   database: string
+  onWarning?: (message: string) => void
 }): Promise<boolean> {
   const { binPath, dataDir, database } = options
   const markerPath = join(dataDir, '.spindb-pg-cron.json')
@@ -91,7 +93,7 @@ export async function configurePostgresCron(options: {
     await rm(markerPath, { force: true })
     return false
   }
-  if (!hasCronFiles) {
+  async function disableCron(reason: string): Promise<false> {
     await persistPostgresSettings(dataDir, {
       shared_preload_libraries: libraries
         .filter((library) => !isCron(library))
@@ -99,13 +101,15 @@ export async function configurePostgresCron(options: {
       'cron.launch_active_jobs': 'off',
     })
     await rm(markerPath, { force: true })
+    const message = `pg_cron disabled: ${reason}. Jobs are paused and definitions retained. Fix the cause, add pg_cron back to shared_preload_libraries, restart, then explicitly resume jobs.`
+    logDebug(message, { dataDir })
+    options.onWarning?.(message)
     return false
   }
+  if (!hasCronFiles) return disableCron('the installed binary lacks pg_cron')
   const workers = Number(await setting('max_worker_processes'))
   if (!Number.isInteger(workers) || workers < 2) {
-    throw new Error(
-      'pg_cron needs a launcher and a job worker. Set max_worker_processes to at least 2 before starting.',
-    )
+    return disableCron('max_worker_processes must be at least 2')
   }
 
   const settings: Record<string, string> = {

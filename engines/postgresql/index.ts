@@ -510,6 +510,7 @@ export class PostgreSQLEngine extends BaseEngine {
       binPath,
       dataDir,
       database: container.database || 'postgres',
+      onWarning: (message) => onProgress?.({ stage: 'info', message }),
     })
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
