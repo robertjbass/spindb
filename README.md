@@ -99,11 +99,18 @@ spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/ro
 spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dropped by default)
 ```
 
-When the selected PostgreSQL artifact includes pg_cron, SpinDB configures its
-preload and background workers on startup. Availability depends on the artifact;
-the candidate packaging targets PostgreSQL 18.6.0 and 19.0.0-beta.3 on Linux x64,
-covering the current Cloud new-database choices. Other artifacts are unchanged. Install the catalog
-with `CREATE EXTENSION pg_cron` in the database named by `SHOW cron.database_name`.
+pg_cron is opt-in. Selecting an artifact that contains it does not enable it.
+The candidate immutable Linux x64 artifacts are `18.6.0+cron.1` and
+`19.0.0-beta.3+cron.1`; the upstream PostgreSQL versions are unchanged.
+To enable it, add `pg_cron` to your existing `shared_preload_libraries` setting,
+restart the database, then run `CREATE EXTENSION pg_cron` in the database named by
+`SHOW cron.database_name`. Preserve other libraries when changing the list.
+SpinDB configures background workers only after this explicit preload opt-in.
+It never copies the effective preload list into `postgresql.auto.conf` on normal
+starts. PostgreSQL's own `ALTER SYSTEM` precedence still applies if you set the
+list there; use `ALTER SYSTEM RESET shared_preload_libraries` before managing it
+in `postgresql.conf` instead. If an older artifact lacks pg_cron, SpinDB removes
+only that preload and pauses jobs; catalog rows remain, and re-enabling is explicit.
 Copied databases and restored schedules stay paused. Inspect `cron.job`, then
 explicitly reactivate with `ALTER SYSTEM SET cron.launch_active_jobs = on` and
 `SELECT pg_reload_conf()`. A restore with cron enabled restarts the server to stop

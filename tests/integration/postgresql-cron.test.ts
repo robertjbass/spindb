@@ -74,8 +74,27 @@ test(
         join(dataDir, 'postgresql.conf'),
         `\nlisten_addresses = ''\nunix_socket_directories = '${root}'\nport = 55439\nshared_preload_libraries = 'pg_stat_statements'\n`,
       )
+      const originalAuto = await readFile(
+        join(dataDir, 'postgresql.auto.conf'),
+        'utf8',
+      )
+      assert.equal(
+        await configurePostgresCron({
+          binPath: binPath!,
+          dataDir,
+          database: 'postgres',
+        }),
+        false,
+      )
+      assert.equal(
+        await readFile(join(dataDir, 'postgresql.auto.conf'), 'utf8'),
+        originalAuto,
+      )
+      await appendFile(
+        join(dataDir, 'postgresql.conf'),
+        `\nshared_preload_libraries = '"pg_stat_statements",pg_cron'\n`,
+      )
       await persistPostgresSettings(dataDir, {
-        shared_preload_libraries: '"pg_stat_statements"',
         max_connections: '37',
       })
       assert.equal(
@@ -90,6 +109,7 @@ test(
         join(dataDir, 'postgresql.auto.conf'),
         'utf8',
       )
+      assert.doesNotMatch(configuration, /shared_preload_libraries/)
       await configurePostgresCron({
         binPath: binPath!,
         dataDir,
@@ -217,6 +237,41 @@ test(
       assert.equal(await query('SELECT count(*) FROM sentinel'), restoredCount)
       assert.equal(await query('SELECT count(*) FROM cron.job'), '2')
       await stop(copyDir)
+      const oldArtifact = join(root, 'old-artifact')
+      await cp(binPath!, oldArtifact, { recursive: true })
+      await rm(join(oldArtifact, 'lib', 'pg_cron.so'))
+      assert.equal(
+        await configurePostgresCron({
+          binPath: oldArtifact,
+          dataDir,
+          database: 'postgres',
+        }),
+        false,
+      )
+      await exec(
+        join(oldArtifact, 'bin', 'pg_ctl'),
+        ['-D', dataDir, '-l', join(root, 'rollback.log'), '-w', 'start'],
+        {
+          env: { ...env, LD_LIBRARY_PATH: join(oldArtifact, 'lib') },
+          timeout: 20_000,
+        },
+      )
+      assert.equal(await query('SHOW cron.launch_active_jobs'), 'off')
+      assert.equal(
+        await query('SHOW shared_preload_libraries'),
+        '"pg_stat_statements"',
+      )
+      assert.equal(await query('SELECT count(*) FROM cron.job'), '3')
+      assert.equal(await query('SELECT 42'), '42')
+      await stop(dataDir)
+      assert.equal(
+        await configurePostgresCron({
+          binPath: binPath!,
+          dataDir,
+          database: 'postgres',
+        }),
+        false,
+      )
     } finally {
       for (const dir of [dataDir, copyDir]) {
         try {

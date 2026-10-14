@@ -62,14 +62,14 @@ export async function configurePostgresCron(options: {
   database: string
 }): Promise<boolean> {
   const { binPath, dataDir, database } = options
-  // Old and unsupported artifacts keep their existing startup behavior.
-  if (
+  const markerPath = join(dataDir, '.spindb-pg-cron.json')
+  const hasCronFiles = !(
     !existsSync(join(binPath, 'lib', 'pg_cron.so')) ||
     !existsSync(join(binPath, 'share', 'extension', 'pg_cron.control')) ||
     !existsSync(join(binPath, 'share', 'extension', 'pg_cron--1.0.sql')) ||
     !existsSync(join(binPath, 'share', 'extension', 'pg_cron--1.5--1.6.sql'))
   )
-    return false
+  if (!existsSync(join(binPath, 'bin', 'postgres'))) return false
 
   async function setting(key: string): Promise<string> {
     const { stdout } = await execFileAsync(
@@ -81,17 +81,34 @@ export async function configurePostgresCron(options: {
   }
 
   const preloads = await setting('shared_preload_libraries')
-  const workers = Number(await setting('max_worker_processes'))
-  if (!Number.isInteger(workers) || workers < 2) {
-    if (mergeCronPreload(preloads) === preloads) {
-      throw new Error(
-        'pg_cron needs a launcher and a job worker. Set max_worker_processes to at least 2 before starting.',
-      )
-    }
+  const libraries = preloads.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+  function isCron(library: string): boolean {
+    return /(?:^|\/)pg_cron(?:\.so)?$/.test(
+      library.trim().replace(/^"|"$/g, ''),
+    )
+  }
+  if (!libraries.some(isCron)) {
+    await rm(markerPath, { force: true })
     return false
   }
+  if (!hasCronFiles) {
+    await persistPostgresSettings(dataDir, {
+      shared_preload_libraries: libraries
+        .filter((library) => !isCron(library))
+        .join(','),
+      'cron.launch_active_jobs': 'off',
+    })
+    await rm(markerPath, { force: true })
+    return false
+  }
+  const workers = Number(await setting('max_worker_processes'))
+  if (!Number.isInteger(workers) || workers < 2) {
+    throw new Error(
+      'pg_cron needs a launcher and a job worker. Set max_worker_processes to at least 2 before starting.',
+    )
+  }
+
   const settings: Record<string, string> = {
-    shared_preload_libraries: mergeCronPreload(preloads),
     'cron.use_background_workers': 'on',
     'cron.max_running_jobs': String(Math.min(2, workers - 1)),
   }
@@ -106,5 +123,10 @@ export async function configurePostgresCron(options: {
   }
   // Deliberately preserve cron.launch_active_jobs, including a copied database's pause.
   await persistPostgresSettings(dataDir, settings)
+  await writeFile(
+    markerPath,
+    JSON.stringify({ database: settings['cron.database_name'] }),
+    { mode: 0o600 },
+  )
   return true
 }

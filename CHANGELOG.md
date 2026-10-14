@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- PostgreSQL startup detects artifacts containing pg_cron, preserves effective preload settings (including postgres.auto.conf), and configures background-worker execution with at most two job workers. Unsupported artifacts retain their existing configuration.
+- PostgreSQL pg_cron is explicitly opt-in through its preload configuration. Normal starts leave the preload list unchanged. Enabled clusters use at most two job workers; falling back to an artifact missing pg_cron removes only that preload and pauses jobs without deleting catalog data.
 - `spindb start --no-scheduled-jobs` suppresses PostgreSQL jobs for that server process. Ordinary subsequent starts retain the persisted scheduling policy.
 - PostgreSQL copies keep schedule definitions paused. Restores stop active cron workers before replacement and leave scheduling paused for deliberate review and reactivation.
 

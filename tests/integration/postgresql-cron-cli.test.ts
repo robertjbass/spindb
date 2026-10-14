@@ -76,6 +76,16 @@ test(
         '55441',
         '--start',
       ])
+      assert.equal(await query('SHOW shared_preload_libraries'), '')
+      assert.equal(
+        await query(
+          "SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron'",
+        ),
+        '0',
+      )
+      await query("ALTER SYSTEM SET shared_preload_libraries = 'pg_cron'")
+      await command(['stop', 'source'])
+      await command(['start', 'source', '--strict-port'])
       await query(
         "CREATE EXTENSION pg_cron; CREATE TABLE sentinel(n int); SELECT cron.schedule('sentinel', '1 second', 'INSERT INTO sentinel VALUES (1)')",
       )
