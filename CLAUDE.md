@@ -310,3 +310,20 @@ Key fixes from the E2E stabilization session:
 - **0.47.10:** SurrealDB reads saved credentials from credential file
 - **0.47.12:** `--namespace` flag for `spindb query`, type-safe `QueryOptions`
 - **0.47.13:** MongoDB `waitForReady` falls back to TCP when auth rejects mongosh
+
+## PostgreSQL scheduled jobs
+
+`engines/postgresql/cron-config.ts` acts only after the user explicitly includes
+pg_cron in the effective preload list. Artifact availability alone never enables
+it. Do not create extension catalogs on start/wake. Never persist a merged preload
+on ordinary starts: this shadows future postgresql.conf edits. The sole recovery
+exception removes pg_cron from the effective list when its artifact is missing,
+then persists launch_active_jobs=off; keep all other libraries and catalog data.
+An opted-in, supported cluster gets `.spindb-pg-cron.json` in its data directory
+for Cloud's bounded history maintenance; remove that marker when not opted in. Branch/copy preparation
+persists cron.launch_active_jobs=off. Restore preparation stops active workers and
+keeps copied definitions paused. Temporary starts use --no-scheduled-jobs, a
+process-only override. Cloud must carry it through setup restarts. The opt-in
+real-binary tests are tests/integration/postgresql-cron.test.ts and
+postgresql-cron-cli.test.ts. Release through hostdb first; do not pin unpublished
+artifacts or package versions.

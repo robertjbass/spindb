@@ -1,4 +1,8 @@
-import { describe, it } from 'node:test'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { paths } from '../../config/paths'
+import { describe, it, mock } from 'node:test'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import {
   POSTGRESQL_VERSION_MAP,
@@ -364,4 +368,69 @@ describe('PostgreSQL BinaryManager', () => {
       assert(linuxUrl.includes('linux-x64'), 'Linux x64 should use linux-x64')
     })
   })
+})
+
+describe('PostgreSQL artifact revision verification', () => {
+  it(
+    'verifies upstream versions while preserving the full artifact path',
+    { skip: process.platform === 'win32' },
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'pg-revision-'))
+      await mkdir(join(root, 'bin'))
+      let requestedVersion = ''
+      const pathMock = mock.method(
+        paths,
+        'getBinaryPath',
+        (options: { version: string }) => {
+          requestedVersion = options.version
+          return root
+        },
+      )
+      try {
+        for (const [expected, reported] of [
+          ['18.6.0+cron.1', '18.6'],
+          ['19.0.0-beta.3+cron.1', '19beta3'],
+        ]) {
+          await writeFile(
+            join(root, 'bin', 'postgres'),
+            `#!/bin/sh\nprintf 'postgres (PostgreSQL) ${reported}\\n'\n`,
+            { mode: 0o755 },
+          )
+          assert(
+            await postgresqlBinaryManager.verify(
+              expected,
+              Platform.Darwin,
+              Arch.ARM64,
+            ),
+            'artifact revision should verify against its upstream version',
+          )
+          assertEqual(
+            requestedVersion,
+            expected,
+            'cache identity must retain build metadata',
+          )
+        }
+        await writeFile(
+          join(root, 'bin', 'postgres'),
+          "#!/bin/sh\nprintf 'postgres (PostgreSQL) 19beta2\\n'\n",
+          { mode: 0o755 },
+        )
+        let rejected = false
+        try {
+          await postgresqlBinaryManager.verify(
+            '19.0.0-beta.3+cron.1',
+            Platform.Darwin,
+            Arch.ARM64,
+          )
+        } catch (error) {
+          rejected =
+            error instanceof Error && error.message.includes('Version mismatch')
+        }
+        assert(rejected, 'a different upstream beta must still be rejected')
+      } finally {
+        pathMock.mock.restore()
+        await rm(root, { recursive: true, force: true })
+      }
+    },
+  )
 })

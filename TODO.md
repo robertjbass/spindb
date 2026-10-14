@@ -1,5 +1,10 @@
 # TODO
 
+## PostgreSQL scheduler qualification
+
+- [ ] Qualify pg_cron beyond PostgreSQL 18.6 Linux x64 before expanding packaging.
+- [ ] Publish the qualified hostdb release before updating SpinDB's exact hostdb pin.
+
 ## Triage
 
 Quick capture for ideas that need review and prioritization:

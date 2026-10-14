@@ -748,6 +748,7 @@ export const restoreCommand = new Command('restore')
           dropSpinner.start()
 
           try {
+            await engine.prepareRestore(config)
             await engine.dropDatabase(config, databaseName)
             // Don't remove from tracking - the database name stays the same
             // and addDatabase() is idempotent, so tracking remains valid
@@ -872,6 +873,8 @@ export const restoreCommand = new Command('restore')
               `Restoring into existing database "${databaseName}"`,
             )
           }
+
+          await engine.prepareRestore(config)
 
           // --pre-sql: compatibility shims the dump needs and the target does
           // not have (a missing extension, the roles a dump grants to, a

@@ -57,6 +57,7 @@ export abstract class BaseEngine {
   abstract start(
     container: ContainerConfig,
     onProgress?: ProgressCallback,
+    options?: { disableScheduledJobs?: boolean },
   ): Promise<{ port: number; connectionString: string }>
 
   // Stop the database server
@@ -69,6 +70,8 @@ export abstract class BaseEngine {
   abstract detectBackupFormat(filePath: string): Promise<BackupFormat>
 
   // Restore a backup to the database
+  async prepareRestore(_container: ContainerConfig): Promise<void> {}
+
   abstract restore(
     container: ContainerConfig,
     backupPath: string,

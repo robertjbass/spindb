@@ -146,7 +146,10 @@ export function parsePrereleaseVersion(version: string): {
   type: PrereleaseType
   num: number
 } | null {
-  const canonical = version.match(/^(\d+)(?:\.\d+)*-(alpha|beta|rc)\.(\d+)$/)
+  const upstreamVersion = version.split('+')[0]
+  const canonical = upstreamVersion.match(
+    /^(\d+)(?:\.\d+)*-(alpha|beta|rc)\.(\d+)$/,
+  )
   if (canonical) {
     return {
       major: parseInt(canonical[1], 10),
@@ -155,7 +158,7 @@ export function parsePrereleaseVersion(version: string): {
     }
   }
 
-  const reported = version.match(/^(\d+)(alpha|beta|rc)(\d+)$/)
+  const reported = upstreamVersion.match(/^(\d+)(alpha|beta|rc)(\d+)$/)
   if (reported) {
     return {
       major: parseInt(reported[1], 10),
