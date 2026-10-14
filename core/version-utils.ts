@@ -146,7 +146,7 @@ export function parsePrereleaseVersion(version: string): {
   type: PrereleaseType
   num: number
 } | null {
-  const upstreamVersion = version.split('+')[0]
+  const upstreamVersion = version.split('+')[0].replace(/-cron\.\d+$/, '')
   const canonical = upstreamVersion.match(
     /^(\d+)(?:\.\d+)*-(alpha|beta|rc)\.(\d+)$/,
   )

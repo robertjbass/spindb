@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.72.0] - Unreleased
 
-- Verify immutable PostgreSQL build revisions against the upstream version without changing cache identity. Pause scheduling and report recovery instructions if worker capacity is below two or pg_cron files are missing.
+- Verify URL-safe immutable PostgreSQL -cron.N artifact revisions against the upstream version without changing cache identity. Pause scheduling and report recovery instructions if worker capacity is below two or pg_cron files are missing.
 
 ### Added
 

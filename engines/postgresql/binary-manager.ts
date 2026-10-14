@@ -94,7 +94,7 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
     if (!reportedVersion) {
       throw new Error(`Could not parse version from: ${stdout.trim()}`)
     }
-    const upstreamVersion = fullVersion.split('+')[0]
+    const upstreamVersion = fullVersion.split('+')[0].replace(/-cron\.\d+$/, '')
     const expectedNormalized = this.stripTrailingZero(upstreamVersion)
     const reportedNormalized = this.stripTrailingZero(reportedVersion)
 
