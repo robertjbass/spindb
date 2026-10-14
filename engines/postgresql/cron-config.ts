@@ -6,6 +6,7 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { logDebug } from '../../core/error-handler'
 import { getLibraryEnv } from '../../core/library-env'
+import type { QueryResult } from '../../types'
 
 const execFileAsync = promisify(execFile)
 
@@ -54,6 +55,44 @@ export async function persistPostgresSettings(
   } finally {
     await rm(temporary, { force: true })
   }
+}
+
+/**
+ * After `ALTER SYSTEM SET cron.launch_active_jobs = off` and pg_reload_conf(),
+ * wait until the pause is in effect: new sessions report it and no pg_cron job
+ * worker is still running. Workers that were already mid-run are terminated,
+ * as a server stop would; client sessions are left connected.
+ */
+export async function waitForCronPause(
+  query: (sql: string) => Promise<QueryResult>,
+  options: { timeoutMs?: number; pollMs?: number } = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 10000
+  const pollMs = options.pollMs ?? 250
+  const deadline = Date.now() + timeoutMs
+  // pg_reload_conf() only signals the postmaster; each query is a new session.
+  let paused = false
+  let idleChecks = 0
+  while (Date.now() <= deadline) {
+    if (!paused) {
+      const { rows } = await query(
+        "SELECT current_setting('cron.launch_active_jobs') AS enabled",
+      )
+      paused = String(rows[0]?.enabled) === 'off'
+    }
+    if (paused) {
+      const { rows } = await query(
+        "SELECT count(pg_terminate_backend(pid)) AS running FROM pg_stat_activity WHERE backend_type = 'pg_cron'",
+      )
+      idleChecks = String(rows[0]?.running) === '0' ? idleChecks + 1 : 0
+      // Two clean polls cover a job the launcher started just before reloading.
+      if (idleChecks >= 2) return
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
+  }
+  throw new Error(
+    `pg_cron did not pause within ${timeoutMs / 1000}s. cron.launch_active_jobs = off is saved in postgresql.auto.conf, so jobs stay paused once it applies. Restore has not begun; inspect the server log before retrying.`,
+  )
 }
 
 /** Only call while PostgreSQL is stopped, before its first postmaster starts. */

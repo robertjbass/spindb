@@ -321,8 +321,9 @@ exception removes pg_cron from the effective list when its artifact is missing,
 then persists launch_active_jobs=off; keep all other libraries and catalog data.
 An opted-in, supported cluster gets `.spindb-pg-cron.json` in its data directory
 for Cloud's bounded history maintenance; remove that marker when not opted in. Branch/copy preparation
-persists cron.launch_active_jobs=off. Restore preparation stops active workers and
-keeps copied definitions paused. Temporary starts use --no-scheduled-jobs, a
+persists cron.launch_active_jobs=off. Restore preparation pauses without a restart
+(ALTER SYSTEM + pg_reload_conf, a PGC_SIGHUP setting), confirms the pause and ends
+in-flight pg_cron workers, and keeps restored definitions paused. Temporary starts use --no-scheduled-jobs, a
 process-only override. Cloud must carry it through setup restarts. The opt-in
 real-binary tests are tests/integration/postgresql-cron.test.ts and
 postgresql-cron-cli.test.ts. Release through hostdb first; do not pin unpublished

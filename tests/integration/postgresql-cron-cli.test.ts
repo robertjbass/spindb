@@ -159,6 +159,50 @@ test(
       await delay(2500)
       assert.equal(await query('SELECT count(*) FROM sentinel'), restored)
       assert.equal(await query('SELECT count(*) FROM cron.job'), '1')
+
+      // An in-place restore pauses by reload: a session on another database
+      // stays connected across it, and scheduling stays paused afterwards.
+      await query('ALTER SYSTEM SET cron.launch_active_jobs = on')
+      await query('SELECT pg_reload_conf()')
+      await delay(2500)
+      const resumed = Number(await query('SELECT count(*) FROM sentinel'))
+      assert.ok(resumed > Number(restored), 'jobs resume after reactivation')
+      const held = exec(
+        join(binPath!, 'bin', 'psql'),
+        [
+          '-X',
+          '-h',
+          '127.0.0.1',
+          '-p',
+          '55441',
+          '-U',
+          'postgres',
+          '-d',
+          'postgres',
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-Atq',
+          '-c',
+          'SELECT pg_sleep(8)',
+          '-c',
+          "SELECT 'alive'",
+        ],
+        { env, timeout: 30_000 },
+      )
+      await delay(1000)
+      await command([
+        'restore',
+        'source',
+        join(root, 'backup.dump'),
+        '--database',
+        'app',
+        '--into-existing',
+      ])
+      assert.equal(await query('SHOW cron.launch_active_jobs'), 'off')
+      assert.match((await held).stdout, /alive/)
+      const inPlace = await query('SELECT count(*) FROM sentinel')
+      await delay(2500)
+      assert.equal(await query('SELECT count(*) FROM sentinel'), inPlace)
     } finally {
       for (const name of ['source', 'copy', 'online']) {
         try {
