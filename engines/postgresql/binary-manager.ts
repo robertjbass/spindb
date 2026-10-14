@@ -17,7 +17,10 @@ import { paths } from '../../config/paths'
 import { spawnAsync } from '../../core/spawn-utils'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
-import { prereleaseVersionMatches } from '../../core/version-utils'
+import {
+  isPrereleaseVersion,
+  prereleaseVersionMatches,
+} from '../../core/version-utils'
 import { Engine, Platform, type Arch } from '../../types'
 
 class PostgreSQLBinaryManager extends BaseServerBinaryManager {
@@ -103,10 +106,15 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
       return true
     }
 
-    // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1")
+    // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1").
+    // GA only: "19.0.0-beta.3" also yields "19.0", and a prerelease must match
+    // its exact alpha/beta/rc build because their data directories can differ.
+    const isPrerelease =
+      isPrereleaseVersion(upstreamVersion) ||
+      isPrereleaseVersion(reportedVersion)
     const expectedMajorMinor = upstreamVersion.split('.').slice(0, 2).join('.')
     const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
-    if (expectedMajorMinor === reportedMajorMinor) {
+    if (!isPrerelease && expectedMajorMinor === reportedMajorMinor) {
       return true
     }
 
