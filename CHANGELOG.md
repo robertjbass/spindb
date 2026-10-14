@@ -5,6 +5,14 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.72.0] - Unreleased
+
+### Added
+
+- PostgreSQL startup detects artifacts containing pg_cron, preserves effective preload settings (including postgres.auto.conf), and configures background-worker execution with at most two job workers. Unsupported artifacts retain their existing configuration.
+- `spindb start --no-scheduled-jobs` suppresses PostgreSQL jobs for that server process. Ordinary subsequent starts retain the persisted scheduling policy.
+- PostgreSQL copies keep schedule definitions paused. Restores stop active cron workers before replacement and leave scheduling paused for deliberate review and reactivation.
+
 ## [0.71.3] - 2026-10-08
 
 ### Fixed

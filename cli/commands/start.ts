@@ -42,6 +42,10 @@ export const startCommand = new Command('start')
     'Fail if the configured port is in use instead of moving to a new port',
   )
   .option(
+    '--no-scheduled-jobs',
+    'Suppress PostgreSQL scheduled jobs for this server process only',
+  )
+  .option(
     '--no-recreate-database',
     'Leave a missing primary database missing instead of recreating it empty (engines that can detect it; reported as primaryDatabase.state)',
   )
@@ -56,6 +60,7 @@ export const startCommand = new Command('start')
         memoryBudgetMb?: string
         strictPort?: boolean
         recreateDatabase?: boolean
+        scheduledJobs?: boolean
       },
     ) => {
       try {
@@ -105,6 +110,16 @@ export const startCommand = new Command('start')
         }
 
         const { engine: engineName } = config
+
+        if (
+          options.scheduledJobs === false &&
+          engineName !== Engine.PostgreSQL
+        ) {
+          return exitWithError({
+            message: '--no-scheduled-jobs is supported only for PostgreSQL',
+            json: options.json,
+          })
+        }
 
         // Remote containers are managed externally
         if (isRemoteContainer(config)) {
@@ -287,6 +302,7 @@ export const startCommand = new Command('start')
           engine,
           config,
           strictPort: options.strictPort,
+          disableScheduledJobs: options.scheduledJobs === false,
           onPortChange: (oldPort, newPort) => {
             if (spinner) {
               spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`

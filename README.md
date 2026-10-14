@@ -99,6 +99,17 @@ spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/ro
 spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dropped by default)
 ```
 
+When the selected PostgreSQL artifact includes pg_cron, SpinDB configures its
+preload and background workers on startup. Availability depends on the artifact;
+the candidate packaging targets PostgreSQL 18.6.0 and 19.0.0-beta.3 on Linux x64,
+covering the current Cloud new-database choices. Other artifacts are unchanged. Install the catalog
+with `CREATE EXTENSION pg_cron` in the database named by `SHOW cron.database_name`.
+Copied databases and restored schedules stay paused. Inspect `cron.job`, then
+explicitly reactivate with `ALTER SYSTEM SET cron.launch_active_jobs = on` and
+`SELECT pg_reload_conf()`. A restore with cron enabled restarts the server to stop
+active workers before replacing data. For a temporary export, start with
+`spindb start myapp --no-scheduled-jobs`, then stop it when finished.
+
 ### MongoDB
 
 ```bash

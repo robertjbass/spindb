@@ -23,6 +23,7 @@ import {
   normalizeVersion,
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
+import { configurePostgresCron, persistPostgresSettings } from './cron-config'
 import {
   DROP_RETRY_DELAY_MS,
   buildDropDatabaseSql,
@@ -374,6 +375,10 @@ export class PostgreSQLEngine extends BaseEngine {
   supportsOnlineBranch = true
 
   async prepareBranchedDataDir(container: ContainerConfig): Promise<void> {
+    await persistPostgresSettings(
+      paths.getContainerDataPath(container.name, { engine: this.name }),
+      { 'cron.launch_active_jobs': 'off' },
+    )
     await retargetPostgresBranchCredentials(container)
   }
 
@@ -461,6 +466,7 @@ export class PostgreSQLEngine extends BaseEngine {
   async start(
     container: ContainerConfig,
     onProgress?: ProgressCallback,
+    options: { disableScheduledJobs?: boolean } = {},
   ): Promise<{ port: number; connectionString: string }> {
     const { name, version, port } = container
 
@@ -469,6 +475,11 @@ export class PostgreSQLEngine extends BaseEngine {
       engine: this.name,
     })
     if (alreadyRunning) {
+      if (options.disableScheduledJobs) {
+        throw new Error(
+          'Stop PostgreSQL before starting with scheduled jobs disabled.',
+        )
+      }
       return {
         port,
         connectionString: this.getConnectionString(container),
@@ -495,6 +506,11 @@ export class PostgreSQLEngine extends BaseEngine {
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
 
     await refreshOnlineBranchPaths(dataDir)
+    await configurePostgresCron({
+      binPath,
+      dataDir,
+      database: container.database || 'postgres',
+    })
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
 
@@ -502,6 +518,7 @@ export class PostgreSQLEngine extends BaseEngine {
       port,
       logFile,
       bindAddress: container.bindAddress,
+      disableScheduledJobs: options.disableScheduledJobs,
     })
 
     return {
@@ -543,6 +560,39 @@ export class PostgreSQLEngine extends BaseEngine {
     return detectBackupFormat(filePath)
   }
 
+  async prepareRestore(container: ContainerConfig): Promise<void> {
+    const credentials = await loadCredentials(
+      container.name,
+      Engine.PostgreSQL,
+      getDefaultUsername(Engine.PostgreSQL),
+    )
+    const result = await this.executeQuery(
+      container,
+      "SELECT current_setting('cron.launch_active_jobs', true) AS enabled",
+      { ...credentials, database: 'postgres' },
+    )
+    if (result.rows[0]?.enabled !== 'on') return
+    // Stop active workers before restoring any definitions or dropping databases.
+    await this.stop(container)
+    try {
+      await persistPostgresSettings(
+        paths.getContainerDataPath(container.name, { engine: this.name }),
+        { 'cron.launch_active_jobs': 'off' },
+      )
+    } catch (error) {
+      try {
+        await this.start(container)
+      } catch (restartError) {
+        throw new AggregateError(
+          [error, restartError],
+          'Could not pause cron or restart PostgreSQL. Restore has not begun; inspect the server log before retrying.',
+        )
+      }
+      throw error
+    }
+    await this.start(container)
+  }
+
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -556,6 +606,8 @@ export class PostgreSQLEngine extends BaseEngine {
       Engine.PostgreSQL,
       getDefaultUsername(Engine.PostgreSQL),
     )
+
+    await this.prepareRestore(container)
 
     // First create the database if it doesn't exist
     if (options.createDatabase !== false) {

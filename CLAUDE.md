@@ -310,3 +310,15 @@ Key fixes from the E2E stabilization session:
 - **0.47.10:** SurrealDB reads saved credentials from credential file
 - **0.47.12:** `--namespace` flag for `spindb query`, type-safe `QueryOptions`
 - **0.47.13:** MongoDB `waitForReady` falls back to TCP when auth rejects mongosh
+
+## PostgreSQL scheduled jobs
+
+`engines/postgresql/cron-config.ts` configures only artifacts containing pg_cron.
+Read effective PostgreSQL settings before updating postgres.auto.conf; never
+replace the preload list from a partial config-file parse. Branch/copy preparation
+persists cron.launch_active_jobs=off. Restore preparation stops active workers and
+keeps copied definitions paused. Temporary starts use --no-scheduled-jobs, a
+process-only override. Cloud must carry it through setup restarts. The opt-in
+real-binary tests are tests/integration/postgresql-cron.test.ts and
+postgresql-cron-cli.test.ts. Release through hostdb first; do not pin unpublished
+artifacts or package versions.
