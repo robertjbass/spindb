@@ -5,6 +5,39 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.72.0] - Unreleased
+
+- Verify URL-safe immutable PostgreSQL -cron.N artifact revisions against the upstream version without changing cache identity. Pause scheduling and report recovery instructions if worker capacity is below two or pg_cron files are missing.
+
+### Added
+
+- PostgreSQL pg_cron is explicitly opt-in through its preload configuration. Normal starts leave the preload list unchanged. Enabled clusters use at most two job workers; falling back to an artifact missing pg_cron removes only that preload and pauses jobs without deleting catalog data.
+- `spindb start --no-scheduled-jobs` suppresses PostgreSQL jobs for that server process. Ordinary subsequent starts retain the persisted scheduling policy.
+- PostgreSQL copies keep schedule definitions paused. Restores pause active cron scheduling by configuration reload before replacement and leave it paused for deliberate review and reactivation.
+
+### Fixed
+
+- **A PostgreSQL container pinned to a pg_cron build revision is never self-healed onto a plain binary, and the reverse.** When a container's exact binaries were missing, start resolved onto any installed same-major binary and repinned the container (or downloaded the plain version for that major), so an `18.6.0-cron.1` database that preloads pg_cron could be moved to plain `18.6.0`. A `-cron.N` version now downloads its own pinned revision and keeps its configured version, and the pre-start compatibility check accepts only that exact revision. A plain container is no longer healed onto an installed `-cron.N` binary. Client tool lookups (`psql`, `pg_dump`, `pg_restore`) and other engines are unchanged.
+- PostgreSQL binary verification now reads the full version from a `-cron.N` binary directory (`postgresql-18.6.0-cron.1-linux-x64` yields `18.6.0-cron.1`, not `18.6.0`).
+- **A PostgreSQL restore with pg_cron scheduling active no longer restarts the server.** Restore preparation (every `spindb restore` path, including `--into-existing`, which deliberately keeps live connections) used to stop and restart the whole server to pause jobs, disconnecting every client, including sessions on other databases. It now runs `ALTER SYSTEM SET cron.launch_active_jobs = off` and `pg_reload_conf()` (pg_cron 1.6.8 defines the setting as `PGC_SIGHUP`), waits until new sessions report `off`, then terminates any `pg_cron` job worker still running and requires two consecutive polls with none before the restore begins. If the pause is not in effect within 10s the restore does not begin; the saved `off` keeps jobs paused once it applies. Scheduling stays paused after the restore, as before.
+- **PostgreSQL prerelease binaries must match their exact prerelease.** Binary verification accepted any binary with the same major.minor, and `19.0.0-beta.3` and a GA `19.0` binary both yield `19.0`. That fallback now applies only when neither side is a prerelease, so `19.0.0-beta.3` and `19.0.0-beta.3-cron.1` verify only against a binary reporting `19beta3`. GA versions, including `18.6.0-cron.1` against a binary reporting `18.6`, verify as before. The fallback predates 0.72.0.
+- **The per-start pg_cron preload probe can no longer fail `spindb start`.** Every PostgreSQL start runs `postgres -D <data> -C shared_preload_libraries` to see whether pg_cron is opted in. A failure or its 10s timeout used to fail the start, including for databases that never opted in. It is now logged at debug level and the start continues; the pg_cron marker and `postgresql.auto.conf` are left exactly as they were, so an opted-in database is never disabled by a failed probe.
+- **Versions hostdb does not build for this platform are hidden and fail early.** A hostdb version entry can narrow its own `platforms` (the `-cron.1` PostgreSQL build revisions are Linux x64 only; PostgreSQL 19 betas have no Windows build). The interactive `spindb create` version picker now hides those versions on other platforms, and drops a major line with nothing left, instead of offering a choice that can only 404. Building a download URL for such a version (`getBinaryUrl`, `spindb engines download`, `create --db-version`) now throws `<engine> <version> is not built for <platform> (built for: ...)` with how to pick another version. Versions without a version-level list, versions unknown to the bundled hostdb data, and retired platforms whose artifact still exists are unaffected (`core/version-platforms.ts`).
+- README names the URL-safe artifact revisions `18.6.0-cron.1` and `19.0.0-beta.3-cron.1`.
+
+### Changed
+
+- **hostdb pinned to 0.44.0.** Its bundled release data adds the Linux x64 only PostgreSQL build revisions `18.6.0-cron.1` and `19.0.0-beta.3-cron.1` (PostgreSQL 18.6.0 and 19.0.0-beta.3 with pg_cron 1.6.8), so `spindb create --db-version 18.6.0-cron.1` and `--db-version 19.0.0-beta.3-cron.1` resolve on Linux x64 and fail early with the platform message elsewhere. `18`, `18.6` and `18.6.0` still resolve to plain 18.6.0.
+
+### Testing
+
+- `tests/unit/postgresql-cron-restore.test.ts` covers the reload pause: no statements beyond the probe when scheduling is off or pg_cron is absent, no stop or start when it is on, `ALTER SYSTEM` then `pg_reload_conf()`, in-flight workers ended only after the pause is confirmed, and refusal to begin when the pause never applies or workers keep running. `tests/integration/postgresql-cron-cli.test.ts` adds an `--into-existing` restore with a session held open on another database.
+- `tests/unit/postgresql-binary-heal.test.ts` covers a cron-pinned container with only a plain same-major binary installed (downloads the pinned revision, config unchanged, not startable from the plain binary), a plain container with only a cron revision installed (not healed onto it), a plain container still healing onto a plain same-major binary past a newer cron revision, and version extraction from plain, prerelease, cron and prerelease cron binary paths. End to end on Linux x64 (Docker `linux/amd64` Ubuntu 22.04): with plain `18.6.0` and an opted-in `18.6.0-cron.1` database running a scheduled job, deleting only the `18.6.0-cron.1` binary directory and starting re-downloaded `18.6.0-cron.1`, kept the configured version, started the postmaster from the cron binary with `pg_cron` preloaded, and the job kept running.
+- `tests/unit/binary-manager.test.ts` rejects `19beta1`, `19beta2`, `19rc1` and a GA `19.0` binary for `19.0.0-beta.3-cron.1`, and still accepts `18.6` for `18.6.0` and `18.6.0-cron.1`.
+- `tests/unit/postgresql-cron-config.test.ts` covers a failing preload probe: start configuration returns without throwing and leaves the marker and `postgresql.auto.conf` untouched.
+- `tests/unit/version-platforms.test.ts` covers version-level platform filtering for the picker map, the early download-URL error, retired platforms, unknown versions, and (when the bundled hostdb data includes them) the Linux-only `-cron.1` revisions. With hostdb 0.44.0 bundled, the `-cron.1` case now runs instead of skipping.
+- End to end on Linux x64 (Docker `linux/amd64` Ubuntu 22.04, SpinDB CLI from source): for each of `18.6.0-cron.1` and `19.0.0-beta.3-cron.1`, SpinDB downloaded the registry artifact (sha256 matched the hostdb manifest), the database was opted in by adding `pg_cron` to `shared_preload_libraries`, `CREATE EXTENSION pg_cron` succeeded, a `* * * * *` job recorded succeeded runs in `cron.job_run_details` and inserted rows, and the job kept running after stop/start. A plain `18.6.0` database that did not opt in started with no `pg_cron` preload, no extension, no marker and no cron settings in `postgresql.auto.conf`.
+
 ## [0.71.3] - 2026-10-08
 
 ### Fixed

@@ -17,7 +17,10 @@ import { paths } from '../../config/paths'
 import { spawnAsync } from '../../core/spawn-utils'
 import { getBinaryUrl } from './binary-urls'
 import { normalizeVersion } from './version-maps'
-import { prereleaseVersionMatches } from '../../core/version-utils'
+import {
+  isPrereleaseVersion,
+  prereleaseVersionMatches,
+} from '../../core/version-utils'
 import { Engine, Platform, type Arch } from '../../types'
 
 class PostgreSQLBinaryManager extends BaseServerBinaryManager {
@@ -94,7 +97,8 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
     if (!reportedVersion) {
       throw new Error(`Could not parse version from: ${stdout.trim()}`)
     }
-    const expectedNormalized = this.stripTrailingZero(fullVersion)
+    const upstreamVersion = fullVersion.split('+')[0].replace(/-cron\.\d+$/, '')
+    const expectedNormalized = this.stripTrailingZero(upstreamVersion)
     const reportedNormalized = this.stripTrailingZero(reportedVersion)
 
     // Check if versions match (e.g., "18.1.0" vs "18.1")
@@ -102,16 +106,21 @@ class PostgreSQLBinaryManager extends BaseServerBinaryManager {
       return true
     }
 
-    // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1")
-    const expectedMajorMinor = fullVersion.split('.').slice(0, 2).join('.')
+    // Also accept if major.minor matches (e.g., expected "18.1.0", got "18.1").
+    // GA only: "19.0.0-beta.3" also yields "19.0", and a prerelease must match
+    // its exact alpha/beta/rc build because their data directories can differ.
+    const isPrerelease =
+      isPrereleaseVersion(upstreamVersion) ||
+      isPrereleaseVersion(reportedVersion)
+    const expectedMajorMinor = upstreamVersion.split('.').slice(0, 2).join('.')
     const reportedMajorMinor = reportedVersion.split('.').slice(0, 2).join('.')
-    if (expectedMajorMinor === reportedMajorMinor) {
+    if (!isPrerelease && expectedMajorMinor === reportedMajorMinor) {
       return true
     }
 
     // Prerelease binaries self-report the upstream form (e.g. "19beta1") which
     // maps to hostdb's canonical "19.0.0-beta.1".
-    if (prereleaseVersionMatches(fullVersion, reportedVersion)) {
+    if (prereleaseVersionMatches(upstreamVersion, reportedVersion)) {
       return true
     }
 

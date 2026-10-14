@@ -97,6 +97,7 @@ export type InitdbOptions = {
 }
 
 export type StartOptions = {
+  disableScheduledJobs?: boolean
   port?: number
   logFile?: string
   bindAddress?: string
@@ -224,7 +225,9 @@ export class ProcessManager {
       // On Windows, start without -w (wait) flag and poll for readiness
       // The -w flag can hang indefinitely on Windows
       let cmd = `"${pgCtlPath}" start -D "${dataDir}" -l "${logDest}"`
-      const pgOpts: string[] = []
+      const pgOpts: string[] = options.disableScheduledJobs
+        ? ['-c cron.launch_active_jobs=off']
+        : []
       if (port) pgOpts.push(`-p ${port}`)
       if (bindAddress) pgOpts.push(`-h ${bindAddress}`)
       if (pgOpts.length > 0) {
@@ -285,7 +288,9 @@ export class ProcessManager {
     }
 
     // Unix path - use spawn without shell
-    const pgOptions: string[] = []
+    const pgOptions: string[] = options.disableScheduledJobs
+      ? ['-c cron.launch_active_jobs=off']
+      : []
     if (port) {
       pgOptions.push(`-p ${port}`)
     }

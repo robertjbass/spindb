@@ -21,6 +21,7 @@ export type StartWithRetryOptions = {
   // hosting publishes a fixed port per container), a reassigned port is
   // unreachable, and persisting it breaks every later start.
   strictPort?: boolean
+  disableScheduledJobs?: boolean
   onPortChange?: (oldPort: number, newPort: number) => void
 }
 
@@ -55,7 +56,9 @@ export async function startWithRetry(
         port: config.port,
       })
 
-      await engine.start(config)
+      await engine.start(config, undefined, {
+        disableScheduledJobs: options.disableScheduledJobs,
+      })
 
       return {
         success: true,

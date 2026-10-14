@@ -34,6 +34,7 @@ spindb create mydb --start              # Create and start
 spindb create mydb --from backup.sql    # Create from backup
 spindb create mydb --show-deprecated    # Show deprecated versions in picker
 
+spindb start mydb --no-scheduled-jobs    # PostgreSQL: temporary start with jobs paused
 spindb start mydb                       # Start container (offers to download missing binaries on a TTY)
 spindb start mydb -f                    # Start (download missing binaries without asking)
 spindb start mydb --bind 0.0.0.0        # Listen on all interfaces, not just localhost (persisted)

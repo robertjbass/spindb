@@ -24,6 +24,11 @@ import {
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import {
+  configurePostgresCron,
+  persistPostgresSettings,
+  waitForCronPause,
+} from './cron-config'
+import {
   DROP_RETRY_DELAY_MS,
   buildDropDatabaseSql,
   buildTerminateConnectionsSql,
@@ -114,6 +119,39 @@ export function buildWindowsPsqlCommand(
   return cmd
 }
 
+// Matches the version in a binary directory name, keeping an optional
+// prerelease (alpha/beta/rc) and an optional pg_cron build revision suffix.
+export const POSTGRESQL_BIN_PATH_VERSION =
+  /postgresql-(\d+(?:\.\d+)*(?:-(?:alpha|beta|rc)\.\d+)?(?:-cron\.\d+)?)/
+
+// True for hostdb build revisions that bundle pg_cron (e.g. "18.6.0-cron.1").
+export function isCronBuildRevision(version: string): boolean {
+  return /-cron\.\d+$/.test(version.split('+')[0])
+}
+
+/**
+ * Newest installed same-major binary a plain (non pg_cron) container may be
+ * healed onto. pg_cron build revisions are skipped so a plain container is
+ * never silently repinned to one.
+ */
+export function findHealableBinaryForMajor(
+  majorVersion: string,
+  platform: string,
+  arch: string,
+): { version: string; path: string } | null {
+  const majorPrefix = `${majorVersion}.`
+  return (
+    paths
+      .findInstalledBinaries('postgresql', platform, arch)
+      .find(
+        (entry) =>
+          (entry.version.startsWith(majorPrefix) ||
+            entry.version === majorVersion) &&
+          !isCronBuildRevision(entry.version),
+      ) ?? null
+  )
+}
+
 export class PostgreSQLEngine extends BaseEngine {
   name = 'postgresql'
   displayName = 'PostgreSQL'
@@ -168,6 +206,10 @@ export class PostgreSQLEngine extends BaseEngine {
    * 2. If found, uses those and optionally updates the container config
    * 3. If not found, downloads the current supported version for that major
    *
+   * pg_cron build revisions (`-cron.N`) are excluded both ways: a cron-pinned
+   * container downloads its exact revision, and a plain container is never
+   * healed onto a cron revision.
+   *
    * @param version - The version from container config (e.g., "17.7.0")
    * @param containerName - Container name for config updates (optional)
    * @param onProgress - Progress callback for downloads
@@ -200,16 +242,22 @@ export class PostgreSQLEngine extends BaseEngine {
       }
     }
 
+    // A pg_cron build revision is never swapped for another binary: an
+    // opted-in database preloads pg_cron and cannot start without it. Download
+    // the pinned revision itself and leave the container config alone.
+    if (isCronBuildRevision(fullVersion)) {
+      onProgress?.({
+        stage: 'downloading',
+        message: `Binaries for PostgreSQL ${fullVersion} not found, downloading...`,
+      })
+      const binPath = await this.ensureBinaries(fullVersion, onProgress)
+      return { binPath, actualVersion: fullVersion, wasHealed: false }
+    }
+
     // Binaries don't exist - try to find same major version
     const majorVersion = fullVersion.split('.')[0]
 
-    // Check if we have any installed binaries for this major version
-    const installed = paths.findInstalledBinaryForMajor(
-      'postgresql',
-      majorVersion,
-      p,
-      a,
-    )
+    const installed = findHealableBinaryForMajor(majorVersion, p, a)
 
     if (installed) {
       // Found compatible binaries - verify they work
@@ -265,11 +313,10 @@ export class PostgreSQLEngine extends BaseEngine {
 
   async verifyBinary(binPath: string): Promise<boolean> {
     const { platform: p, arch: a } = this.getPlatformInfo()
-    // Extract version from path like "postgresql-17.7.0-darwin-arm64" or a
-    // prerelease path like "postgresql-19.0.0-beta.1-darwin-arm64".
-    const match = binPath.match(
-      /postgresql-(\d+(?:\.\d+)*(?:-(?:alpha|beta|rc)\.\d+)?)/,
-    )
+    // Extract version from path like "postgresql-17.7.0-darwin-arm64", a
+    // prerelease path like "postgresql-19.0.0-beta.1-darwin-arm64", or a
+    // pg_cron build revision like "postgresql-18.6.0-cron.1-linux-x64".
+    const match = binPath.match(POSTGRESQL_BIN_PATH_VERSION)
     if (!match) {
       throw new Error(
         `Could not extract PostgreSQL version from path: ${binPath}`,
@@ -359,21 +406,22 @@ export class PostgreSQLEngine extends BaseEngine {
       return true
     }
 
+    if (isCronBuildRevision(fullVersion)) {
+      return false
+    }
+
     // Check if any same-major version exists
     const majorVersion = fullVersion.split('.')[0]
-    const installed = paths.findInstalledBinaryForMajor(
-      'postgresql',
-      majorVersion,
-      p,
-      a,
-    )
-
-    return installed !== null
+    return findHealableBinaryForMajor(majorVersion, p, a) !== null
   }
 
   supportsOnlineBranch = true
 
   async prepareBranchedDataDir(container: ContainerConfig): Promise<void> {
+    await persistPostgresSettings(
+      paths.getContainerDataPath(container.name, { engine: this.name }),
+      { 'cron.launch_active_jobs': 'off' },
+    )
     await retargetPostgresBranchCredentials(container)
   }
 
@@ -461,6 +509,7 @@ export class PostgreSQLEngine extends BaseEngine {
   async start(
     container: ContainerConfig,
     onProgress?: ProgressCallback,
+    options: { disableScheduledJobs?: boolean } = {},
   ): Promise<{ port: number; connectionString: string }> {
     const { name, version, port } = container
 
@@ -469,6 +518,11 @@ export class PostgreSQLEngine extends BaseEngine {
       engine: this.name,
     })
     if (alreadyRunning) {
+      if (options.disableScheduledJobs) {
+        throw new Error(
+          'Stop PostgreSQL before starting with scheduled jobs disabled.',
+        )
+      }
       return {
         port,
         connectionString: this.getConnectionString(container),
@@ -495,6 +549,12 @@ export class PostgreSQLEngine extends BaseEngine {
     const logFile = paths.getContainerLogPath(name, { engine: this.name })
 
     await refreshOnlineBranchPaths(dataDir)
+    await configurePostgresCron({
+      binPath,
+      dataDir,
+      database: container.database || 'postgres',
+      onWarning: (message) => onProgress?.({ stage: 'info', message }),
+    })
 
     onProgress?.({ stage: 'starting', message: 'Starting PostgreSQL...' })
 
@@ -502,6 +562,7 @@ export class PostgreSQLEngine extends BaseEngine {
       port,
       logFile,
       bindAddress: container.bindAddress,
+      disableScheduledJobs: options.disableScheduledJobs,
     })
 
     return {
@@ -543,6 +604,29 @@ export class PostgreSQLEngine extends BaseEngine {
     return detectBackupFormat(filePath)
   }
 
+  async prepareRestore(container: ContainerConfig): Promise<void> {
+    const credentials = await loadCredentials(
+      container.name,
+      Engine.PostgreSQL,
+      getDefaultUsername(Engine.PostgreSQL),
+    )
+    const query = (sql: string) =>
+      this.executeQuery(container, sql, {
+        ...credentials,
+        database: 'postgres',
+      })
+    const result = await query(
+      "SELECT current_setting('cron.launch_active_jobs', true) AS enabled",
+    )
+    if (result.rows[0]?.enabled !== 'on') return
+    // cron.launch_active_jobs is a SIGHUP setting, so the pause is persisted
+    // and reloaded without a restart: --into-existing restores keep their live
+    // connections, including those to other databases on this server.
+    await query('ALTER SYSTEM SET cron.launch_active_jobs = off')
+    await query('SELECT pg_reload_conf()')
+    await waitForCronPause(query)
+  }
+
   async restore(
     container: ContainerConfig,
     backupPath: string,
@@ -556,6 +640,8 @@ export class PostgreSQLEngine extends BaseEngine {
       Engine.PostgreSQL,
       getDefaultUsername(Engine.PostgreSQL),
     )
+
+    await this.prepareRestore(container)
 
     // First create the database if it doesn't exist
     if (options.createDatabase !== false) {
