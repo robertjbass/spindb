@@ -12,6 +12,7 @@
 import { Platform, type Arch, type Engine } from '../types'
 import type { ReleaseType } from 'hostdb'
 import { logDebug } from './error-handler'
+import { assertVersionBuiltForPlatform } from './version-platforms'
 
 // Registry base URLs
 export const LAYERBASE_REGISTRY_BASE = 'https://registry.layerbase.host'
@@ -198,7 +199,9 @@ export type BuildHostdbUrlOptions = {
 }
 
 /**
- * Build a download URL for a hostdb release (low-level, no validation).
+ * Build a download URL for a hostdb release (low-level). The only validation
+ * is that a version whose hostdb entry lists its own `platforms` is built for
+ * `hostdbPlatform` (see core/version-platforms.ts).
  *
  * This is the core URL builder that all engines should use after validating
  * the platform against their own supported platform set.
@@ -212,6 +215,12 @@ export function buildHostdbUrl(
   options: BuildHostdbUrlOptions,
 ): string {
   const { version, hostdbPlatform, extension = 'tar.gz' } = options
+  // A version narrowed to other platforms (e.g. a Linux-only build revision)
+  // has no artifact here; fail with a clear message instead of a 404.
+  assertVersionBuiltForPlatform(engine, {
+    version,
+    platformKey: hostdbPlatform,
+  })
   const tag = `${engine}-${version}`
   const filename = `${engine}-${version}-${hostdbPlatform}.${extension}`
 

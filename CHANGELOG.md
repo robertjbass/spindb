@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `spindb start --no-scheduled-jobs` suppresses PostgreSQL jobs for that server process. Ordinary subsequent starts retain the persisted scheduling policy.
 - PostgreSQL copies keep schedule definitions paused. Restores stop active cron workers before replacement and leave scheduling paused for deliberate review and reactivation.
 
+### Fixed
+
+- **The per-start pg_cron preload probe can no longer fail `spindb start`.** Every PostgreSQL start runs `postgres -D <data> -C shared_preload_libraries` to see whether pg_cron is opted in. A failure or its 10s timeout used to fail the start, including for databases that never opted in. It is now logged at debug level and the start continues; the pg_cron marker and `postgresql.auto.conf` are left exactly as they were, so an opted-in database is never disabled by a failed probe.
+- **Versions hostdb does not build for this platform are hidden and fail early.** A hostdb version entry can narrow its own `platforms` (the `-cron.1` PostgreSQL build revisions are Linux x64 only; PostgreSQL 19 betas have no Windows build). The interactive `spindb create` version picker now hides those versions on other platforms, and drops a major line with nothing left, instead of offering a choice that can only 404. Building a download URL for such a version (`getBinaryUrl`, `spindb engines download`, `create --db-version`) now throws `<engine> <version> is not built for <platform> (built for: ...)` with how to pick another version. Versions without a version-level list, versions unknown to the bundled hostdb data, and retired platforms whose artifact still exists are unaffected (`core/version-platforms.ts`).
+- README names the URL-safe artifact revisions `18.6.0-cron.1` and `19.0.0-beta.3-cron.1`.
+
+### Testing
+
+- `tests/unit/postgresql-cron-config.test.ts` covers a failing preload probe: start configuration returns without throwing and leaves the marker and `postgresql.auto.conf` untouched.
+- `tests/unit/version-platforms.test.ts` covers version-level platform filtering for the picker map, the early download-URL error, retired platforms, unknown versions, and (when the bundled hostdb data includes them) the Linux-only `-cron.1` revisions.
+
 ## [0.71.3] - 2026-10-08
 
 ### Fixed

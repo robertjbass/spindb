@@ -100,8 +100,8 @@ spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dro
 ```
 
 pg_cron is opt-in. Selecting an artifact that contains it does not enable it.
-The candidate immutable Linux x64 artifacts are `18.6.0+cron.1` and
-`19.0.0-beta.3+cron.1`; the upstream PostgreSQL versions are unchanged.
+The candidate immutable Linux x64 artifacts are `18.6.0-cron.1` and
+`19.0.0-beta.3-cron.1`; the upstream PostgreSQL versions are unchanged.
 To enable it, add `pg_cron` to your existing `shared_preload_libraries` setting,
 restart the database, then run `CREATE EXTENSION pg_cron` in the database named by
 `SHOW cron.database_name`. Preserve other libraries when changing the list.

@@ -82,7 +82,19 @@ export async function configurePostgresCron(options: {
     return stdout.trim()
   }
 
-  const preloads = await setting('shared_preload_libraries')
+  // This probe runs on every start, including for databases that never opted
+  // in, so a failure or timeout must not block the start. State is left as
+  // is: an opted-in database keeps its marker and auto.conf untouched.
+  let preloads: string
+  try {
+    preloads = await setting('shared_preload_libraries')
+  } catch (error) {
+    logDebug('pg_cron preload probe failed; starting without changes', {
+      dataDir,
+      error: String(error),
+    })
+    return false
+  }
   const libraries = preloads.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
   function isCron(library: string): boolean {
     return /(?:^|\/)pg_cron(?:\.so)?$/.test(
