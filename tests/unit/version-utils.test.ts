@@ -191,21 +191,21 @@ describe('compareVersions prerelease ordering', () => {
 describe('artifact build metadata', () => {
   it('accepts the upstream prerelease without weakening channel matching', () => {
     assert(
-      prereleaseVersionMatches('19.0.0-beta.3+cron.1', '19beta3'),
+      prereleaseVersionMatches('19.0.0-beta.3-cron.1', '19beta3'),
       'same beta matches',
     )
     assert(
-      !prereleaseVersionMatches('19.0.0-beta.3+cron.1', '19beta2'),
+      !prereleaseVersionMatches('19.0.0-beta.3-cron.1', '19beta2'),
       'different beta rejected',
     )
     assert(
-      !prereleaseVersionMatches('19.0.0-beta.3+cron.1', '19rc3'),
+      !prereleaseVersionMatches('19.0.0-beta.3-cron.1', '19rc3'),
       'different channel rejected',
     )
     assert(
-      isPrereleaseVersion('19.0.0-beta.3+cron.1'),
+      isPrereleaseVersion('19.0.0-beta.3-cron.1'),
       'beta classification retained',
     )
-    assert(!isPrereleaseVersion('18.6.0+cron.1'), 'GA classification retained')
+    assert(!isPrereleaseVersion('18.6.0-cron.1'), 'GA classification retained')
   })
 })

@@ -388,8 +388,8 @@ describe('PostgreSQL artifact revision verification', () => {
       )
       try {
         for (const [expected, reported] of [
-          ['18.6.0+cron.1', '18.6'],
-          ['19.0.0-beta.3+cron.1', '19beta3'],
+          ['18.6.0-cron.1', '18.6'],
+          ['19.0.0-beta.3-cron.1', '19beta3'],
         ]) {
           await writeFile(
             join(root, 'bin', 'postgres'),
@@ -418,7 +418,7 @@ describe('PostgreSQL artifact revision verification', () => {
         let rejected = false
         try {
           await postgresqlBinaryManager.verify(
-            '19.0.0-beta.3+cron.1',
+            '19.0.0-beta.3-cron.1',
             Platform.Darwin,
             Arch.ARM64,
           )
