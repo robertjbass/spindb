@@ -105,7 +105,11 @@ and 19.0.0-beta.3; SpinDB checks the installed binary itself, not its version
 name. Binaries are cached per version, so a copy downloaded before that build
 gained pg_cron lacks it: stop the databases on that version and run
 `spindb engines download postgresql 18.6.0 --refresh` to replace the cached
-copy (the output reports `pg_cron: included` or `not included`). Databases
+copy (the output reports `pg_cron: included` or `not included`). `--refresh`
+is for a local SpinDB binary store only: it renames and deletes the version's
+directory under any server using it, so never run it against a store shared
+with other containers or hosts (for example a read-only bind-mounted shared
+store). Databases
 created on the earlier separate `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`
 builds keep using them; those builds are no longer offered for new databases.
 To enable it, add `pg_cron` to your existing `shared_preload_libraries` setting,

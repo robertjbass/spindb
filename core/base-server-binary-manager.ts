@@ -26,7 +26,10 @@ import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
 import { fetchWithRegistryFallback } from './hostdb-client'
 import { prereleaseVersionMatches } from './version-utils'
-import { binariesNotFoundMessage } from './version-resolver'
+import {
+  BinaryVersionNotFoundError,
+  binariesNotFoundMessage,
+} from './version-resolver'
 import {
   type Engine,
   Platform,
@@ -227,7 +230,7 @@ export abstract class BaseServerBinaryManager {
 
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error(
+          throw new BinaryVersionNotFoundError(
             binariesNotFoundMessage({
               engine: this.config.engineName,
               displayName: this.config.displayName,

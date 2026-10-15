@@ -1,5 +1,6 @@
 import { describe, it, before, after, afterEach } from 'node:test'
-import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'fs/promises'
+import { existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { paths } from '../../config/paths'
@@ -10,6 +11,8 @@ import {
   POSTGRESQL_BIN_PATH_VERSION,
   isCronBuildRevision,
 } from '../../engines/postgresql'
+import { CRON_MARKER_FILE } from '../../engines/postgresql/cron-config'
+import { BinaryVersionNotFoundError } from '../../core/version-resolver'
 import type { ContainerConfig } from '../../types'
 import { assert, assertDeepEqual, assertEqual } from '../utils/assertions'
 
@@ -233,25 +236,95 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
     assertDeepEqual(configUpdates, [], 'container config untouched')
   })
 
-  it('falls back to the major default when an opted-in pinned version cannot be downloaded', async () => {
+  it('falls back to the major default only when the registry has no opted-in pinned version (404)', async () => {
     await dataDir('opted-in-db', true)
     stub([])
     postgresqlEngine.ensureBinaries = async (version: string) => {
       downloads.push(version)
-      if (version === '18.5.0') throw new Error('404')
+      if (version === '18.5.0')
+        throw new BinaryVersionNotFoundError(
+          'PostgreSQL 18.5.0 binaries not found (404).',
+        )
       return dirFor(version)
     }
+    const progress: string[] = []
 
     const result = await postgresqlEngine.getBinaryPathWithFallback(
       '18.5.0',
       'opted-in-db',
+      (event) => progress.push(event.message),
     )
 
     assertEqual(downloads[0], '18.5.0', 'pinned version tried first')
     assertEqual(downloads.length, 2, 'then the major default')
     assert(!downloads[1].includes('-cron.'), 'never a legacy cron revision')
     assertEqual(result.wasHealed, true, 'healed onto the major default')
+    assert(
+      progress.some((message) => message.includes('not found (404)')),
+      `notice carries the registry error: ${progress.join(' | ')}`,
+    )
   })
+
+  for (const [label, failure] of [
+    ['a network failure', new Error('fetch failed: ECONNRESET')],
+    [
+      'a timeout',
+      new Error(
+        'Download timed out after 5 minutes. Check your network connection and try again.',
+      ),
+    ],
+    [
+      'a full disk',
+      Object.assign(new Error('ENOSPC: no space left on device, write'), {
+        code: 'ENOSPC',
+      }),
+    ],
+    [
+      'a read-only bin directory',
+      Object.assign(new Error('EROFS: read-only file system, mkdir'), {
+        code: 'EROFS',
+      }),
+    ],
+  ] as const) {
+    it(`keeps an opted-in pin and rethrows on ${label} instead of falling back`, async () => {
+      await dataDir('opted-in-db', true)
+      const dir = join(root, 'data', 'opted-in-db')
+      await writeFile(join(dir, CRON_MARKER_FILE), '{}')
+      stub([])
+      postgresqlEngine.ensureBinaries = async (version: string) => {
+        downloads.push(version)
+        throw failure
+      }
+
+      let error: unknown
+      try {
+        await postgresqlEngine.getBinaryPathWithFallback(
+          '18.5.0',
+          'opted-in-db',
+        )
+      } catch (caught) {
+        error = caught
+      }
+
+      assert(error instanceof Error, 'the failure is rethrown')
+      assert(
+        error.message.includes(failure.message),
+        `original error text kept: ${error.message}`,
+      )
+      assert(
+        error.message.includes('spindb engines download postgresql 18.5.0'),
+        'actionable retry command',
+      )
+      assertDeepEqual(downloads, ['18.5.0'], 'no major default download')
+      assertDeepEqual(configUpdates, [], 'container not repinned')
+      assert(existsSync(join(dir, CRON_MARKER_FILE)), 'pg_cron marker kept')
+      assertEqual(
+        await readFile(join(dir, 'postgresql.auto.conf'), 'utf8'),
+        "shared_preload_libraries = 'pg_cron'\n",
+        'pg_cron preload untouched',
+      )
+    })
+  }
 
   it('heals a plain container that did not opt in exactly as before, pg_cron or not', async () => {
     await install('18.4.0')

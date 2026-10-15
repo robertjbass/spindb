@@ -16,6 +16,7 @@
  */
 
 import { getDatabaseEntry } from 'hostdb'
+import { BinaryVersionNotFoundError } from './version-resolver'
 
 /**
  * The platforms a version is explicitly built for, or null when the version
@@ -76,7 +77,7 @@ export function assertVersionBuiltForPlatform(
   const { version, platformKey } = options
   if (isVersionBuiltForPlatform(engine, version, platformKey)) return
   const platforms = getVersionPlatformList(engine, version) ?? []
-  throw new Error(
+  throw new BinaryVersionNotFoundError(
     `${engine} ${version} is not built for ${platformKey} (built for: ${platforms.join(', ')}). ` +
       `Pick a different version: the interactive \`spindb create\` picker lists only versions built for this platform, ` +
       `or pass a major version such as \`--db-version ${version.split('.')[0]}\` to get the default build. ` +

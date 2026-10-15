@@ -15,6 +15,7 @@ import {
 } from '../../core/platform-service'
 import { paths } from '../../config/paths'
 import { defaults, getEngineDefaults } from '../../config/defaults'
+import { BinaryVersionNotFoundError } from '../../core/version-resolver'
 import { getBinaryUrl } from './binary-urls'
 import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
 import {
@@ -294,6 +295,11 @@ export class PostgreSQLEngine extends BaseEngine {
     // An opted-in database gets its own pinned version back rather than the
     // newest build for the major, which may lack pg_cron. The pin is kept; if
     // the download still lacks pg_cron, start reports how to recover.
+    // Falling back to the major default repins the database and disables
+    // pg_cron, so it happens only when the registry has no such version. Any
+    // other failure (network, timeout, full disk, read-only store) is rethrown
+    // with the pin untouched so a retry can succeed.
+    let pinnedNotFound: string | undefined
     if (requirePgCron) {
       try {
         onProgress?.({
@@ -303,9 +309,20 @@ export class PostgreSQLEngine extends BaseEngine {
         const binPath = await this.ensureBinaries(fullVersion, onProgress)
         return { binPath, actualVersion: fullVersion, wasHealed: false }
       } catch (error) {
-        logDebug('Pinned PostgreSQL download failed; using the major default', {
+        const reason = error instanceof Error ? error.message : String(error)
+        if (!(error instanceof BinaryVersionNotFoundError)) {
+          throw new Error(
+            `Could not download PostgreSQL ${fullVersion}, the version this database is pinned to (it uses pg_cron): ${reason}. ` +
+              `The database was left on ${fullVersion} with pg_cron unchanged. ` +
+              `Fix the cause (network, disk space, or a writable SpinDB bin directory) and run the command again, ` +
+              `or run \`spindb engines download postgresql ${fullVersion}\` first.`,
+            { cause: error },
+          )
+        }
+        pinnedNotFound = reason
+        logDebug('Pinned PostgreSQL version is not in the registry', {
           version: fullVersion,
-          error: String(error),
+          error: reason,
         })
       }
     }
@@ -321,7 +338,9 @@ export class PostgreSQLEngine extends BaseEngine {
 
     onProgress?.({
       stage: 'downloading',
-      message: `Binaries for PostgreSQL ${fullVersion} not found, downloading ${targetVersion}...`,
+      message: pinnedNotFound
+        ? `PostgreSQL ${fullVersion} is not available from the registry (${pinnedNotFound}), downloading ${targetVersion}...`
+        : `Binaries for PostgreSQL ${fullVersion} not found, downloading ${targetVersion}...`,
     })
 
     const binPath = await this.ensureBinaries(targetVersion, onProgress)
