@@ -315,7 +315,18 @@ Key fixes from the E2E stabilization session:
 
 `engines/postgresql/cron-config.ts` acts only after the user explicitly includes
 pg_cron in the effective preload list. Artifact availability alone never enables
-it. Do not create extension catalogs on start/wake. Never persist a merged preload
+it. pg_cron ships inside the standard hostdb builds (Linux x64); support is a
+capability check on the binary (`hasPgCron`), never a version-name check. The
+`-cron.N` revisions (`isCronBuildRevision`) are a compatibility shim only: never
+offered, never healed onto, and a container already pinned to one stays on it.
+Healing an opted-in container (`isPostgresCronOptedIn`) only picks binaries with
+pg_cron. `spindb engines download postgresql <v> --refresh` re-fetches a version
+hostdb rebuilt in place (cache is by directory; refused while a database on
+that version runs; local stores only: never on a store shared with other
+containers/hosts, since it renames and deletes the directory under them).
+Self-heal for an opted-in container falls back from its pinned version to the
+major default only on `BinaryVersionNotFoundError` (registry 404 / not built
+for the platform); any other download failure is rethrown with the pin kept. Do not create extension catalogs on start/wake. Never persist a merged preload
 on ordinary starts: this shadows future postgresql.conf edits. The sole recovery
 exception removes pg_cron from the effective list when its artifact is missing,
 then persists launch_active_jobs=off; keep all other libraries and catalog data.

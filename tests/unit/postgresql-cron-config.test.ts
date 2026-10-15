@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   configurePostgresCron,
+  hasPgCron,
+  isPostgresCronOptedIn,
   mergeCronPreload,
+  missingCronReason,
   persistPostgresSettings,
   updatePostgresSettings,
 } from '../../engines/postgresql/cron-config'
@@ -108,9 +111,13 @@ esac
         binPath: root,
         dataDir: root,
         database: 'postgres',
+        version: '18.6.0',
         onWarning: (message) => warnings.push(message),
       })
-      assert.match(warnings[1], /installed binary lacks pg_cron/)
+      assert.match(
+        warnings[1],
+        /PostgreSQL 18\.6\.0 binary at .* does not include pg_cron/,
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -153,3 +160,79 @@ test(
     }
   },
 )
+
+test('pg_cron support is detected from the binary contents, not its version name', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cron-probe-files-'))
+  try {
+    assert.equal(hasPgCron(root), false)
+    await mkdir(join(root, 'lib'), { recursive: true })
+    await mkdir(join(root, 'share/extension'), { recursive: true })
+    await writeFile(join(root, 'lib/pg_cron.so'), '')
+    assert.equal(hasPgCron(root), false, 'library without extension files')
+    await writeFile(join(root, 'share/extension/pg_cron--1.0.sql'), '')
+    assert.equal(hasPgCron(root), false, 'install script without control file')
+    await rm(join(root, 'share/extension/pg_cron--1.0.sql'))
+    await writeFile(join(root, 'share/extension/pg_cron.control'), '')
+    assert.equal(
+      hasPgCron(root),
+      true,
+      'library plus control file, whatever the script names',
+    )
+    await rm(join(root, 'share/extension/pg_cron.control'))
+    assert.equal(hasPgCron(root), false, 'control file is required')
+    await writeFile(join(root, 'share/extension/pg_cron.control'), '')
+    await rm(join(root, 'lib/pg_cron.so'))
+    await writeFile(join(root, 'lib/pg_cron.dylib'), '')
+    assert.equal(hasPgCron(root), true, 'macOS library suffix')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a binary without pg_cron gets platform-specific recovery instructions', () => {
+  const linux = missingCronReason('/bin/postgresql-18.6.0-linux-x64', {
+    version: '18.6.0',
+    platformKey: 'linux-x64',
+  })
+  assert.match(
+    linux,
+    /PostgreSQL 18\.6\.0 binary at \/bin\/postgresql-18\.6\.0-linux-x64/,
+  )
+  assert.match(linux, /spindb engines download postgresql 18\.6\.0 --refresh/)
+  const mac = missingCronReason('/bin/postgresql-18.6.0-darwin-arm64', {
+    version: '18.6.0',
+    platformKey: 'darwin-arm64',
+  })
+  assert.match(mac, /only in its Linux x64 PostgreSQL builds, not darwin-arm64/)
+  assert.doesNotMatch(mac, /--refresh/)
+})
+
+test('opt-in is read from the marker or the configured preload list', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cron-opt-in-'))
+  try {
+    assert.equal(await isPostgresCronOptedIn(root), false, 'empty data dir')
+    await writeFile(
+      join(root, 'postgresql.conf'),
+      "#shared_preload_libraries = 'pg_cron'\nshared_preload_libraries = 'pg_stat_statements'\n",
+    )
+    assert.equal(await isPostgresCronOptedIn(root), false, 'commented line')
+    await writeFile(
+      join(root, 'postgresql.conf'),
+      'shared_preload_libraries = \'pg_stat_statements,"pg_cron"\'\n',
+    )
+    assert.equal(await isPostgresCronOptedIn(root), true, 'postgresql.conf')
+    await writeFile(
+      join(root, 'postgresql.auto.conf'),
+      "shared_preload_libraries = 'pg_cron'\nshared_preload_libraries = 'pg_stat_statements'\n",
+    )
+    assert.equal(
+      await isPostgresCronOptedIn(root),
+      false,
+      'last postgresql.auto.conf assignment wins over postgresql.conf',
+    )
+    await writeFile(join(root, '.spindb-pg-cron.json'), '{}')
+    assert.equal(await isPostgresCronOptedIn(root), true, 'marker')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

@@ -16,6 +16,20 @@ import { isShorthandVersion } from '../../core/version-utils'
 import { getEngineMetadata } from '../helpers'
 import { isV1 as isFerretDBv1 } from '../../engines/ferretdb/version-maps'
 
+/**
+ * Print notices the engine reported while starting. Under --json, stdout holds
+ * only the JSON result, so notices go to stderr; they never fail the start.
+ */
+export function reportStartNotices(
+  notices: string[],
+  options: { json?: boolean },
+): void {
+  for (const notice of notices) {
+    if (options.json) console.error(notice)
+    else console.log(uiWarning(notice))
+  }
+}
+
 export const startCommand = new Command('start')
   .description('Start a container')
   .argument('[name]', 'Container name')
@@ -298,11 +312,13 @@ export const startCommand = new Command('start')
           : createSpinner(`Starting ${containerName}...`)
         spinner?.start()
 
+        const notices: string[] = []
         const result = await startWithRetry({
           engine,
           config,
           strictPort: options.strictPort,
           disableScheduledJobs: options.scheduledJobs === false,
+          onNotice: (message) => notices.push(message),
           onPortChange: (oldPort, newPort) => {
             if (spinner) {
               spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
@@ -329,6 +345,7 @@ export const startCommand = new Command('start')
         } else {
           spinner?.succeed(`Container "${containerName}" started`)
         }
+        reportStartNotices(notices, { json: options.json })
 
         // Ensure user's database exists (may already exist, which is fine).
         // Skip engines that don't support multiple databases (libsql, sqlite,

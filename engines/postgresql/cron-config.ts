@@ -57,6 +57,90 @@ export async function persistPostgresSettings(
   }
 }
 
+export const CRON_MARKER_FILE = '.spindb-pg-cron.json'
+
+const CRON_LIBRARY_FILES = ['pg_cron.so', 'pg_cron.dylib', 'pg_cron.dll']
+const CRON_CONTROL_FILE = 'pg_cron.control'
+
+/**
+ * Whether a PostgreSQL binary directory contains pg_cron: its shared library
+ * plus the extension control file. This is the capability check; the version
+ * name of the binary says nothing about it, because hostdb ships pg_cron
+ * inside standard builds on some platforms only, and a version cached before
+ * its rebuild lacks it. Specific install/upgrade script names are not checked:
+ * they change between pg_cron releases, and a missing script already fails
+ * CREATE EXTENSION with PostgreSQL's own clear error.
+ */
+export function hasPgCron(binPath: string): boolean {
+  return (
+    CRON_LIBRARY_FILES.some((file) => existsSync(join(binPath, 'lib', file))) &&
+    existsSync(join(binPath, 'share', 'extension', CRON_CONTROL_FILE))
+  )
+}
+
+/**
+ * Actionable reason used when an opted-in database's binary lacks pg_cron.
+ * hostdb builds pg_cron into its Linux x64 PostgreSQL builds only, so a
+ * refresh is suggested there and nowhere else.
+ */
+export function missingCronReason(
+  binPath: string,
+  options: { version?: string; platformKey?: string } = {},
+): string {
+  const { version } = options
+  const platformKey =
+    options.platformKey ?? `${process.platform}-${process.arch}`
+  const label = version ? `PostgreSQL ${version}` : 'PostgreSQL'
+  const missing = `the ${label} binary at ${binPath} does not include pg_cron`
+  if (platformKey !== 'linux-x64') {
+    return `${missing}. hostdb includes pg_cron only in its Linux x64 PostgreSQL builds, not ${platformKey}`
+  }
+  return (
+    `${missing}. A version downloaded before hostdb added pg_cron to its build stays cached without it: ` +
+    `stop the database and run \`spindb engines download postgresql ${version ?? '<version>'} --refresh\` to replace the cached copy with the current build ` +
+    `(if the refreshed build still lacks pg_cron, that version does not ship it)`
+  )
+}
+
+function splitPreloads(value: string): string[] {
+  return value.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+}
+
+function isCron(library: string): boolean {
+  return /(?:^|\/)pg_cron(?:\.so)?$/.test(library.trim().replace(/^"|"$/g, ''))
+}
+
+function lastConfiguredPreloads(content: string): string | null {
+  let value: string | null = null
+  for (const line of content.split(/\r?\n/)) {
+    const match =
+      /^\s*shared_preload_libraries\s*=?\s*(?:'((?:[^']|'')*)'|([^\s#]*))/i.exec(
+        line,
+      )
+    if (match) value = (match[1] ?? match[2] ?? '').replace(/''/g, "'")
+  }
+  return value
+}
+
+/**
+ * Whether a stopped data directory is opted into pg_cron, read from files
+ * without running a binary: the marker SpinDB writes once pg_cron is
+ * configured, or pg_cron in the configured preload list (postgresql.auto.conf
+ * takes precedence over postgresql.conf, as in PostgreSQL). Used to keep an
+ * opted-in database off binaries that lack pg_cron when its own binary is
+ * missing; the per-start probe in configurePostgresCron stays authoritative.
+ */
+export async function isPostgresCronOptedIn(dataDir: string): Promise<boolean> {
+  if (existsSync(join(dataDir, CRON_MARKER_FILE))) return true
+  for (const file of ['postgresql.auto.conf', 'postgresql.conf']) {
+    const path = join(dataDir, file)
+    if (!existsSync(path)) continue
+    const preloads = lastConfiguredPreloads(await readFile(path, 'utf8'))
+    if (preloads !== null) return splitPreloads(preloads).some(isCron)
+  }
+  return false
+}
+
 /**
  * After `ALTER SYSTEM SET cron.launch_active_jobs = off` and pg_reload_conf(),
  * wait until the pause is in effect: new sessions report it and no pg_cron job
@@ -100,16 +184,13 @@ export async function configurePostgresCron(options: {
   binPath: string
   dataDir: string
   database: string
+  /** Version of the binary at binPath, used in the refresh instructions. */
+  version?: string
   onWarning?: (message: string) => void
 }): Promise<boolean> {
   const { binPath, dataDir, database } = options
-  const markerPath = join(dataDir, '.spindb-pg-cron.json')
-  const hasCronFiles = !(
-    !existsSync(join(binPath, 'lib', 'pg_cron.so')) ||
-    !existsSync(join(binPath, 'share', 'extension', 'pg_cron.control')) ||
-    !existsSync(join(binPath, 'share', 'extension', 'pg_cron--1.0.sql')) ||
-    !existsSync(join(binPath, 'share', 'extension', 'pg_cron--1.5--1.6.sql'))
-  )
+  const markerPath = join(dataDir, CRON_MARKER_FILE)
+  const hasCronFiles = hasPgCron(binPath)
   if (!existsSync(join(binPath, 'bin', 'postgres'))) return false
 
   async function setting(key: string): Promise<string> {
@@ -134,12 +215,7 @@ export async function configurePostgresCron(options: {
     })
     return false
   }
-  const libraries = preloads.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-  function isCron(library: string): boolean {
-    return /(?:^|\/)pg_cron(?:\.so)?$/.test(
-      library.trim().replace(/^"|"$/g, ''),
-    )
-  }
+  const libraries = splitPreloads(preloads)
   if (!libraries.some(isCron)) {
     await rm(markerPath, { force: true })
     return false
@@ -157,7 +233,8 @@ export async function configurePostgresCron(options: {
     options.onWarning?.(message)
     return false
   }
-  if (!hasCronFiles) return disableCron('the installed binary lacks pg_cron')
+  if (!hasCronFiles)
+    return disableCron(missingCronReason(binPath, { version: options.version }))
   const workers = Number(await setting('max_worker_processes'))
   if (!Number.isInteger(workers) || workers < 2) {
     return disableCron('max_worker_processes must be at least 2')

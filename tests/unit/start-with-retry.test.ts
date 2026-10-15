@@ -278,3 +278,32 @@ describe('strictPort', () => {
     assertEqual(config.port, 10264, 'Config port should be untouched')
   })
 })
+
+describe('startWithRetry notices', () => {
+  it('forwards only info-stage progress from engine.start as notices', async () => {
+    const { startWithRetry } = await import('../../core/start-with-retry')
+    const notices: string[] = []
+    const engine = {
+      name: 'postgresql',
+      start: async (
+        _config: unknown,
+        onProgress?: (progress: { stage: string; message: string }) => void,
+      ) => {
+        onProgress?.({ stage: 'downloading', message: 'not a notice' })
+        onProgress?.({ stage: 'info', message: 'pg_cron disabled: reason' })
+        return { port: 5432, connectionString: '' }
+      },
+    }
+    const result = await startWithRetry({
+      engine: engine as unknown as Parameters<
+        typeof startWithRetry
+      >[0]['engine'],
+      config: { name: 'db', engine: 'postgresql', port: 5432 } as Parameters<
+        typeof startWithRetry
+      >[0]['config'],
+      onNotice: (message) => notices.push(message),
+    })
+    assert(result.success, 'started')
+    assertEqual(notices.join('|'), 'pg_cron disabled: reason', 'info only')
+  })
+})
