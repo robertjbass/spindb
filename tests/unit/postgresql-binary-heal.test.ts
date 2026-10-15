@@ -217,7 +217,7 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
     )
   })
 
-  it('downloads instead of healing an opted-in container onto a binary without pg_cron', async () => {
+  it('re-downloads the pinned version of an opted-in container instead of healing onto a binary without pg_cron', async () => {
     await install('18.4.0')
     await dataDir('opted-in-db', true)
     stub(['18.4.0'])
@@ -227,9 +227,30 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
       'opted-in-db',
     )
 
-    assert(result.actualVersion !== '18.4.0', 'not healed onto 18.4.0')
-    assertEqual(downloads.length, 1, 'downloaded the current major version')
-    assert(!downloads[0].includes('-cron.'), 'never a legacy cron revision')
+    assertDeepEqual(downloads, ['18.5.0'], 'downloaded the pinned version')
+    assertEqual(result.actualVersion, '18.5.0', 'pin kept')
+    assertEqual(result.wasHealed, false, 'not healed')
+    assertDeepEqual(configUpdates, [], 'container config untouched')
+  })
+
+  it('falls back to the major default when an opted-in pinned version cannot be downloaded', async () => {
+    await dataDir('opted-in-db', true)
+    stub([])
+    postgresqlEngine.ensureBinaries = async (version: string) => {
+      downloads.push(version)
+      if (version === '18.5.0') throw new Error('404')
+      return dirFor(version)
+    }
+
+    const result = await postgresqlEngine.getBinaryPathWithFallback(
+      '18.5.0',
+      'opted-in-db',
+    )
+
+    assertEqual(downloads[0], '18.5.0', 'pinned version tried first')
+    assertEqual(downloads.length, 2, 'then the major default')
+    assert(!downloads[1].includes('-cron.'), 'never a legacy cron revision')
+    assertEqual(result.wasHealed, true, 'healed onto the major default')
   })
 
   it('heals a plain container that did not opt in exactly as before, pg_cron or not', async () => {

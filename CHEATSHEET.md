@@ -839,7 +839,7 @@ spindb engines download postgresql 18.6.0 --refresh   # Only if the cached copy 
 spindb run mydb -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_cron'"  # Keep any other libraries in the list
 spindb stop mydb && spindb start mydb
 spindb run mydb -c "SHOW cron.database_name"         # The database that holds the cron catalog
-spindb run mydb -d <that database> -c "CREATE EXTENSION pg_cron"
+spindb run mydb -d mydb -c "CREATE EXTENSION pg_cron"  # Replace mydb with the name SHOW returned
 ```
 
 If the binary lacks pg_cron, start removes only that preload, pauses jobs, and

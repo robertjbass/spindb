@@ -61,6 +61,7 @@ import {
   assertValidUsername,
   SpinDBError,
   ErrorCodes,
+  logDebug,
 } from '../../core/error-handler'
 import { parseCSVToQueryResult } from '../../core/query-parser'
 import { Engine } from '../../types'
@@ -287,6 +288,25 @@ export class PostgreSQLEngine extends BaseEngine {
           actualVersion: installed.version,
           wasHealed: true,
         }
+      }
+    }
+
+    // An opted-in database gets its own pinned version back rather than the
+    // newest build for the major, which may lack pg_cron. The pin is kept; if
+    // the download still lacks pg_cron, start reports how to recover.
+    if (requirePgCron) {
+      try {
+        onProgress?.({
+          stage: 'downloading',
+          message: `Binaries for PostgreSQL ${fullVersion} not found, downloading...`,
+        })
+        const binPath = await this.ensureBinaries(fullVersion, onProgress)
+        return { binPath, actualVersion: fullVersion, wasHealed: false }
+      } catch (error) {
+        logDebug('Pinned PostgreSQL download failed; using the major default', {
+          version: fullVersion,
+          error: String(error),
+        })
       }
     }
 

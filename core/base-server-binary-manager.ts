@@ -555,8 +555,14 @@ export abstract class BaseServerBinaryManager {
       await rm(previous, { recursive: true, force: true })
       return refreshed
     } catch (error) {
-      await rm(binPath, { recursive: true, force: true })
-      await rename(previous, binPath)
+      try {
+        await rm(binPath, { recursive: true, force: true })
+        await rename(previous, binPath)
+      } catch (restoreError) {
+        throw new Error(
+          `Refresh of ${this.config.displayName} ${fullVersion} failed (${(error as Error).message}) and restoring the previous copy also failed (${(restoreError as Error).message}). The previous copy is at ${previous}; move it back to ${binPath} to restore it.`,
+        )
+      }
       throw error
     }
   }
