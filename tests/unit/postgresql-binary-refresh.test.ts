@@ -8,6 +8,7 @@ import { paths } from '../../config/paths'
 import '../../core/container-manager'
 import { postgresqlEngine } from '../../engines/postgresql'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
+import { withoutCronBuildRevisions } from '../../engines/postgresql/hostdb-releases'
 import { Platform, type Arch } from '../../types'
 import { assert, assertDeepEqual, assertEqual } from '../utils/assertions'
 
@@ -125,7 +126,21 @@ describe('PostgreSQL binary refresh', () => {
 })
 
 describe('PostgreSQL offered versions', () => {
-  it('never offers a legacy -cron.N build revision', async () => {
+  it('hides -cron.N build revisions and keeps the plain versions', () => {
+    const offered = withoutCronBuildRevisions({
+      '18': ['18.6.0-cron.1', '18.6.0', '18.5.0'],
+      '19': ['19.0.0-beta.3-cron.1', '19.0.0-beta.3'],
+      '20': ['20.0.0-beta.1-cron.1'],
+    })
+
+    assertDeepEqual(
+      offered,
+      { '18': ['18.6.0', '18.5.0'], '19': ['19.0.0-beta.3'] },
+      'cron revisions hidden, plain versions kept, empty major dropped',
+    )
+  })
+
+  it('never offers a legacy -cron.N build revision from the live list', async () => {
     const versions = await postgresqlEngine.fetchAvailableVersions()
     const all = Object.values(versions).flat()
     assert(all.length > 0, 'versions are offered')

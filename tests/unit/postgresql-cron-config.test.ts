@@ -169,13 +169,15 @@ test('pg_cron support is detected from the binary contents, not its version name
     await mkdir(join(root, 'share/extension'), { recursive: true })
     await writeFile(join(root, 'lib/pg_cron.so'), '')
     assert.equal(hasPgCron(root), false, 'library without extension files')
-    for (const file of [
-      'pg_cron.control',
-      'pg_cron--1.0.sql',
-      'pg_cron--1.5--1.6.sql',
-    ])
-      await writeFile(join(root, 'share/extension', file), '')
-    assert.equal(hasPgCron(root), true)
+    await writeFile(join(root, 'share/extension/pg_cron--1.0.sql'), '')
+    assert.equal(hasPgCron(root), false, 'install script without control file')
+    await rm(join(root, 'share/extension/pg_cron--1.0.sql'))
+    await writeFile(join(root, 'share/extension/pg_cron.control'), '')
+    assert.equal(
+      hasPgCron(root),
+      true,
+      'library plus control file, whatever the script names',
+    )
     await rm(join(root, 'share/extension/pg_cron.control'))
     assert.equal(hasPgCron(root), false, 'control file is required')
     await writeFile(join(root, 'share/extension/pg_cron.control'), '')

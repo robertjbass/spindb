@@ -844,6 +844,10 @@ spindb run mydb -d mydb -c "CREATE EXTENSION pg_cron"  # Replace mydb with the n
 
 If the binary lacks pg_cron, start removes only that preload, pauses jobs, and
 prints how to fix it (on Linux x64, `--refresh` with the database stopped).
+`--refresh` is for a local SpinDB binary store only. It renames and deletes the
+version's directory under any server using it, so never run it against a store
+shared by other containers or hosts (for example a read-only bind-mounted
+shared store).
 Copies, branches and restores keep jobs paused until you run
 `ALTER SYSTEM SET cron.launch_active_jobs = on` and `SELECT pg_reload_conf()`.
 Databases created on the earlier `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`

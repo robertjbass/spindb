@@ -32,7 +32,18 @@ const hostdbReleases = createHostdbReleases({
 export async function fetchAvailableVersions(): Promise<
   Record<string, string[]>
 > {
-  const grouped = await hostdbReleases.fetchAvailableVersions()
+  return withoutCronBuildRevisions(
+    await hostdbReleases.fetchAvailableVersions(),
+  )
+}
+
+/**
+ * Drop legacy `-cron.N` build revisions from a major -> versions map, and any
+ * major left with no versions.
+ */
+export function withoutCronBuildRevisions(
+  grouped: Record<string, string[]>,
+): Record<string, string[]> {
   const result: Record<string, string[]> = {}
   for (const [major, versions] of Object.entries(grouped)) {
     const offered = versions.filter((version) => !isCronBuildRevision(version))

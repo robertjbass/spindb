@@ -60,25 +60,21 @@ export async function persistPostgresSettings(
 export const CRON_MARKER_FILE = '.spindb-pg-cron.json'
 
 const CRON_LIBRARY_FILES = ['pg_cron.so', 'pg_cron.dylib', 'pg_cron.dll']
-const CRON_EXTENSION_FILES = [
-  'pg_cron.control',
-  'pg_cron--1.0.sql',
-  'pg_cron--1.5--1.6.sql',
-]
+const CRON_CONTROL_FILE = 'pg_cron.control'
 
 /**
  * Whether a PostgreSQL binary directory contains pg_cron: its shared library
- * plus the extension control and install scripts. This is the capability
- * check; the version name of the binary says nothing about it, because hostdb
- * ships pg_cron inside standard builds on some platforms only, and a version
- * cached before its rebuild lacks it.
+ * plus the extension control file. This is the capability check; the version
+ * name of the binary says nothing about it, because hostdb ships pg_cron
+ * inside standard builds on some platforms only, and a version cached before
+ * its rebuild lacks it. Specific install/upgrade script names are not checked:
+ * they change between pg_cron releases, and a missing script already fails
+ * CREATE EXTENSION with PostgreSQL's own clear error.
  */
 export function hasPgCron(binPath: string): boolean {
   return (
     CRON_LIBRARY_FILES.some((file) => existsSync(join(binPath, 'lib', file))) &&
-    CRON_EXTENSION_FILES.every((file) =>
-      existsSync(join(binPath, 'share', 'extension', file)),
-    )
+    existsSync(join(binPath, 'share', 'extension', CRON_CONTROL_FILE))
   )
 }
 

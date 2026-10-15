@@ -81,6 +81,20 @@ export function formatAvailableVersions(engine: string): string {
 }
 
 /**
+ * Thrown when the registry has no artifact for a version on this platform: a
+ * download 404, or a version whose hostdb entry is built for other platforms
+ * only. Callers that may substitute another version (self-heal) key on this
+ * type, so a network failure, timeout or full disk is never mistaken for a
+ * version that does not exist.
+ */
+export class BinaryVersionNotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BinaryVersionNotFoundError'
+  }
+}
+
+/**
  * The message every binary manager shows when a download 404s, including what
  * IS available so the user can correct the version without a second command.
  */

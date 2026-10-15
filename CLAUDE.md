@@ -322,7 +322,11 @@ offered, never healed onto, and a container already pinned to one stays on it.
 Healing an opted-in container (`isPostgresCronOptedIn`) only picks binaries with
 pg_cron. `spindb engines download postgresql <v> --refresh` re-fetches a version
 hostdb rebuilt in place (cache is by directory; refused while a database on
-that version runs). Do not create extension catalogs on start/wake. Never persist a merged preload
+that version runs; local stores only: never on a store shared with other
+containers/hosts, since it renames and deletes the directory under them).
+Self-heal for an opted-in container falls back from its pinned version to the
+major default only on `BinaryVersionNotFoundError` (registry 404 / not built
+for the platform); any other download failure is rethrown with the pin kept. Do not create extension catalogs on start/wake. Never persist a merged preload
 on ordinary starts: this shadows future postgresql.conf edits. The sole recovery
 exception removes pg_cron from the effective list when its artifact is missing,
 then persists launch_active_jobs=off; keep all other libraries and catalog data.

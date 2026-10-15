@@ -23,7 +23,10 @@ import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
 import { compareVersions } from './version-utils'
-import { binariesNotFoundMessage } from './version-resolver'
+import {
+  BinaryVersionNotFoundError,
+  binariesNotFoundMessage,
+} from './version-resolver'
 import { fetchWithRegistryFallback } from './hostdb-client'
 import {
   type Engine,
@@ -221,7 +224,7 @@ export abstract class BaseEmbeddedBinaryManager {
 
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error(
+          throw new BinaryVersionNotFoundError(
             binariesNotFoundMessage({
               engine: this.config.engineName,
               displayName: this.config.displayName,

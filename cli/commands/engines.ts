@@ -741,7 +741,7 @@ enginesCommand
 type Refresh = { refresh?: boolean }
 
 // A refresh briefly removes the version's directory, so nothing may run from it.
-async function assertPostgresVersionStopped(
+export async function assertPostgresVersionStopped(
   fullVersion: string,
 ): Promise<void> {
   const running = (await containerManager.list()).filter(
@@ -763,7 +763,7 @@ enginesCommand
   .description('Download/install engine binaries')
   .option(
     '--refresh',
-    'PostgreSQL only: replace an already downloaded version with the current hostdb build (stop databases on that version first)',
+    'PostgreSQL only: replace an already downloaded version with the current hostdb build (stop databases on that version first). Local SpinDB binary store only: never run it against a store shared by other containers or hosts, since it renames and deletes the directory under any server using it',
   )
   .action(async (engineName: string, version?: string, opts: Refresh = {}) => {
     try {
