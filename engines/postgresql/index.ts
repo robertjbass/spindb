@@ -20,11 +20,14 @@ import { fetchAvailableVersions, getLatestVersion } from './hostdb-releases'
 import {
   SUPPORTED_MAJOR_VERSIONS,
   POSTGRESQL_VERSION_MAP,
+  isCronBuildRevision,
   normalizeVersion,
 } from './version-maps'
 import { detectBackupFormat, restoreBackup } from './restore'
 import {
   configurePostgresCron,
+  hasPgCron,
+  isPostgresCronOptedIn,
   persistPostgresSettings,
   waitForCronPause,
 } from './cron-config'
@@ -58,6 +61,7 @@ import {
   assertValidUsername,
   SpinDBError,
   ErrorCodes,
+  logDebug,
 } from '../../core/error-handler'
 import { parseCSVToQueryResult } from '../../core/query-parser'
 import { Engine } from '../../types'
@@ -119,25 +123,26 @@ export function buildWindowsPsqlCommand(
   return cmd
 }
 
+export { isCronBuildRevision }
+
 // Matches the version in a binary directory name, keeping an optional
-// prerelease (alpha/beta/rc) and an optional pg_cron build revision suffix.
+// prerelease (alpha/beta/rc) and an optional legacy pg_cron build revision
+// suffix.
 export const POSTGRESQL_BIN_PATH_VERSION =
   /postgresql-(\d+(?:\.\d+)*(?:-(?:alpha|beta|rc)\.\d+)?(?:-cron\.\d+)?)/
 
-// True for hostdb build revisions that bundle pg_cron (e.g. "18.6.0-cron.1").
-export function isCronBuildRevision(version: string): boolean {
-  return /-cron\.\d+$/.test(version.split('+')[0])
-}
-
 /**
- * Newest installed same-major binary a plain (non pg_cron) container may be
- * healed onto. pg_cron build revisions are skipped so a plain container is
- * never silently repinned to one.
+ * Newest installed same-major binary a container whose own binary is missing
+ * may be healed onto. Legacy -cron.N build revisions are never candidates.
+ * With requirePgCron (the database is opted into pg_cron), only binaries that
+ * contain pg_cron qualify, so healing never strips an opted-in database's
+ * scheduler.
  */
 export function findHealableBinaryForMajor(
   majorVersion: string,
   platform: string,
   arch: string,
+  options: { requirePgCron?: boolean } = {},
 ): { version: string; path: string } | null {
   const majorPrefix = `${majorVersion}.`
   return (
@@ -147,7 +152,8 @@ export function findHealableBinaryForMajor(
         (entry) =>
           (entry.version.startsWith(majorPrefix) ||
             entry.version === majorVersion) &&
-          !isCronBuildRevision(entry.version),
+          !isCronBuildRevision(entry.version) &&
+          (!options.requirePgCron || hasPgCron(entry.path)),
       ) ?? null
   )
 }
@@ -206,9 +212,10 @@ export class PostgreSQLEngine extends BaseEngine {
    * 2. If found, uses those and optionally updates the container config
    * 3. If not found, downloads the current supported version for that major
    *
-   * pg_cron build revisions (`-cron.N`) are excluded both ways: a cron-pinned
-   * container downloads its exact revision, and a plain container is never
-   * healed onto a cron revision.
+   * Legacy pg_cron build revisions (`-cron.N`) are excluded both ways: a
+   * container pinned to one downloads its exact revision, and no other
+   * container is healed onto one. A container opted into pg_cron is healed
+   * only onto a binary that contains pg_cron (capability, not version name).
    *
    * @param version - The version from container config (e.g., "17.7.0")
    * @param containerName - Container name for config updates (optional)
@@ -257,7 +264,14 @@ export class PostgreSQLEngine extends BaseEngine {
     // Binaries don't exist - try to find same major version
     const majorVersion = fullVersion.split('.')[0]
 
-    const installed = findHealableBinaryForMajor(majorVersion, p, a)
+    const requirePgCron =
+      containerName !== undefined &&
+      (await isPostgresCronOptedIn(
+        paths.getContainerDataPath(containerName, { engine: this.name }),
+      ))
+    const installed = findHealableBinaryForMajor(majorVersion, p, a, {
+      requirePgCron,
+    })
 
     if (installed) {
       // Found compatible binaries - verify they work
@@ -274,6 +288,25 @@ export class PostgreSQLEngine extends BaseEngine {
           actualVersion: installed.version,
           wasHealed: true,
         }
+      }
+    }
+
+    // An opted-in database gets its own pinned version back rather than the
+    // newest build for the major, which may lack pg_cron. The pin is kept; if
+    // the download still lacks pg_cron, start reports how to recover.
+    if (requirePgCron) {
+      try {
+        onProgress?.({
+          stage: 'downloading',
+          message: `Binaries for PostgreSQL ${fullVersion} not found, downloading...`,
+        })
+        const binPath = await this.ensureBinaries(fullVersion, onProgress)
+        return { binPath, actualVersion: fullVersion, wasHealed: false }
+      } catch (error) {
+        logDebug('Pinned PostgreSQL download failed; using the major default', {
+          version: fullVersion,
+          error: String(error),
+        })
       }
     }
 
@@ -530,11 +563,8 @@ export class PostgreSQLEngine extends BaseEngine {
     }
 
     // Get binary path with self-healing fallback
-    const { binPath, wasHealed } = await this.getBinaryPathWithFallback(
-      version,
-      name,
-      onProgress,
-    )
+    const { binPath, actualVersion, wasHealed } =
+      await this.getBinaryPathWithFallback(version, name, onProgress)
 
     if (wasHealed) {
       onProgress?.({
@@ -553,6 +583,7 @@ export class PostgreSQLEngine extends BaseEngine {
       binPath,
       dataDir,
       database: container.database || 'postgres',
+      version: actualVersion,
       onWarning: (message) => onProgress?.({ stage: 'info', message }),
     })
 

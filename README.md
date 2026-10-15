@@ -99,9 +99,15 @@ spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/ro
 spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dropped by default)
 ```
 
-pg_cron is opt-in. Selecting an artifact that contains it does not enable it.
-The immutable Linux x64 artifacts (hostdb 0.44.0+) are `18.6.0-cron.1` and
-`19.0.0-beta.3-cron.1`; the upstream PostgreSQL versions are unchanged.
+pg_cron is opt-in. A binary that contains it does not enable it.
+hostdb includes pg_cron in the standard Linux x64 builds of PostgreSQL 18.6.0
+and 19.0.0-beta.3; SpinDB checks the installed binary itself, not its version
+name. Binaries are cached per version, so a copy downloaded before that build
+gained pg_cron lacks it: stop the databases on that version and run
+`spindb engines download postgresql 18.6.0 --refresh` to replace the cached
+copy (the output reports `pg_cron: included` or `not included`). Databases
+created on the earlier separate `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`
+builds keep using them; those builds are no longer offered for new databases.
 To enable it, add `pg_cron` to your existing `shared_preload_libraries` setting,
 restart the database, then run `CREATE EXTENSION pg_cron` in the database named by
 `SHOW cron.database_name`. Preserve other libraries when changing the list.
@@ -109,8 +115,8 @@ SpinDB configures background workers only after this explicit preload opt-in.
 It never copies the effective preload list into `postgresql.auto.conf` on normal
 starts. PostgreSQL's own `ALTER SYSTEM` precedence still applies if you set the
 list there; use `ALTER SYSTEM RESET shared_preload_libraries` before managing it
-in `postgresql.conf` instead. If an older artifact lacks pg_cron or max_worker_processes is below 2, SpinDB reports the reason and removes
-only that preload and pauses jobs; catalog rows remain, and re-enabling is explicit.
+in `postgresql.conf` instead. If the installed binary lacks pg_cron or max_worker_processes is below 2, SpinDB reports the reason (with the refresh command when a newer build may include it), removes
+only that preload and pauses jobs so the database still starts; catalog rows remain, and re-enabling is explicit.
 Copied databases and restored schedules stay paused. Inspect `cron.job`, then
 explicitly reactivate with `ALTER SYSTEM SET cron.launch_active_jobs = on` and
 `SELECT pg_reload_conf()`. A restore with cron enabled pauses scheduling the same

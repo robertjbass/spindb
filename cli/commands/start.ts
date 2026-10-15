@@ -298,11 +298,13 @@ export const startCommand = new Command('start')
           : createSpinner(`Starting ${containerName}...`)
         spinner?.start()
 
+        const notices: string[] = []
         const result = await startWithRetry({
           engine,
           config,
           strictPort: options.strictPort,
           disableScheduledJobs: options.scheduledJobs === false,
+          onNotice: (message) => notices.push(message),
           onPortChange: (oldPort, newPort) => {
             if (spinner) {
               spinner.text = `Port ${oldPort} was in use, retrying with port ${newPort}...`
@@ -328,6 +330,11 @@ export const startCommand = new Command('start')
           )
         } else {
           spinner?.succeed(`Container "${containerName}" started`)
+        }
+        // JSON output stays on stdout; notices go to stderr there.
+        for (const notice of notices) {
+          if (options.json) console.error(notice)
+          else console.log(uiWarning(notice))
         }
 
         // Ensure user's database exists (may already exist, which is fine).

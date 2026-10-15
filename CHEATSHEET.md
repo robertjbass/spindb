@@ -820,11 +820,34 @@ spindb logs mydb --editor               # Open in $EDITOR
 spindb engines                          # List downloaded engines
 spindb engines --json                   # List engines as JSON
 spindb engines download postgresql 18   # Download specific version
+spindb engines download postgresql 18.6.0 --refresh  # Replace a cached copy with the current build
 spindb engines delete postgresql 17     # Delete engine version (prompts)
 spindb engines delete postgresql 17 -y  # Delete engine version (skip prompt)
 spindb deps check                       # Check required tools
 spindb deps install                     # Install missing tools
 ```
+
+### PostgreSQL pg_cron (opt-in)
+
+hostdb includes pg_cron in its standard Linux x64 builds of PostgreSQL 18.6.0
+and 19.0.0-beta.3. SpinDB checks the installed binary for pg_cron, never the
+version name, and does nothing until you opt in:
+
+```bash
+spindb engines download postgresql 18.6.0 --refresh   # Only if the cached copy predates pg_cron
+                                                      # (prints "pg_cron: included" when it has it)
+spindb run mydb -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_cron'"  # Keep any other libraries in the list
+spindb stop mydb && spindb start mydb
+spindb run mydb -c "SHOW cron.database_name"         # The database that holds the cron catalog
+spindb run mydb -d mydb -c "CREATE EXTENSION pg_cron"  # Replace mydb with the name SHOW returned
+```
+
+If the binary lacks pg_cron, start removes only that preload, pauses jobs, and
+prints how to fix it (on Linux x64, `--refresh` with the database stopped).
+Copies, branches and restores keep jobs paused until you run
+`ALTER SYSTEM SET cron.launch_active_jobs = on` and `SELECT pg_reload_conf()`.
+Databases created on the earlier `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`
+builds keep using them; those builds are no longer offered.
 
 ## Network & Authentication
 

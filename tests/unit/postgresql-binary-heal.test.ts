@@ -15,6 +15,7 @@ import { assert, assertDeepEqual, assertEqual } from '../utils/assertions'
 
 const realGetBinaryPath = paths.getBinaryPath.bind(paths)
 const realFindInstalledBinaries = paths.findInstalledBinaries.bind(paths)
+const realGetContainerDataPath = paths.getContainerDataPath.bind(paths)
 const realUpdateConfig = containerManager.updateConfig.bind(containerManager)
 const realEnsureBinaries =
   postgresqlEngine.ensureBinaries.bind(postgresqlEngine)
@@ -37,6 +38,7 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
   afterEach(() => {
     paths.getBinaryPath = realGetBinaryPath
     paths.findInstalledBinaries = realFindInstalledBinaries
+    paths.getContainerDataPath = realGetContainerDataPath
     containerManager.updateConfig = realUpdateConfig
     postgresqlEngine.ensureBinaries = realEnsureBinaries
   })
@@ -51,10 +53,35 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
     await writeFile(join(binDir, `pg_ctl${ext}`), 'fake pg_ctl')
   }
 
+  async function installWithCron(version: string): Promise<void> {
+    await install(version)
+    const dir = dirFor(version)
+    await mkdir(join(dir, 'lib'), { recursive: true })
+    await mkdir(join(dir, 'share', 'extension'), { recursive: true })
+    await writeFile(join(dir, 'lib', 'pg_cron.so'), '')
+    for (const file of [
+      'pg_cron.control',
+      'pg_cron--1.0.sql',
+      'pg_cron--1.5--1.6.sql',
+    ])
+      await writeFile(join(dir, 'share', 'extension', file), '')
+  }
+
+  // A data directory per container; opted-in ones preload pg_cron.
+  async function dataDir(name: string, optedIn: boolean): Promise<void> {
+    const dir = join(root, 'data', name)
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'postgresql.auto.conf'),
+      optedIn ? "shared_preload_libraries = 'pg_cron'\n" : '',
+    )
+  }
+
   function stub(installedVersions: string[]): void {
     configUpdates = []
     downloads = []
     paths.getBinaryPath = (options) => dirFor(options.version)
+    paths.getContainerDataPath = (name: string) => join(root, 'data', name)
     paths.findInstalledBinaries = () =>
       installedVersions.map((version) => ({ version, path: dirFor(version) }))
     containerManager.updateConfig = async (name, updates) => {
@@ -168,6 +195,76 @@ describe('PostgreSQL binary self-heal and pg_cron build revisions', () => {
       true,
       'exact cron revision is startable',
     )
+  })
+
+  it('heals an opted-in plain container only onto a binary that contains pg_cron', async () => {
+    await install('18.4.0')
+    await installWithCron('18.1.0')
+    await dataDir('opted-in-db', true)
+    stub(['18.4.0', '18.1.0'])
+
+    const result = await postgresqlEngine.getBinaryPathWithFallback(
+      '18.5.0',
+      'opted-in-db',
+    )
+
+    assertEqual(result.actualVersion, '18.1.0', 'skipped 18.4.0 (no pg_cron)')
+    assertDeepEqual(downloads, [], 'nothing downloaded')
+    assertDeepEqual(
+      configUpdates,
+      [{ name: 'opted-in-db', version: '18.1.0' }],
+      'config repinned to the pg_cron-capable binary',
+    )
+  })
+
+  it('re-downloads the pinned version of an opted-in container instead of healing onto a binary without pg_cron', async () => {
+    await install('18.4.0')
+    await dataDir('opted-in-db', true)
+    stub(['18.4.0'])
+
+    const result = await postgresqlEngine.getBinaryPathWithFallback(
+      '18.5.0',
+      'opted-in-db',
+    )
+
+    assertDeepEqual(downloads, ['18.5.0'], 'downloaded the pinned version')
+    assertEqual(result.actualVersion, '18.5.0', 'pin kept')
+    assertEqual(result.wasHealed, false, 'not healed')
+    assertDeepEqual(configUpdates, [], 'container config untouched')
+  })
+
+  it('falls back to the major default when an opted-in pinned version cannot be downloaded', async () => {
+    await dataDir('opted-in-db', true)
+    stub([])
+    postgresqlEngine.ensureBinaries = async (version: string) => {
+      downloads.push(version)
+      if (version === '18.5.0') throw new Error('404')
+      return dirFor(version)
+    }
+
+    const result = await postgresqlEngine.getBinaryPathWithFallback(
+      '18.5.0',
+      'opted-in-db',
+    )
+
+    assertEqual(downloads[0], '18.5.0', 'pinned version tried first')
+    assertEqual(downloads.length, 2, 'then the major default')
+    assert(!downloads[1].includes('-cron.'), 'never a legacy cron revision')
+    assertEqual(result.wasHealed, true, 'healed onto the major default')
+  })
+
+  it('heals a plain container that did not opt in exactly as before, pg_cron or not', async () => {
+    await install('18.4.0')
+    await dataDir('plain-db', false)
+    stub(['18.4.0'])
+
+    const result = await postgresqlEngine.getBinaryPathWithFallback(
+      '18.5.0',
+      'plain-db',
+    )
+
+    assertEqual(result.actualVersion, '18.4.0', 'healed onto 18.4.0')
+    assertDeepEqual(downloads, [], 'nothing downloaded')
   })
 
   it('identifies cron build revisions', () => {

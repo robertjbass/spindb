@@ -11,6 +11,7 @@ import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
+import { hasPgCron } from '../../engines/postgresql/cron-config'
 import { paths } from '../../config/paths'
 import { getEngineDefaults, type AuxPort } from '../../config/defaults'
 import {
@@ -737,27 +738,79 @@ enginesCommand
     },
   )
 
+type Refresh = { refresh?: boolean }
+
+// A refresh briefly removes the version's directory, so nothing may run from it.
+async function assertPostgresVersionStopped(
+  fullVersion: string,
+): Promise<void> {
+  const running = (await containerManager.list()).filter(
+    (container) =>
+      container.engine === Engine.PostgreSQL &&
+      container.status === 'running' &&
+      postgresqlBinaryManager.getFullVersion(container.version) === fullVersion,
+  )
+  if (running.length === 0) return
+  const names = running.map((container) => container.name)
+  throw new Error(
+    `PostgreSQL ${fullVersion} is in use by running database(s): ${names.join(', ')}. Stop them first (${names.map((name) => `spindb stop ${name}`).join('; ')}), then run the refresh again.`,
+  )
+}
+
 // Download subcommand
 enginesCommand
   .command('download <engine> [version]')
   .description('Download/install engine binaries')
-  .action(async (engineName: string, version?: string) => {
+  .option(
+    '--refresh',
+    'PostgreSQL only: replace an already downloaded version with the current hostdb build (stop databases on that version first)',
+  )
+  .action(async (engineName: string, version?: string, opts: Refresh = {}) => {
     try {
       const normalizedEngine = engineName.toLowerCase()
+      const isPostgres = ['postgresql', 'pg', 'postgres'].includes(
+        normalizedEngine,
+      )
+
+      if (opts.refresh && !isPostgres) {
+        console.error(
+          uiError(
+            '--refresh is supported for PostgreSQL only. To re-download another engine, run `spindb engines delete <engine> <version>` and then download it again.',
+          ),
+        )
+        process.exit(1)
+      }
 
       // PostgreSQL: download binaries
-      if (['postgresql', 'pg', 'postgres'].includes(normalizedEngine)) {
+      if (isPostgres) {
         if (!version) {
           console.error(uiError('PostgreSQL requires a version (e.g., 17)'))
           process.exit(1)
         }
 
         const engine = getEngine(Engine.PostgreSQL)
+        const { platform, arch } = platformService.getPlatformInfo()
+        const fullVersion = postgresqlBinaryManager.getFullVersion(version)
+
+        if (opts.refresh) {
+          await assertPostgresVersionStopped(fullVersion)
+        }
 
         const spinner = createSpinner(
           `Checking PostgreSQL ${version} binaries...`,
         )
         spinner.start()
+
+        if (opts.refresh) {
+          await postgresqlBinaryManager.refresh(
+            version,
+            platform,
+            arch,
+            ({ message }) => {
+              spinner.text = message
+            },
+          )
+        }
 
         // Always call ensureBinaries - it handles cached binaries gracefully
         // and registers client tool paths in config (needed for dependency checks)
@@ -771,15 +824,15 @@ enginesCommand
           }
         })
 
-        if (wasCached) {
+        if (opts.refresh) {
+          spinner.succeed(`PostgreSQL ${version} binaries refreshed`)
+        } else if (wasCached) {
           spinner.succeed(`PostgreSQL ${version} binaries already installed`)
         } else {
           spinner.succeed(`PostgreSQL ${version} binaries downloaded`)
         }
 
         // Show the path for reference
-        const { platform, arch } = platformService.getPlatformInfo()
-        const fullVersion = postgresqlBinaryManager.getFullVersion(version)
         const binPath = paths.getBinaryPath({
           engine: 'postgresql',
           version: fullVersion,
@@ -787,6 +840,11 @@ enginesCommand
           arch,
         })
         console.log(chalk.gray(`  Location: ${binPath}`))
+        console.log(
+          chalk.gray(
+            `  pg_cron: ${hasPgCron(binPath) ? 'included' : 'not included'}`,
+          ),
+        )
 
         // Check for bundled client tools and install missing ones
         await checkAndInstallClientTools('postgresql', binPath)
