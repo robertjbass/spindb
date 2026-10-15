@@ -22,6 +22,9 @@ export type StartWithRetryOptions = {
   // unreachable, and persisting it breaks every later start.
   strictPort?: boolean
   disableScheduledJobs?: boolean
+  // Notices the engine reports while starting (stage 'info'), such as
+  // PostgreSQL disabling pg_cron because the binary lacks it.
+  onNotice?: (message: string) => void
   onPortChange?: (oldPort: number, newPort: number) => void
 }
 
@@ -56,9 +59,18 @@ export async function startWithRetry(
         port: config.port,
       })
 
-      await engine.start(config, undefined, {
-        disableScheduledJobs: options.disableScheduledJobs,
-      })
+      const { onNotice } = options
+      await engine.start(
+        config,
+        onNotice
+          ? ({ stage, message }) => {
+              if (stage === 'info') onNotice(message)
+            }
+          : undefined,
+        {
+          disableScheduledJobs: options.disableScheduledJobs,
+        },
+      )
 
       return {
         success: true,

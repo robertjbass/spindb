@@ -32,3 +32,15 @@ export function normalizeVersion(version: string): string {
   )
   return version
 }
+
+/**
+ * True for the legacy hostdb build revisions that bundled pg_cron separately
+ * (e.g. "18.6.0-cron.1", hostdb 0.44.0, spindb 0.72.0). pg_cron now ships
+ * inside the standard builds and support is detected from the binary itself
+ * (hasPgCron). This name check remains only as a compatibility shim: databases
+ * created on a -cron.N revision stay pinned to it, and no other database is
+ * ever moved onto one or offered one.
+ */
+export function isCronBuildRevision(version: string): boolean {
+  return /-cron\.\d+$/.test(version.split('+')[0])
+}

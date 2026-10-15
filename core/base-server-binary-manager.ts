@@ -15,6 +15,7 @@
  * To extend this class, implement the abstract methods that define engine-specific behavior.
  */
 
+import { randomUUID } from 'crypto'
 import { createWriteStream, existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
@@ -512,6 +513,52 @@ export abstract class BaseServerBinaryManager {
     }
 
     return await this.download(version, platform, arch, onProgress)
+  }
+
+  /**
+   * Replace an installed version with a fresh download of the same version.
+   *
+   * Binaries are cached by directory, so ensureInstalled() never notices when
+   * hostdb republishes a version in place (for example PostgreSQL 18.6.0
+   * rebuilt to include pg_cron). The cached copy is moved aside, the version
+   * is downloaded and verified, and only then is the old copy deleted; any
+   * failure puts the old copy back, so a failed refresh leaves the cache as it
+   * was. Callers must make sure nothing is running from this version, since
+   * its directory is briefly absent.
+   */
+  async refresh(
+    version: string,
+    platform: Platform,
+    arch: Arch,
+    onProgress?: ProgressCallback,
+  ): Promise<string> {
+    const fullVersion = this.getFullVersion(version)
+    const binPath = paths.getBinaryPath({
+      engine: this.config.engineName,
+      version: fullVersion,
+      platform,
+      arch,
+    })
+    if (!existsSync(binPath)) {
+      return await this.download(version, platform, arch, onProgress)
+    }
+
+    // Same directory as binPath, so the moves are renames on one filesystem.
+    // The temp- prefix keeps it out of installed-binary listings.
+    const previous = join(
+      paths.bin,
+      `temp-refresh-${this.config.engineName}-${fullVersion}-${platform}-${arch}-${randomUUID()}`,
+    )
+    await rename(binPath, previous)
+    try {
+      const refreshed = await this.download(version, platform, arch, onProgress)
+      await rm(previous, { recursive: true, force: true })
+      return refreshed
+    } catch (error) {
+      await rm(binPath, { recursive: true, force: true })
+      await rename(previous, binPath)
+      throw error
+    }
   }
 
   /**
