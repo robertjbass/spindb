@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 
 - `tests/unit/libsql-sqld-args.test.ts`: every sqld start carries `--checkpoint-interval-s` with a positive value, plus the listen address, data path and JWT key handling.
-- Local load against sqld 0.24.32 (benchmark reconstruction with 15 s client abandonment, and plain 128-writer stress): without the flag writes wedged in 3 of 7 reconstructions and 7 of 7 stress runs; with it, none wedged across 21 reconstructions and 15 stress runs, the first write after load succeeded at once, and every acknowledged insert was present.
+- Local load against sqld 0.24.32 (benchmark reconstruction with 15 s client abandonment, and plain 128-writer stress): without the flag writes wedged in 4 of 10 reconstructions and in 13 of 13 stress runs (including runs with only 16 writers); with it, none wedged across 21 reconstructions and 24 stress runs, the first write after load succeeded at once, and every acknowledged insert was present.
 
 ## [0.73.0] - 2026-10-15
 
