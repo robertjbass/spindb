@@ -30,6 +30,7 @@ import {
   restoreBackup,
 } from './restore'
 import { createBackup } from './backup'
+import { buildSqldArgs } from './sqld-args'
 import { libsqlQuery, hranaValueToJs, libsqlApiRequest } from './api-client'
 import {
   Engine,
@@ -293,19 +294,19 @@ export class LibSQLEngine extends BaseEngine {
     onProgress?.({ stage: 'starting', message: 'Starting libSQL...' })
 
     const bindAddr = container.bindAddress ?? '127.0.0.1'
-    const args = [
-      '--http-listen-addr',
-      `${bindAddr}:${port}`,
-      '--db-path',
-      dbPath,
-    ]
 
     // If a JWT key file exists, enable JWT authentication
     const jwtKeyPath = join(containerDir, JWT_KEY_FILE)
-    if (existsSync(jwtKeyPath)) {
-      args.push('--auth-jwt-key-file', jwtKeyPath)
+    const hasJwtKey = existsSync(jwtKeyPath)
+    if (hasJwtKey) {
       logDebug(`JWT auth enabled via key file: ${jwtKeyPath}`)
     }
+    const args = buildSqldArgs({
+      bindAddress: bindAddr,
+      port,
+      dbPath,
+      jwtKeyPath: hasJwtKey ? jwtKeyPath : undefined,
+    })
 
     logDebug(`Starting sqld with args: ${args.join(' ')}`)
 

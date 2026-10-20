@@ -972,7 +972,7 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **TypeDB:** Uses gRPC protocol. Default credentials: admin/password.
 > **InfluxDB:** REST API only. Databases created implicitly on first write. No authentication in local dev mode.
 > **Weaviate:** REST/GraphQL API on HTTP port, gRPC on port+1. No authentication in local dev mode.
-> **LibSQL:** HTTP API (Hrana protocol). Single database per instance ('main'). JWT auth via `spindb users create`. macOS/Linux only.
+> **LibSQL:** HTTP API (Hrana protocol). Single database per instance ('main'). JWT auth via `spindb users create`. macOS/Linux only. sqld runs with `--checkpoint-interval-s 60` (WAL truncated every minute; writes may get `SQLITE_BUSY` while a checkpoint runs, so retry it).
 > **TigerBeetle:** Custom binary protocol (no URI scheme). Single binary serves as both server and REPL client.
 
 ## Export to Docker
