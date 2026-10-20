@@ -90,8 +90,10 @@ http://127.0.0.1:{port}
 ### Start Command
 
 ```bash
-sqld --http-listen-addr {bind}:{port} --db-path {dataDir}/data.db
+sqld --http-listen-addr {bind}:{port} --db-path {dataDir}/data.db --checkpoint-interval-s 60 [--auth-jwt-key-file {containerDir}/jwt-key.pem]
 ```
+
+Arguments are built in `sqld-args.ts`. See "Checkpoint interval" below for why `--checkpoint-interval-s` is always passed.
 
 ### Server Process Management
 
@@ -252,6 +254,16 @@ sqld supports JWT authentication via Ed25519 key pairs. Tokens include a 10-year
 ### 6. SQL Restore Skips Transaction Control
 
 When restoring from SQL dumps, `BEGIN TRANSACTION`, `COMMIT`, and `ROLLBACK` statements are skipped because sqld handles transactions differently via the Hrana protocol.
+
+### 7. Checkpoint Interval (Write Lock-Up in sqld 0.24.32)
+
+sqld is always started with `--checkpoint-interval-s 60`. With sqld's default frame-count auto-checkpoint, a burst of concurrent writes could leave a departed writer at the head of sqld's write-lock scheduler (`connection_manager.rs` `acquire()` returns `SQLITE_BUSY` during a PASSIVE auto-checkpoint without leaving the write queue). After that every write and checkpoint waits forever while `/health` and reads still answer, until the stuck requests use up the 128 admission permits and every request gets `429 Timed out while opening database connection`. The flag turns SQLite auto-checkpoint off and checkpoints every 60 s in TRUNCATE mode, a path that clears the write queue before it runs.
+
+What to expect with it:
+
+- **WAL size is bounded by one interval of writes.** `dbs/default/data-wal` grows until the next checkpoint truncates it to zero, roughly 20 KB per single-row commit on an indexed table: about 150 MB for a minute at 125 commits/s. It counts toward disk usage and is copied by file-level backups and branches (SQLite replays it on open). An idle database checkpoints in microseconds.
+- **Writes can get `SQLITE_BUSY` during a checkpoint.** While the checkpoint holds the write lock, new writes fail at once with `SQLITE_BUSY` and queued writes with `SQLITE_BUSY_SNAPSHOT` (sqld sets no busy handler and rejects `PRAGMA busy_timeout`). Measured locally: about 0.2% of writes at 128 concurrent writers, a few per checkpoint at low concurrency. A client that keeps a read transaction open makes the checkpoint wait up to 5 s for it, and writes fail for that time. Retry `SQLITE_BUSY` in the client.
+- Clients cannot start a checkpoint themselves: sqld rejects `PRAGMA wal_checkpoint` and setting `wal_autocheckpoint`.
 
 ## License
 
