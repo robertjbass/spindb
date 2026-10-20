@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **libSQL no longer locks up all writes after a burst of concurrent writes.** sqld (libsql-server 0.24.32) is now always started with `--checkpoint-interval-s 60` (`engines/libsql/sqld-args.ts`). With the default frame-count auto-checkpoint, a writer already queued for the write lock could wake while another connection's PASSIVE auto-checkpoint held it, return `SQLITE_BUSY` and leave a stale entry in sqld's write queue. The scheduler later handed the lock to that departed writer and never took it back, so every later write and checkpoint waited forever (spinning on CPU) while `/health` stayed 200; requests stuck that way held sqld's admission permits, so once 128 were stuck even reads got `429 Timed out while opening database connection`. Reproduced locally with a burst of 128 concurrent single-row inserts. The flag sets SQLite's auto-checkpoint to 0 and checkpoints from a timer in TRUNCATE mode, a path that removes every queued writer from the queue before it checkpoints. Takes effect on the next start of each libSQL database.
+
+### Testing
+
+- `tests/unit/libsql-sqld-args.test.ts`: every sqld start carries `--checkpoint-interval-s` with a positive value, plus the listen address, data path and JWT key handling.
+
 ## [0.73.0] - 2026-10-15
 
 ### Changed
