@@ -753,6 +753,7 @@ export class ContainerManager {
         ...sourceConfig,
         name: newName,
         database: filePath,
+        databases: [filePath],
       }
     }
 

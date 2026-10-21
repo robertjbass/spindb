@@ -98,6 +98,7 @@ describe('DuckDB database version pins', () => {
       )
       const config = await containerManager.rename('pinned-source', 'renamed')
       assert.equal(config.database, expectedPath)
+      assert.deepEqual(config.databases, [expectedPath])
       assert.equal(config.version, '1.4.3')
       assert.equal(entries.get('renamed')?.filePath, expectedPath)
       assert.equal(entries.get('renamed')?.version, '1.4.3')
