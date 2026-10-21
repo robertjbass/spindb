@@ -104,6 +104,11 @@ matches nothing reports the versions that do exist.
 Run `spindb engines download <engine>` with no version to browse the versions
 an engine offers.
 
+DuckDB 2.0 GA is available explicitly with
+`spindb create analytics -e duckdb --db-version 2` or
+`spindb engines download duckdb 2.0.0`. The default remains on the 1.x line at 1.5.6;
+existing file pins and explicit older-version creation are preserved.
+
 New DuckDB databases save the selected exact patch. Connect (including `--ui`),
 the menu Web UI and shell, query, backup, restore, branch, reset, and rename
 preserve that pin, even when another DuckDB

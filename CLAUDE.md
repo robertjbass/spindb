@@ -127,8 +127,11 @@ checkpointing use that version; branches inherit it and reset follows the
 parent's pin. A missing pinned binary fails instead of using another cached
 version. Legacy/imported entries without a pin retain their previous behavior;
 the displayed default is not persisted as evidence of their original runtime.
+DuckDB 2.0 GA is an explicit selection (`--db-version 2`); the configured
+1.x default advances to 1.5.6; older exact file pins remain unchanged. The preservation drill
+runs both 1.x with 2.0 preferred and 2.0 with 1.x preferred.
 SQLite file pins and Cloud's separately embedded proxy runtimes remain separate
-work. No version or package defaults change as part of this preservation fix.
+work. Cloud engine versions and defaults need separate approval.
 
 Together these mean: new containers are immune from day one; legacy containers self-heal on their next start.
 
