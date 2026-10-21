@@ -40,6 +40,7 @@ import {
   getDblabPlatformSuffix,
 } from '../../../core/dblab-utils'
 import { getEngine } from '../../../engines'
+import { duckdbEngine } from '../../../engines/duckdb'
 import { isRemoteContainer } from '../../../types'
 import { loadCredentials } from '../../../core/credential-manager'
 import {
@@ -607,12 +608,17 @@ export async function handleOpenShell(
 
   // Handle DuckDB built-in Web UI (duckdb -ui)
   if (shellChoice === 'duckdb-ui') {
-    const duckdbPath = await configManager.getBinaryPath('duckdb')
-    if (!duckdbPath) {
-      console.error(
-        uiError(
+    let duckdbPath: string | null
+    try {
+      duckdbPath = await duckdbEngine.getRegisteredBinaryPath(config.name)
+      if (!duckdbPath) {
+        throw new Error(
           'DuckDB binary not found. Download it with: spindb engines download duckdb',
-        ),
+        )
+      }
+    } catch (error) {
+      console.error(
+        uiError(error instanceof Error ? error.message : String(error)),
       )
       await pressEnterToContinue()
       return
@@ -1559,8 +1565,16 @@ async function launchShell(
     installHint = 'brew install sqlite3'
   } else if (config.engine === 'duckdb') {
     // DuckDB shell
-    const duckdbPath = await configManager.getBinaryPath('duckdb')
-    shellCmd = duckdbPath || 'duckdb'
+    try {
+      shellCmd =
+        (await duckdbEngine.getRegisteredBinaryPath(config.name)) || 'duckdb'
+    } catch (error) {
+      console.error(
+        uiError(error instanceof Error ? error.message : String(error)),
+      )
+      await pressEnterToContinue()
+      return
+    }
     shellArgs = [config.database]
     installHint = 'spindb engines download duckdb'
   } else if (config.engine === 'mysql') {

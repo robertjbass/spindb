@@ -227,6 +227,16 @@ export class DuckDBEngine extends BaseEngine {
     return `duckdb:///${filePath}`
   }
 
+  async getRegisteredBinaryPath(name: string): Promise<string | null> {
+    const entry = await duckdbRegistry.get(name)
+    if (!entry) {
+      throw new Error(`DuckDB container "${name}" not found in registry`)
+    }
+    return entry.version
+      ? this.requireDuckDBPath(entry.version)
+      : this.getDuckDBPath()
+  }
+
   // Opens an interactive duckdb shell.
   async connect(container: ContainerConfig, _database?: string): Promise<void> {
     const entry = await duckdbRegistry.get(container.name)

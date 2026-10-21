@@ -435,6 +435,12 @@ class BranchManager {
     }
 
     const duckdb = await getEngine(Engine.DuckDB).getDuckDBPath(opts.version)
+    if (opts.version && !duckdb) {
+      throw new Error(
+        `duckdb ${opts.version} not found. Ensure DuckDB binaries are downloaded:\n` +
+          `  spindb engines download duckdb ${opts.version}`,
+      )
+    }
     const walPath = `${sourceFile}.wal`
     const targetWal = `${targetFile}.wal`
 
