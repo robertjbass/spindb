@@ -12,7 +12,9 @@ on:
 jobs:
   test-docker-export:
     name: Docker Export
-    runs-on: ubuntu-latest
+    # Match the qualified Linux matrix and exported image base. A moving
+    # ubuntu-latest can drop libraries required by the host-side initdb step.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6

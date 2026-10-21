@@ -119,7 +119,16 @@ Two layered guarantees prevent silent version drift on the user's data:
 
 1. **At create time** (`cli/commands/create.ts`): the major/major-minor shorthand the user passes (`spindb create postgresql 18`) is resolved to a full version through `dbEngine.resolveFullVersion()` BEFORE `containerManager.create()` writes container.json. New containers always persist `version: '18.4.0'`, never `'18'`.
 
-2. **At start time** (`cli/commands/start.ts`): if a container.json still has shorthand (legacy from an older spindb), `isShorthandVersion()` from `core/version-utils.ts` detects it. Spindb resolves through hostdb, writes the full version back to disk, prints a one-line `uiInfo` that the container is now pinned to `<full>`. From that point on the container is drift-immune. Skipped for file-based engines (SQLite/DuckDB don't pin per data file) and remote/`'unknown'` containers.
+2. **At start time** (`cli/commands/start.ts`): if a container.json still has shorthand (legacy from an older spindb), `isShorthandVersion()` from `core/version-utils.ts` detects it. Spindb resolves through hostdb, writes the full version back to disk, prints a one-line `uiInfo` that the container is now pinned to `<full>`. From that point on the container is drift-immune. Skipped for file-based engines and remote/`'unknown'` containers.
+
+**DuckDB file pins:** newly created DuckDB registry entries retain the exact
+selected version. Connect, query, scripts, SQL backup/restore, and branch WAL
+checkpointing use that version; branches inherit it and reset follows the
+parent's pin. A missing pinned binary fails instead of using another cached
+version. Legacy/imported entries without a pin retain their previous behavior;
+the displayed default is not persisted as evidence of their original runtime.
+SQLite file pins and Cloud's separately embedded proxy runtimes remain separate
+work. No version or package defaults change as part of this preservation fix.
 
 Together these mean: new containers are immune from day one; legacy containers self-heal on their next start.
 
