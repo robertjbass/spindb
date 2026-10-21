@@ -1,4 +1,5 @@
 import { existsSync } from 'fs'
+import { isAbsolute, join, relative, sep } from 'path'
 import {
   mkdir,
   readdir,
@@ -724,8 +725,17 @@ export class ContainerManager {
       // This way if the move fails, registry is unchanged
       const oldContainerPath = paths.getContainerPath(oldName, { engine })
       const newContainerPath = paths.getContainerPath(newName, { engine })
+      let filePath = entry.filePath
       if (existsSync(oldContainerPath)) {
+        const relativeFilePath = relative(oldContainerPath, entry.filePath)
         await this.atomicMoveDirectory(oldContainerPath, newContainerPath)
+        if (
+          relativeFilePath !== '..' &&
+          !relativeFilePath.startsWith(`..${sep}`) &&
+          !isAbsolute(relativeFilePath)
+        ) {
+          filePath = join(newContainerPath, relativeFilePath)
+        }
       }
 
       // Now update registry - remove old entry and add new one with updated name.
@@ -735,12 +745,14 @@ export class ContainerManager {
       await duckdbRegistry.add({
         ...entry,
         name: newName,
+        filePath,
       })
 
       // Return updated config
       return {
         ...sourceConfig,
         name: newName,
+        database: filePath,
       }
     }
 

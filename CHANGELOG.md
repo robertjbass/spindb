@@ -5,7 +5,16 @@ All notable changes to SpinDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.74.0] - 2026-10-21
+
+### Added
+
+- DuckDB 2.0.0 GA is available with `--db-version 2`, `2.0` or `2.0.0` through hostdb 0.45.0. The default stays on the 1.x line and advances to 1.5.6; all earlier exact DuckDB versions remain available.
+- DuckDB integration qualification covers 1.4.3, 1.5.5, 1.5.6 and 2.0.0 with exact file pins, branch/reset/rename, SQL and binary restore, and missing-binary refusal on all five supported platforms.
+
+### Fixed
+
+- Renaming a managed DuckDB database updates its registered file path after moving its directory, keeping queries and backups usable. External database files retain their original paths and exact version pins.
 
 ### Testing
 
