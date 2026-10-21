@@ -1378,12 +1378,17 @@ export async function getQdrantPointCount(
 ): Promise<number> {
   try {
     const response = await fetch(
-      `http://127.0.0.1:${port}/collections/${collection}`,
+      `http://127.0.0.1:${port}/collections/${collection}/points/count`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exact: true }),
+      },
     )
     const data = (await response.json()) as {
-      result?: { points_count?: number }
+      result?: { count?: number }
     }
-    return data.result?.points_count || 0
+    return data.result?.count || 0
   } catch {
     return 0
   }
@@ -1403,7 +1408,7 @@ export async function insertQdrantPoints(
 ): Promise<boolean> {
   try {
     const response = await fetch(
-      `http://127.0.0.1:${port}/collections/${collection}/points`,
+      `http://127.0.0.1:${port}/collections/${collection}/points?wait=true`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

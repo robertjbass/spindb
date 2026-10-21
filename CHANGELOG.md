@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Testing
+
+- Qdrant integration helpers wait for point writes to complete and use the exact
+  count endpoint, avoiding a race against asynchronous writes and approximate
+  collection metadata in the Windows integration job.
+
 ## [0.73.2] - 2026-10-21
 
 ### Fixed
