@@ -38,12 +38,19 @@ const installs = [oldVersion, newVersion].map((version) => ({
 it(
   'preserves DuckDB versions across CLI invocations, branches and restores',
   {
-    skip: installs.every(({ binary }) => existsSync(binary))
-      ? false
-      : `Install DuckDB ${oldVersion} and ${newVersion} to run the version preservation drill`,
+    skip:
+      process.env.CI || installs.every(({ binary }) => existsSync(binary))
+        ? false
+        : `Install DuckDB ${oldVersion} and ${newVersion} to run the version preservation drill`,
     timeout: 300_000,
   },
   async () => {
+    for (const { version, binary } of installs) {
+      assert.ok(
+        existsSync(binary),
+        `Missing DuckDB ${version}. Run spindb engines download duckdb ${version}`,
+      )
+    }
     const root = await mkdtemp(join(tmpdir(), 'spindb-duckdb-version-drill-'))
     try {
       for (const install of installs) {

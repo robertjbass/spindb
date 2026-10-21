@@ -14,12 +14,12 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 
 // Engine name to test file mapping (canonical names)
-const ENGINE_TEST_FILES: Record<string, string> = {
+const ENGINE_TEST_FILES: Record<string, string | string[]> = {
   postgresql: 'postgresql.test.ts',
   mysql: 'mysql.test.ts',
   mariadb: 'mariadb.test.ts',
   sqlite: 'sqlite.test.ts',
-  duckdb: 'duckdb.test.ts',
+  duckdb: ['duckdb.test.ts', 'duckdb-version-pinning.test.ts'],
   mongodb: 'mongodb.test.ts',
   ferretdb: 'ferretdb.test.ts',
   'ferretdb-v1': 'ferretdb-v1.test.ts',
@@ -206,16 +206,24 @@ async function runTest(testFile: string): Promise<number> {
   })
 }
 
+async function runEngineTests(engine: string): Promise<number> {
+  const files = ENGINE_TEST_FILES[engine]
+  let hasFailure = false
+  for (const file of Array.isArray(files) ? files : [files]) {
+    if ((await runTest(file)) !== 0) hasFailure = true
+  }
+  return hasFailure ? 1 : 0
+}
+
 async function runAllTests(): Promise<number> {
   let hasFailure = false
 
   for (const engine of TEST_ORDER) {
-    const testFile = ENGINE_TEST_FILES[engine]
     console.log(`\n${'='.repeat(60)}`)
     console.log(`Running ${engine} integration tests...`)
     console.log(`${'='.repeat(60)}\n`)
 
-    const exitCode = await runTest(testFile)
+    const exitCode = await runEngineTests(engine)
     if (exitCode !== 0) {
       hasFailure = true
       console.error(`\n${engine} tests failed with exit code ${exitCode}`)
@@ -258,10 +266,9 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  const testFile = ENGINE_TEST_FILES[engine]
   console.log(`Running ${engine} integration tests...\n`)
 
-  const exitCode = await runTest(testFile)
+  const exitCode = await runEngineTests(engine)
   process.exit(exitCode)
 }
 
