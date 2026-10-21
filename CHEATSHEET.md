@@ -104,8 +104,9 @@ matches nothing reports the versions that do exist.
 Run `spindb engines download <engine>` with no version to browse the versions
 an engine offers.
 
-New DuckDB databases save the selected exact patch. Connect, query, backup,
-restore, branch, reset, and rename preserve that pin, even when another DuckDB
+New DuckDB databases save the selected exact patch. Connect (including `--ui`),
+the menu Web UI and shell, query, backup, restore, branch, reset, and rename
+preserve that pin, even when another DuckDB
 version becomes the preferred binary. Older/imported files without a saved pin
 keep their existing behavior. If the pinned binary is missing, the error gives
 `spindb engines download duckdb <exact>`; install that patch and retry. SpinDB

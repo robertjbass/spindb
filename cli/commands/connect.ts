@@ -23,6 +23,7 @@ import {
   getIredisManualInstructions,
 } from '../../core/dependency-manager'
 import { getEngine } from '../../engines'
+import { duckdbEngine } from '../../engines/duckdb'
 import { getEngineDefaults } from '../../config/defaults'
 import { promptContainerSelect } from '../ui/prompts'
 import { uiError, uiWarning, uiInfo, uiSuccess } from '../ui/theme'
@@ -562,14 +563,13 @@ export const connectCommand = new Command('connect')
             process.exit(1)
           }
 
-          const duckdbPath = await configManager.getBinaryPath('duckdb')
+          const duckdbPath = await duckdbEngine.getRegisteredBinaryPath(
+            config.name,
+          )
           if (!duckdbPath) {
-            console.error(
-              uiError(
-                'DuckDB binary not found. Download it with: spindb engines download duckdb',
-              ),
+            throw new Error(
+              'DuckDB binary not found. Download it with: spindb engines download duckdb',
             )
-            process.exit(1)
           }
 
           const uiProcess = spawn(duckdbPath, [config.database, '-ui'], {
