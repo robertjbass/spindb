@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import childProcess from 'node:child_process'
 import { EventEmitter } from 'node:events'
@@ -10,6 +10,7 @@ import { connectCommand } from '../../cli/commands/connect'
 import { handleOpenShell } from '../../cli/commands/menu/shell-handlers'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { paths } from '../../config/paths'
 import { containerManager } from '../../core/container-manager'
 import { branchManager } from '../../core/branch-manager'
 import { duckdbRegistry } from '../../engines/duckdb/registry'
@@ -73,6 +74,37 @@ describe('DuckDB database version pins', () => {
     assert.equal(entries.get('pinned-branch')?.version, '1.4.3')
     assert.equal(branch.config.version, '1.4.3')
   })
+
+  for (const location of ['managed', 'external', 'sibling-prefix']) {
+    it(`preserves the file and pin when renaming a ${location} database`, async () => {
+      const oldDirectory = join(root, 'pinned-source')
+      const newDirectory = join(root, 'renamed')
+      const source = entries.get('pinned-source')!
+      await mkdir(oldDirectory)
+      if (location === 'managed') {
+        source.filePath = join(oldDirectory, 'source.duckdb')
+      } else if (location === 'sibling-prefix') {
+        await mkdir(`${oldDirectory}-external`)
+        source.filePath = join(`${oldDirectory}-external`, 'source.duckdb')
+      }
+      await writeFile(source.filePath, 'preserved database')
+      const expectedPath =
+        location === 'managed'
+          ? join(newDirectory, 'source.duckdb')
+          : source.filePath
+      mock.method(paths, 'getContainerPath', (name: string) => join(root, name))
+      mock.method(duckdbRegistry, 'remove', async (name: string) =>
+        entries.delete(name),
+      )
+      const config = await containerManager.rename('pinned-source', 'renamed')
+      assert.equal(config.database, expectedPath)
+      assert.equal(config.version, '1.4.3')
+      assert.equal(entries.get('renamed')?.filePath, expectedPath)
+      assert.equal(entries.get('renamed')?.version, '1.4.3')
+      assert.equal(entries.has('pinned-source'), false)
+      assert.equal(await readFile(expectedPath, 'utf8'), 'preserved database')
+    })
+  }
 
   for (const operation of ['query', 'script', 'backup', 'restore', 'connect']) {
     it(`uses the saved version for ${operation}`, async () => {
