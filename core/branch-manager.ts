@@ -35,7 +35,11 @@ import { logDebug } from './error-handler'
 import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
-import type { ContainerConfig } from '../types'
+import type {
+  ContainerConfig,
+  DuckDBRegistryEntry,
+  SQLiteRegistryEntry,
+} from '../types'
 import { Engine, isFileBasedEngine, isRemoteContainer } from '../types'
 
 const execFileAsync = promisify(execFile)
@@ -172,6 +176,7 @@ type FileBasedEngine = Engine.SQLite | Engine.DuckDB
 
 type FileEntryUpdate = Partial<{
   filePath: string
+  version: string | undefined
   created: string
   lastVerified: string
   branchParent: string
@@ -395,6 +400,7 @@ class BranchManager {
     sourceName: string
     sourceFile: string
     targetFile: string
+    version?: string
   }): Promise<{ method: CopyMethod; warning?: string }> {
     const { engine, sourceName, sourceFile, targetFile } = opts
 
@@ -428,7 +434,7 @@ class BranchManager {
       return { method: 'copy' }
     }
 
-    const duckdb = await getEngine(Engine.DuckDB).getDuckDBPath()
+    const duckdb = await getEngine(Engine.DuckDB).getDuckDBPath(opts.version)
     const walPath = `${sourceFile}.wal`
     const targetWal = `${targetFile}.wal`
 
@@ -574,11 +580,15 @@ class BranchManager {
         sourceName: source,
         sourceFile: sourceEntry.filePath,
         targetFile,
+        version: 'version' in sourceEntry ? sourceEntry.version : undefined,
       }))
       const now = new Date().toISOString()
       await this.addFileEntry(engine, {
         name,
         filePath: targetFile,
+        ...('version' in sourceEntry && sourceEntry.version
+          ? { version: sourceEntry.version }
+          : {}),
         created: now,
         lastVerified: now,
         branchParent: source,
@@ -936,6 +946,7 @@ class BranchManager {
         sourceName: parentConfig.name,
         sourceFile: parentEntry.filePath,
         targetFile: scratchFile,
+        version: 'version' in parentEntry ? parentEntry.version : undefined,
       }))
     } catch (error) {
       await this.discardPartialCopy(engine, scratchFile)
@@ -963,6 +974,11 @@ class BranchManager {
     await this.updateFileEntry(engine, branchConfig.name, {
       branchedAt: now,
       lastVerified: now,
+      ...('version' in branchEntry || 'version' in parentEntry
+        ? {
+            version: 'version' in parentEntry ? parentEntry.version : undefined,
+          }
+        : {}),
     })
 
     const config = await containerManager.getConfig(branchConfig.name, {
@@ -1085,7 +1101,10 @@ class BranchManager {
 
   // ---- file-based registry helpers ----
 
-  private async fileRegistryGet(engine: FileBasedEngine, name: string) {
+  private async fileRegistryGet(
+    engine: FileBasedEngine,
+    name: string,
+  ): Promise<SQLiteRegistryEntry | DuckDBRegistryEntry | null> {
     return engine === Engine.SQLite
       ? sqliteRegistry.get(name)
       : duckdbRegistry.get(name)
@@ -1109,6 +1128,7 @@ class BranchManager {
       name: string
       filePath: string
       created: string
+      version?: string
       lastVerified?: string
       branchParent?: string
       branchedAt?: string
