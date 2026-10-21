@@ -1,2 +1,2 @@
-// Auto-generated — do not edit manually
-export const VERSION = '0.73.1'
+// Auto-generated - do not edit manually
+export const VERSION = '0.73.2'

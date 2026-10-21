@@ -759,6 +759,7 @@ export type SQLiteEngineRegistry = {
 export type DuckDBRegistryEntry = {
   name: string // Container name (used in spindb commands)
   filePath: string // Absolute path to .duckdb file
+  version?: string // Exact selected binary version; absent on legacy/imported files
   created: string // ISO timestamp
   lastVerified?: string // ISO timestamp of last existence check
   branchParent?: string // Source container when created via `spindb branch`

@@ -170,6 +170,7 @@ export class DuckDBEngine extends BaseEngine {
     await duckdbRegistry.add({
       name: containerName,
       filePath: absolutePath,
+      version: this.resolveFullVersion(version),
       created: new Date().toISOString(),
     })
 
@@ -238,7 +239,7 @@ export class DuckDBEngine extends BaseEngine {
       throw new Error(`DuckDB database file not found: ${entry.filePath}`)
     }
 
-    const cmd = await this.requireDuckDBPath()
+    const cmd = await this.requireDuckDBPath(entry.version)
 
     return new Promise((resolve, reject) => {
       const proc = spawn(cmd, [entry.filePath], { stdio: 'inherit' })
@@ -304,7 +305,7 @@ export class DuckDBEngine extends BaseEngine {
 
     if (options.format === 'sql') {
       // Use EXPORT DATABASE for SQL format
-      const duckdb = await this.requireDuckDBPath()
+      const duckdb = await this.requireDuckDBPath(entry.version)
 
       // DuckDB exports to a directory, so we need to handle this differently
       // For SQL format, we'll use a query to dump schema and data
@@ -336,7 +337,7 @@ export class DuckDBEngine extends BaseEngine {
 
     if (format.format === 'sql') {
       // Restore SQL dump
-      const duckdb = await this.requireDuckDBPath()
+      const duckdb = await this.requireDuckDBPath(entry.version)
 
       // Pipe file to duckdb stdin (avoids shell injection)
       await this.runSqlFile(duckdb, entry.filePath, backupPath)
@@ -663,7 +664,7 @@ export class DuckDBEngine extends BaseEngine {
       throw new Error('DuckDB database file not found')
     }
 
-    const duckdb = await this.requireDuckDBPath()
+    const duckdb = await this.requireDuckDBPath(entry.version)
 
     if (options.file) {
       // Run SQL file - pipe file to stdin (avoids shell injection)
@@ -691,8 +692,8 @@ export class DuckDBEngine extends BaseEngine {
     const duckdb = await this.getDuckDBPath(version)
     if (!duckdb) {
       throw new Error(
-        'duckdb not found. Ensure DuckDB binaries are downloaded:\n' +
-          '  spindb engines download duckdb',
+        `duckdb${version ? ` ${version}` : ''} not found. Ensure DuckDB binaries are downloaded:\n` +
+          `  spindb engines download duckdb${version ? ` ${version}` : ''}`,
       )
     }
     return duckdb
@@ -708,7 +709,7 @@ export class DuckDBEngine extends BaseEngine {
       throw new Error('DuckDB database file not found')
     }
 
-    const duckdb = await this.requireDuckDBPath()
+    const duckdb = await this.requireDuckDBPath(entry.version)
 
     // Use spawn instead of execFileAsync to stream results
     return new Promise((resolve, reject) => {

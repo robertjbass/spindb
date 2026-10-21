@@ -21,13 +21,8 @@ import { getEngine } from '../engines'
 import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
 
-// File-based engines (SQLite, DuckDB) don't pin a specific binary version per
-// container — the file format is library-managed and any matching-major
-// version reads any file. But the ContainerConfig type requires a `version`
-// string, so we report the hostdb-resolved full version for the engine's
-// recommended major. This keeps the displayed version consistent with whatever
-// binary spindb would currently use, instead of hardcoding shorthand `'3'` /
-// `'1'` that drifts away from the actual binary.
+// Legacy file entries have no recorded runtime version. Keep their existing
+// display fallback without persisting it as an inferred binary pin.
 function fileBasedEngineVersion(engine: Engine.SQLite | Engine.DuckDB): string {
   const major = getEngineDefaults(engine).defaultVersion
   const dbEngine = getEngine(engine)
@@ -220,7 +215,9 @@ export class ContainerManager {
     return {
       name: entry.name,
       engine,
-      version: fileBasedEngineVersion(engine),
+      version:
+        ('version' in entry ? entry.version : undefined) ??
+        fileBasedEngineVersion(engine),
       port: 0,
       database: entry.filePath, // file-based: database field stores file path
       databases: [entry.filePath],

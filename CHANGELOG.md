@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.73.2] - 2026-10-21
+
+### Fixed
+
+- Newly created DuckDB databases retain their selected exact binary version
+  through queries, scripts, SQL backups/restores, and branching instead of
+  following the last cached DuckDB binary. A missing pinned binary reports the
+  exact download command. Legacy/imported files without a saved version retain
+  their existing behavior; this change does not infer or migrate their pins.
+
 ## [0.73.1] - 2026-10-20
 
 ### Fixed
