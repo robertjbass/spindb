@@ -67,6 +67,7 @@ test(
           },
         )
         if (input !== undefined) proc.stdin?.end(input)
+        assert.ok(proc.stdout && proc.stderr)
         let stdout = ''
         const timer = setTimeout(() => {
           proc.kill('SIGTERM')
