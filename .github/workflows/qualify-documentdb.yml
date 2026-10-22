@@ -1,0 +1,55 @@
+name: Qualify DocumentDB CLI
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'cli/**'
+      - 'config/**'
+      - 'core/**'
+      - 'types/**'
+      - 'engines/base-engine.ts'
+      - 'engines/index.ts'
+      - 'engines/documentdb/**'
+      - 'engines/mongodb/**'
+      - 'tests/integration/documentdb.test.ts'
+      - '.github/workflows/qualify-documentdb.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: documentdb-cli-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: DocumentDB CLI ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-22.04
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=1536
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the distributable CLI
+        run: pnpm build
+      - name: Run real isolated CLI lifecycle and refusal tests
+        env:
+          DOCUMENTDB_TEST_CLI: ${{ github.workspace }}/dist/cli/bin.js
+        run: node --import tsx --test tests/integration/documentdb.test.ts
+      - name: Record published dependency qualification
+        if: always()
+        run: |
+          echo "Published HostDB pin: $(node -p 'require("./package.json").dependencies.hostdb'). The isolated CLI fixture downloads real registry artifacts without an injected runtime cache." >> "$GITHUB_STEP_SUMMARY"

@@ -126,6 +126,7 @@ function validateConnectionString(
       }
       break
     case Engine.MongoDB:
+    case Engine.DocumentDB:
     case Engine.FerretDB:
       if (
         !input.startsWith('mongodb://') &&

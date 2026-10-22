@@ -61,6 +61,7 @@ const KNOWN_BINARY_TOOLS: readonly BinaryTool[] = [
   'mongorestore',
   // FerretDB
   'ferretdb',
+  'documentdb_gateway',
   // Redis
   'redis-server',
   'redis-cli',

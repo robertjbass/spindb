@@ -19,7 +19,7 @@ SpinDB is the backbone of the Layerbase platform. **hostdb** builds database bin
 
 ## Overview
 
-SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 21 engines: PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, TigerBeetle, LibSQL.
+SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 22 engines: DocumentDB, PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, TigerBeetle, LibSQL.
 
 **Stack**: Node.js 18+, TypeScript, tsx (no build step), pnpm, Commander.js, Inquirer.js, Chalk, Ora, ESM
 
@@ -351,3 +351,12 @@ process-only override. Cloud must carry it through setup restarts. The opt-in
 real-binary tests are tests/integration/postgresql-cron.test.ts and
 postgresql-cron-cli.test.ts. Release through hostdb first; do not pin unpublished
 artifacts or package versions.
+
+## Standalone DocumentDB
+
+See `engines/documentdb/README.md`. The official native gateway and backend are one
+versioned HostDB bundle. Linux only initially, loopback gateway with mandatory
+authentication, private peer-authenticated PostgreSQL socket. Do not reuse the
+FerretDB backend mapping or infer a runtime pin for existing data. Candidate
+qualification may explicitly link a HostDB checkout; published dependencies must
+remain exact pins and follow the normal HostDB-first release cascade.

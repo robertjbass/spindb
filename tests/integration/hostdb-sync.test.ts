@@ -52,7 +52,10 @@ import { WEAVIATE_VERSION_MAP } from '../../engines/weaviate/version-maps'
 import { TIGERBEETLE_VERSION_MAP } from '../../engines/tigerbeetle/version-maps'
 import { LIBSQL_VERSION_MAP } from '../../engines/libsql/version-maps'
 
+import { DOCUMENTDB_VERSION_MAP as STANDALONE_DOCUMENTDB_VERSION_MAP } from '../../engines/documentdb/version-maps'
+
 const ENGINES = [
+  { name: 'documentdb', map: STANDALONE_DOCUMENTDB_VERSION_MAP },
   { name: 'postgresql', map: POSTGRESQL_VERSION_MAP },
   { name: 'mysql', map: MYSQL_VERSION_MAP },
   { name: 'mariadb', map: MARIADB_VERSION_MAP },

@@ -90,6 +90,7 @@ describe('ConfigManager', () => {
         MARIADB_TOOLS,
         MONGODB_TOOLS,
         FERRETDB_TOOLS,
+        DOCUMENTDB_TOOLS,
         REDIS_TOOLS,
         VALKEY_TOOLS,
         QDRANT_TOOLS,
@@ -116,6 +117,7 @@ describe('ConfigManager', () => {
         MARIADB_TOOLS.length +
         MONGODB_TOOLS.length +
         FERRETDB_TOOLS.length +
+        DOCUMENTDB_TOOLS.length +
         REDIS_TOOLS.length +
         VALKEY_TOOLS.length +
         QDRANT_TOOLS.length +

@@ -205,6 +205,23 @@ export const startCommand = new Command('start')
           return
         }
 
+        // Reject unsupported DocumentDB options before persisting either one.
+        if (engineName === Engine.DocumentDB) {
+          if (options.auth === false) {
+            return exitWithError({
+              message:
+                'DocumentDB requires authentication; --no-auth is unsupported',
+              json: options.json,
+            })
+          }
+          if (options.bind && options.bind !== '127.0.0.1') {
+            return exitWithError({
+              message: 'DocumentDB currently supports --bind 127.0.0.1 only',
+              json: options.json,
+            })
+          }
+        }
+
         // Persist bind address if provided
         if (options.bind) {
           await containerManager.updateConfig(containerName, {
@@ -220,6 +237,7 @@ export const startCommand = new Command('start')
             engineName === Engine.FerretDB && isFerretDBv1(config.version)
           const authSupported =
             engineName === Engine.MongoDB ||
+            engineName === Engine.DocumentDB ||
             (engineName === Engine.FerretDB && !isFerretV1)
           if (!authSupported) {
             if (!options.json) {

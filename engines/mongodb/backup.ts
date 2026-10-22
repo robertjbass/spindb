@@ -79,7 +79,9 @@ export async function createBackup(
   const { name, port, database, version } = container
   const db = options.database || database
 
-  const mongodump = await getMongodumpPath(version)
+  const mongodump = await getMongodumpPath(
+    container.engine === Engine.MongoDB ? version : undefined,
+  )
   if (!mongodump) {
     throw new Error(MONGODUMP_NOT_FOUND_ERROR)
   }
@@ -92,8 +94,8 @@ export async function createBackup(
 
   const savedCreds = await loadCredentials(
     name,
-    Engine.MongoDB,
-    getDefaultUsername(Engine.MongoDB),
+    container.engine,
+    getDefaultUsername(container.engine),
   )
 
   // Determine output format (default to 'archive' as per backup-formats.ts)

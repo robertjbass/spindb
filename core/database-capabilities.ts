@@ -34,6 +34,7 @@ function hasDurableDatabaseExistence(engine: Engine): boolean {
       return true
 
     case Engine.MongoDB:
+    case Engine.DocumentDB:
     case Engine.FerretDB:
     case Engine.Meilisearch:
     case Engine.SurrealDB:
@@ -96,6 +97,7 @@ function getDatabaseLifecycleCapabilities(
     case Engine.MySQL:
     case Engine.MariaDB:
     case Engine.MongoDB:
+    case Engine.DocumentDB:
     case Engine.FerretDB:
     case Engine.SurrealDB:
     case Engine.TypeDB:

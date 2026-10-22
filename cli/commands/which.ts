@@ -243,6 +243,7 @@ export const whichCommand = new Command('which')
             mysql: Engine.MySQL,
             mariadb: Engine.MariaDB,
             mongodb: Engine.MongoDB,
+            documentdb: Engine.DocumentDB,
             mongo: Engine.MongoDB,
             redis: Engine.Redis,
             valkey: Engine.Valkey,

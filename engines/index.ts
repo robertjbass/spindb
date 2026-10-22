@@ -5,6 +5,7 @@ import { sqliteEngine } from './sqlite'
 import { duckdbEngine } from './duckdb'
 import { mongodbEngine } from './mongodb'
 import { ferretdbEngine } from './ferretdb'
+import { documentdbEngine } from './documentdb'
 import { redisEngine } from './redis'
 import { valkeyEngine } from './valkey'
 import { clickhouseEngine } from './clickhouse'
@@ -28,7 +29,11 @@ import type { EngineInfo } from '../types'
 // These engines either don't have Windows binaries or have issues running on Windows
 // Note: FerretDB v1 supports Windows (v2 does not), so it's not blanket-blocked here.
 // Version-specific platform checks are handled by the engine itself.
-const WINDOWS_UNSUPPORTED_ENGINES = new Set([Engine.ClickHouse, Engine.LibSQL])
+const WINDOWS_UNSUPPORTED_ENGINES = new Set([
+  Engine.ClickHouse,
+  Engine.LibSQL,
+  Engine.DocumentDB,
+])
 
 // Registry of available database engines
 export const engines: Record<string, BaseEngine> = {
@@ -52,6 +57,7 @@ export const engines: Record<string, BaseEngine> = {
   mongo: mongodbEngine,
   // FerretDB and aliases
   [Engine.FerretDB]: ferretdbEngine,
+  [Engine.DocumentDB]: documentdbEngine,
   ferret: ferretdbEngine,
   fdb: ferretdbEngine,
   // Redis and aliases
@@ -119,6 +125,10 @@ export function listEngines(): EngineInfo[] {
     .filter(([, engine]) => {
       if (seen.has(engine)) return false
       seen.add(engine)
+      // The standalone gateway bundle is currently qualified on Linux only.
+      if (engine.name === Engine.DocumentDB && platform !== Platform.Linux) {
+        return false
+      }
       // Filter out unsupported engines on Windows
       if (isWindows && WINDOWS_UNSUPPORTED_ENGINES.has(engine.name as Engine)) {
         return false

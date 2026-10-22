@@ -10,7 +10,11 @@ describe('BACKUP_FORMATS', () => {
   // `mongorestore --archive`) can read spindb-produced backups. The compressed
   // `archive` stays the default.
   it('mongodb + ferretdb expose an uncompressed archive-plain format', () => {
-    for (const engine of [Engine.MongoDB, Engine.FerretDB] as const) {
+    for (const engine of [
+      Engine.MongoDB,
+      Engine.FerretDB,
+      Engine.DocumentDB,
+    ] as const) {
       const { formats, defaultFormat } = BACKUP_FORMATS[engine]
       assert(
         'archive' in formats,
