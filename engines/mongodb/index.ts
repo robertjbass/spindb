@@ -496,7 +496,7 @@ export class MongoDBEngine extends BaseEngine {
     return args
   }
 
-  private async runLocalMongosh(
+  protected async runLocalMongosh(
     container: ContainerConfig,
     database: string,
     options: {

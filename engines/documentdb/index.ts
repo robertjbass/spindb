@@ -129,10 +129,12 @@ export class DocumentDBEngine extends MongoDBEngine {
     const runtime = this.runtime(container)
     await runtime.start()
     try {
-      for (let attempt = 0; attempt < 60; attempt++) {
+      const deadline = Date.now() + 30000
+      while (Date.now() < deadline) {
         try {
-          await this.executeQuery(container, 'db.runCommand({ping: 1})', {
-            database: 'admin',
+          await this.runLocalMongosh(container, 'admin', {
+            eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
+            timeoutMs: 5000,
           })
           return {
             port: container.port,
@@ -160,8 +162,9 @@ export class DocumentDBEngine extends MongoDBEngine {
         ['status', '-D', this.runtime(container).dataPath],
         { timeout: 5000 },
       )
-      await this.executeQuery(container, 'db.runCommand({ping: 1})', {
-        database: 'admin',
+      await this.runLocalMongosh(container, 'admin', {
+        eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
+        timeoutMs: 5000,
       })
       return {
         running: true,

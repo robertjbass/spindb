@@ -1,7 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'child_process'
-import { mkdtemp, mkdir, symlink, readFile, rename, rm } from 'fs/promises'
+import {
+  mkdtemp,
+  mkdir,
+  symlink,
+  readFile,
+  writeFile,
+  rename,
+  rm,
+} from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath } from 'url'
@@ -151,6 +159,14 @@ test(
       await assertRow('source')
       await assertPin('source')
       await cli('stop', 'source')
+      const unauthenticated = await invoke([
+        'start',
+        'source',
+        '--no-auth',
+        '--json',
+      ])
+      assert.notEqual(unauthenticated.code, 0)
+      assert.match(unauthenticated.stdout, /requires authentication/)
       await cli('start', 'source', '--strict-port')
       await assertRow('source')
       const backupDirectory = join(home, 'backups')
@@ -212,6 +228,30 @@ test(
           .update(await readFile(control))
           .digest('hex')
       const before = await hash()
+      const pinPath = join(
+        home,
+        'containers/documentdb/source/data/.spindb-documentdb-runtime.json',
+      )
+      const originalPin = await readFile(pinPath, 'utf8')
+      const pinnedRuntime = new DocumentDBNativeRuntime({
+        bundlePath: binaryPath,
+        containerPath: join(home, 'containers/documentdb/source'),
+        version: '1.0.0',
+        port,
+      })
+      try {
+        await rm(pinPath)
+        await assert.rejects(() => pinnedRuntime.start(), /ENOENT/)
+        assert.equal(await hash(), before)
+        await writeFile(
+          pinPath,
+          JSON.stringify({ ...JSON.parse(originalPin), version: '2.0.0' }),
+        )
+        await assert.rejects(() => pinnedRuntime.start(), /pin does not match/)
+        assert.equal(await hash(), before)
+      } finally {
+        await writeFile(pinPath, originalPin, { mode: 0o600 })
+      }
       await rename(binaryPath, binaryPath + '.held')
       held = true
       const unavailableRuntime = new DocumentDBNativeRuntime({
