@@ -115,6 +115,7 @@ export async function detectBackupFormat(
 
 // Restore options
 export type RestoreOptions = {
+  engine?: Engine
   containerName?: string
   port: number
   database: string
@@ -174,8 +175,8 @@ export async function restoreBackup(
   const savedCreds = options.containerName
     ? await loadCredentials(
         options.containerName,
-        Engine.MongoDB,
-        getDefaultUsername(Engine.MongoDB),
+        options.engine ?? Engine.MongoDB,
+        getDefaultUsername(options.engine ?? Engine.MongoDB),
       )
     : null
   const container = options.containerName

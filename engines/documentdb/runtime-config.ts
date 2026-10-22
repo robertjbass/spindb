@@ -39,7 +39,8 @@ export function buildPostgresConfig(options: {
     `port = ${options.port}`,
     `unix_socket_directories = ${pgLiteral(options.socketDirectory)}`,
     'unix_socket_permissions = 0700',
-    "shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb'",
+    `documentdb.localhost_connection_string = ${pgLiteral("host='" + options.socketDirectory.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'")}`,
+    "shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb,pg_documentdb_extended_rum'",
     "cron.database_name = 'postgres'",
     'cron.launch_active_jobs = off',
     "log_statement = 'none'",
@@ -62,6 +63,7 @@ export function buildPeerAuthentication(osUsername: string): {
   const roles = [
     'postgres',
     DOCUMENTDB_GATEWAY_ROLE,
+    'documentdb_bg_worker_role',
     '+documentdb_admin_role',
     '+documentdb_readwrite_role',
     '+documentdb_readonly_role',

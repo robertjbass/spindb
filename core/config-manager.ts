@@ -65,6 +65,7 @@ const QDRANT_TOOLS: BinaryTool[] = ['qdrant']
 const MEILISEARCH_TOOLS: BinaryTool[] = ['meilisearch']
 
 const FERRETDB_TOOLS: BinaryTool[] = ['ferretdb']
+const DOCUMENTDB_TOOLS: BinaryTool[] = ['documentdb_gateway']
 
 const SQLITE_TOOLS: BinaryTool[] = ['sqlite3']
 
@@ -106,6 +107,7 @@ const ALL_TOOLS: BinaryTool[] = [
   ...MARIADB_TOOLS,
   ...MONGODB_TOOLS,
   ...FERRETDB_TOOLS,
+  ...DOCUMENTDB_TOOLS,
   ...REDIS_TOOLS,
   ...VALKEY_TOOLS,
   ...QDRANT_TOOLS,
@@ -134,6 +136,7 @@ const ENGINE_BINARY_MAP: Partial<Record<Engine, BinaryTool[]>> = {
   [Engine.MariaDB]: MARIADB_TOOLS,
   [Engine.MongoDB]: MONGODB_TOOLS,
   [Engine.FerretDB]: FERRETDB_TOOLS,
+  [Engine.DocumentDB]: DOCUMENTDB_TOOLS,
   [Engine.Redis]: REDIS_TOOLS,
   [Engine.Valkey]: VALKEY_TOOLS,
   [Engine.Qdrant]: QDRANT_TOOLS,
@@ -634,6 +637,7 @@ export {
   MARIADB_CLIENT_TOOLS,
   MONGODB_TOOLS,
   FERRETDB_TOOLS,
+  DOCUMENTDB_TOOLS,
   REDIS_TOOLS,
   VALKEY_TOOLS,
   QDRANT_TOOLS,

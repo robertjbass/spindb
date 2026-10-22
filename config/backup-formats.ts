@@ -57,6 +57,7 @@ export const BACKUP_FORMATS: {
   [Engine.DuckDB]: EngineBackupFormats<DuckDBFormat>
   [Engine.MongoDB]: EngineBackupFormats<MongoDBFormat>
   [Engine.FerretDB]: EngineBackupFormats<FerretDBFormat>
+  [Engine.DocumentDB]: EngineBackupFormats<MongoDBFormat>
   [Engine.Redis]: EngineBackupFormats<RedisFormat>
   [Engine.Valkey]: EngineBackupFormats<ValkeyFormat>
   [Engine.ClickHouse]: EngineBackupFormats<ClickHouseFormat>
@@ -163,6 +164,30 @@ export const BACKUP_FORMATS: {
     defaultFormat: 'binary',
   },
   [Engine.MongoDB]: {
+    formats: {
+      bson: {
+        extension: '', // Directory, no extension
+        label: '.bson',
+        description: 'Directory dump - BSON files per collection',
+        spinnerLabel: 'BSON directory',
+      },
+      archive: {
+        extension: '.archive',
+        label: '.archive',
+        description: 'Compressed archive - single file, smaller',
+        spinnerLabel: 'archive',
+      },
+      'archive-plain': {
+        extension: '.archive',
+        label: '.archive',
+        description: 'Uncompressed archive - single file, no gzip',
+        spinnerLabel: 'uncompressed archive',
+      },
+    },
+    supportsFormatChoice: true,
+    defaultFormat: 'archive',
+  },
+  [Engine.DocumentDB]: {
     formats: {
       bson: {
         extension: '', // Directory, no extension

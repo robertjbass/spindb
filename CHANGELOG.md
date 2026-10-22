@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add standalone DocumentDB 1.0 for native Linux x64 and ARM64, separate from FerretDB. Includes an authenticated MongoDB wire gateway and private PostgreSQL backend, exact runtime pins, lifecycle operations and archive backup/restore. Loopback only initially. Release awaits the qualified HostDB artifact/package publication and exact dependency update.
+
+
 All notable changes to SpinDB will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

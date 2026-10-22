@@ -22,6 +22,7 @@ const ENGINE_TEST_FILES: Record<string, string | string[]> = {
   duckdb: ['duckdb.test.ts', 'duckdb-version-pinning.test.ts'],
   mongodb: 'mongodb.test.ts',
   ferretdb: 'ferretdb.test.ts',
+  documentdb: 'documentdb.test.ts',
   'ferretdb-v1': 'ferretdb-v1.test.ts',
   redis: 'redis.test.ts',
   valkey: 'valkey.test.ts',

@@ -107,6 +107,7 @@ function extractJson(output: string): unknown | null {
 }
 
 export class MongoDBEngine extends BaseEngine {
+  protected credentialEngine: Engine = Engine.MongoDB
   name = ENGINE
   displayName = 'MongoDB'
   defaultPort = engineDef.defaultPort
@@ -461,8 +462,8 @@ export class MongoDBEngine extends BaseEngine {
   ): Promise<LocalMongoAuth | null> {
     const savedCreds = await loadCredentials(
       containerName,
-      Engine.MongoDB,
-      getDefaultUsername(Engine.MongoDB),
+      this.credentialEngine,
+      getDefaultUsername(this.credentialEngine),
     )
     if (!savedCreds) {
       return null

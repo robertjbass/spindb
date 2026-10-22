@@ -21,6 +21,7 @@ import {
   type InstalledDuckDBEngine,
   type InstalledMongodbEngine,
   type InstalledFerretDBEngine,
+  type InstalledDocumentDBEngine,
   type InstalledRedisEngine,
   type InstalledValkeyEngine,
   type InstalledClickHouseEngine,
@@ -76,6 +77,9 @@ export async function handleEngines(): Promise<void> {
     ),
     ...engines.filter(
       (e): e is InstalledFerretDBEngine => e.engine === 'ferretdb',
+    ),
+    ...engines.filter(
+      (e): e is InstalledDocumentDBEngine => e.engine === 'documentdb',
     ),
     ...engines.filter((e): e is InstalledRedisEngine => e.engine === 'redis'),
     ...engines.filter((e): e is InstalledValkeyEngine => e.engine === 'valkey'),

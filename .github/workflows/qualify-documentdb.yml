@@ -1,0 +1,74 @@
+name: Qualify DocumentDB CLI
+on:
+  pull_request:
+    paths:
+      - 'engines/documentdb/**'
+      - 'engines/mongodb/**'
+      - 'tests/integration/documentdb.test.ts'
+      - '.github/workflows/qualify-documentdb.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: documentdb-cli-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: DocumentDB CLI ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-22.04
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=1536
+      # Explicit candidate fixtures, not published npm dependencies. Replace with
+      # the published HostDB pin/download path after the approved release cascade.
+      HOSTDB_QUALIFIED_RUN: '39732316353'
+      HOSTDB_QUALIFIED_SHA: 561b7ddaacd67850b8a5861309f07637f0b9fefb
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Checkout exact qualified candidate catalog
+        uses: actions/checkout@v6
+        with:
+          repository: robertjbass/hostdb
+          ref: ${{ env.HOSTDB_QUALIFIED_SHA }}
+          path: .candidate-hostdb
+      - name: Build and link candidate catalog for qualification only
+        run: |
+          pnpm --dir .candidate-hostdb install --frozen-lockfile --ignore-scripts
+          pnpm --dir .candidate-hostdb build
+          rm node_modules/hostdb
+          ln -s "$GITHUB_WORKSPACE/.candidate-hostdb" node_modules/hostdb
+      - name: Verify successful qualification and download exact artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run view "$HOSTDB_QUALIFIED_RUN" --repo robertjbass/hostdb --json headSha,conclusion > "$RUNNER_TEMP/qualification.json"
+          jq -e --arg sha "$HOSTDB_QUALIFIED_SHA" '.headSha == $sha and .conclusion == "success"' "$RUNNER_TEMP/qualification.json"
+          gh run download "$HOSTDB_QUALIFIED_RUN" --repo robertjbass/hostdb --name 'documentdb-1.0.0-${{ matrix.platform }}' --dir "$RUNNER_TEMP/documentdb-artifact"
+          cd "$RUNNER_TEMP/documentdb-artifact"
+          sha256sum -c *.sha256
+          mkdir -p "$RUNNER_TEMP/relocated bundle"
+          tar -xzf 'documentdb-1.0.0-${{ matrix.platform }}.tar.gz' -C "$RUNNER_TEMP/relocated bundle"
+      - name: Run real isolated CLI lifecycle and refusal tests
+        env:
+          DOCUMENTDB_TEST_BUNDLE: ${{ runner.temp }}/relocated bundle/documentdb
+        run: node --import tsx --test tests/integration/documentdb.test.ts
+      - name: Record candidate provenance
+        if: always()
+        run: |
+          echo "Candidate HostDB source: $HOSTDB_QUALIFIED_SHA; native artifact run: $HOSTDB_QUALIFIED_RUN. This checks unpublished candidate bytes, not a published npm dependency." >> "$GITHUB_STEP_SUMMARY"

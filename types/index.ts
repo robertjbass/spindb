@@ -73,6 +73,7 @@ export enum Engine {
   DuckDB = 'duckdb',
   MongoDB = 'mongodb',
   FerretDB = 'ferretdb',
+  DocumentDB = 'documentdb',
   Redis = 'redis',
   Valkey = 'valkey',
   ClickHouse = 'clickhouse',
@@ -117,6 +118,7 @@ export const ALL_ENGINES = [
   Engine.DuckDB,
   Engine.MongoDB,
   Engine.FerretDB,
+  Engine.DocumentDB,
   Engine.Redis,
   Engine.Valkey,
   Engine.ClickHouse,
@@ -442,6 +444,7 @@ type EngineFormatMap = {
   [Engine.DuckDB]: DuckDBFormat
   [Engine.MongoDB]: MongoDBFormat
   [Engine.FerretDB]: FerretDBFormat
+  [Engine.DocumentDB]: MongoDBFormat
   [Engine.Redis]: RedisFormat
   [Engine.Valkey]: ValkeyFormat
   [Engine.ClickHouse]: ClickHouseFormat
@@ -576,6 +579,7 @@ export type BinaryTool =
   | 'meilisearch'
   // FerretDB tools
   | 'ferretdb'
+  | 'documentdb_gateway'
   // CouchDB tools
   | 'couchdb'
   // CockroachDB tools
@@ -678,6 +682,7 @@ export type SpinDBConfig = {
     meilisearch?: BinaryConfig
     // FerretDB tools
     ferretdb?: BinaryConfig
+    documentdb_gateway?: BinaryConfig
     // CouchDB tools
     couchdb?: BinaryConfig
     // CockroachDB tools

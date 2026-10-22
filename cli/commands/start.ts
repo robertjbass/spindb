@@ -213,6 +213,14 @@ export const startCommand = new Command('start')
           config.bindAddress = options.bind
         }
 
+        if (engineName === Engine.DocumentDB && options.auth === false) {
+          return exitWithError({
+            message:
+              'DocumentDB requires authentication; --no-auth is unsupported',
+            json: options.json,
+          })
+        }
+
         // Persist auth mode if --auth or --no-auth was provided
         // Commander parses --no-auth as options.auth === false
         if (options.auth !== undefined) {
@@ -220,6 +228,7 @@ export const startCommand = new Command('start')
             engineName === Engine.FerretDB && isFerretDBv1(config.version)
           const authSupported =
             engineName === Engine.MongoDB ||
+            engineName === Engine.DocumentDB ||
             (engineName === Engine.FerretDB && !isFerretV1)
           if (!authSupported) {
             if (!options.json) {

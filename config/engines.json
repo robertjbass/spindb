@@ -309,6 +309,21 @@
       "licensing": "MIT",
       "notes": "SQLite fork by Turso with server mode (sqld), HTTP API, replication support. No Windows binaries. Enhanced clients: litecli, usql.",
       "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]
+    },
+    "documentdb": {
+      "displayName": "DocumentDB",
+      "icon": "\ud83d\udcc4",
+      "status": "integrated",
+      "binarySource": "hostdb",
+      "defaultPort": 27017,
+      "runtime": "server",
+      "queryLanguage": "javascript",
+      "scriptFileLabel": "Run script file",
+      "connectionScheme": "mongodb",
+      "superuser": "spindb",
+      "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
+      "licensing": "Apache-2.0",
+      "notes": "Standalone official gateway and PostgreSQL bundle. Linux only; authenticated loopback listener."
     }
   }
 }

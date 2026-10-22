@@ -61,6 +61,7 @@ function getEngineDisplayName(engine: Engine): string {
     [Engine.DuckDB]: 'DuckDB',
     [Engine.MongoDB]: 'MongoDB',
     [Engine.FerretDB]: 'FerretDB',
+    [Engine.DocumentDB]: 'DocumentDB',
     [Engine.Redis]: 'Redis',
     [Engine.Valkey]: 'Valkey',
     [Engine.ClickHouse]: 'ClickHouse',
@@ -112,6 +113,7 @@ const _ENGINE_BINARY_CONFIG: Record<
   [Engine.MongoDB]: {
     primaryBinaries: ['mongosh', 'mongodump', 'mongorestore'],
   },
+  [Engine.DocumentDB]: { primaryBinaries: ['documentdb_gateway', 'postgres'] },
   [Engine.FerretDB]: {
     primaryBinaries: ['mongosh', 'psql'], // FerretDB uses mongosh + PostgreSQL backend
   },
@@ -189,6 +191,10 @@ function getConnectionStringTemplate(
         : `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
     case Engine.MongoDB:
+    case Engine.DocumentDB:
+      throw new Error(
+        'DocumentDB Docker export is unavailable until remote TLS support is qualified',
+      )
     case Engine.FerretDB:
       return useTLS
         ? `mongodb://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?tls=true`
@@ -438,6 +444,10 @@ rm -f /tmp/create-user.sql
       break
 
     case Engine.MongoDB:
+    case Engine.DocumentDB:
+      throw new Error(
+        'DocumentDB Docker export is unavailable until remote TLS support is qualified',
+      )
     case Engine.FerretDB:
       userCreationCommands = `
 # Create user with password
@@ -1315,6 +1325,10 @@ export async function getDockerConnectionString(
       return `mysql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
     case Engine.MongoDB:
+    case Engine.DocumentDB:
+      throw new Error(
+        'DocumentDB Docker export is unavailable until remote TLS support is qualified',
+      )
     case Engine.FerretDB:
       return `mongodb://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 

@@ -938,6 +938,13 @@ export const engineDependencies: EngineDependencies[] = [
   mariadbDependencies,
   sqliteDependencies,
   mongodbDependencies,
+  {
+    engine: 'documentdb',
+    displayName: 'DocumentDB',
+    dependencies: mongodbDependencies.dependencies.filter(
+      (dependency) => dependency.binary !== 'mongod',
+    ),
+  },
   redisDependencies,
   valkeyDependencies,
   clickhouseDependencies,

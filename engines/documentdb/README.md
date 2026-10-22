@@ -1,19 +1,39 @@
 # Standalone DocumentDB 1.0
 
-Implementation in progress. This engine is not yet registered or released.
+Candidate implementation, not yet published. Tracker: https://github.com/Layerbase-LLC/layerbase-cloud/issues/3359
 
-Tracker: https://github.com/Layerbase-LLC/layerbase-cloud/issues/3359
+The native bundle combines the official GA Rust MongoDB wire gateway, PostgreSQL
+17.11 and DocumentDB extensions. This is separate from the FerretDB
+`postgresql-documentdb` backend. No runtime Docker dependency.
 
-The official GA bundle contains PostgreSQL, DocumentDB extensions, and a Rust
-MongoDB wire gateway. It is not the existing FerretDB PostgreSQL-DocumentDB
-backend. HostDB must publish the qualified bundle before SpinDB's dependency
-is changed to consume it.
+Initial support: Linux x64 and ARM64 with glibc 2.35 or newer. macOS, Windows,
+non-loopback binds and Docker export are unavailable until qualified. The gateway
+requires SCRAM client authentication. SpinDB creates a random administrator
+credential and saves it with its normal credential manager; `spindb url` returns
+the connection URI. `--no-auth` is refused. Telemetry is disabled.
 
-The native backend will listen only on an owner-private Unix socket. The
-current upstream gateway requires peer authentication to PostgreSQL; MongoDB
-clients authenticate separately. Initial configuration limits the gateway to
-loopback until remote TLS is qualified. No runtime Docker requirement.
+The backend accepts only peer-authenticated connections through an owner-private
+Unix socket. It has no TCP listener. The bundle's exact component versions are
+verified before startup and recorded in the data directory, so branch/reset and
+rename preserve them. Unknown data and mismatched or missing pins are refused.
 
-Remaining: native binary qualification, lifecycle integration, MongoDB clients,
-backup/restore, branch/reset, exact-pin recovery, platform CI, and registry/UI
-integration. Configuration unit checks do not prove those lifecycle gates.
+Use the existing MongoDB client tools (`mongosh`, `mongodump`, `mongorestore`),
+installed with `spindb engines download mongodb 8`, then:
+
+```sh
+spindb create documents --engine documentdb --db-version 1 --database app
+spindb start documents
+spindb query documents 'db.items.insertOne({name: "example", quantity: 42})'
+spindb url documents
+```
+
+`tests/integration/documentdb.test.ts` exercises the real CLI: authenticated
+queries, persisted restart, branch isolation/reset, archive backup/restore,
+stopped rename, exact-pin refusal and recovery. It accepts
+`DOCUMENTDB_TEST_BUNDLE` for an explicitly supplied candidate artifact and
+`DOCUMENTDB_TEST_MONGODB_BUNDLE`/`DOCUMENTDB_TEST_MONGODB_VERSION` to reuse clients.
+It uses an isolated temporary home and leaves failed fixtures for diagnostics.
+
+Release order: publish qualified HostDB artifacts and package, verify availability,
+then update SpinDB's exact HostDB dependency and qualify the published downloads.
+The current dependency deliberately remains on the last published HostDB package.

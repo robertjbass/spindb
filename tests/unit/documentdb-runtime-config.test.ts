@@ -15,6 +15,8 @@ describe('DocumentDB private backend configuration', () => {
     assert.match(config, /listen_addresses = ''/)
     assert.match(config, /unix_socket_permissions = 0700/)
     assert.match(config, /cron.launch_active_jobs = off/)
+    assert.match(config, /pg_documentdb_extended_rum/)
+    assert.match(config, /documentdb.localhost_connection_string = 'host=/)
     const { hba, ident } = buildPeerAuthentication('ubuntu')
     assert.equal(hba, 'local all all peer map=spindb_documentdb\n')
     assert.match(ident, /spindb_documentdb ubuntu spindb_gateway\n/)

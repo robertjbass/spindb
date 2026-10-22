@@ -276,6 +276,7 @@ export function getDefaultPortForEngine(engine: Engine): number {
     case Engine.MariaDB:
       return 3306
     case Engine.MongoDB:
+    case Engine.DocumentDB:
     case Engine.FerretDB:
       return 27017
     case Engine.Redis:

@@ -202,6 +202,18 @@ export const engineDefaults: Record<Engine, EngineDefaults> = {
     clientTools: [], // Meilisearch uses REST API, no separate CLI tools
     maxConnections: 0, // Not applicable for search engine
   },
+  [Engine.DocumentDB]: {
+    defaultVersion: '1',
+    defaultPort: 27017,
+    portRange: { start: 27017, end: 27100 },
+    superuser: 'spindb',
+    connectionScheme: 'mongodb',
+    logFileName: 'documentdb.log',
+    pidFileName: 'documentdb.pid',
+    dataSubdir: 'data',
+    clientTools: ['mongosh', 'mongodump', 'mongorestore'],
+    maxConnections: 100,
+  },
   [Engine.FerretDB]: {
     defaultVersion: '2',
     defaultPort: 27017, // MongoDB-compatible port

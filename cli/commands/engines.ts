@@ -453,6 +453,7 @@ async function listEngines(options: { json?: boolean }): Promise<void> {
     couchdb: 'CouchDB',
     duckdb: 'DuckDB',
     ferretdb: 'FerretDB',
+    documentdb: 'DocumentDB',
     influxdb: 'InfluxDB',
     mariadb: 'MariaDB',
     meilisearch: 'Meilisearch',
@@ -1018,6 +1019,29 @@ enginesCommand
           arch: duckdbArch,
         })
         console.log(chalk.gray(`  Location: ${duckdbBinPath}`))
+        return
+      }
+
+      if (normalizedEngine === Engine.DocumentDB) {
+        const engine = getEngine(Engine.DocumentDB)
+        const selectedVersion = version || '1'
+        const spinner = createSpinner(
+          `Checking DocumentDB ${selectedVersion} binaries...`,
+        )
+        spinner.start()
+        const binPath = await engine.ensureBinaries(
+          selectedVersion,
+          ({ message }) => {
+            spinner.text = message
+          },
+        )
+        spinner.succeed(`DocumentDB ${selectedVersion} binaries ready`)
+        console.log(chalk.gray(`  Location: ${binPath}`))
+        console.log(
+          chalk.gray(
+            '  MongoDB clients are required: spindb engines download mongodb 8',
+          ),
+        )
         return
       }
 
