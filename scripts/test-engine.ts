@@ -97,6 +97,7 @@ const TEST_ORDER = [
   'sqlite',
   'duckdb',
   'mongodb',
+  'documentdb',
   'ferretdb',
   'ferretdb-v1',
   'redis',

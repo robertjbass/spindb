@@ -64,7 +64,7 @@ SpinDB supports **22 database engines** across **5 platform architectures**—al
 
 **101+ supported combinations. One CLI. Zero configuration.**
 
-> DocumentDB is a release candidate requiring the new HostDB catalog; see [its engine notes](engines/documentdb/README.md) for publication status and loopback/authentication limits.
+> DocumentDB uses an authenticated loopback listener on Linux. See [its engine notes](engines/documentdb/README.md) for connection and platform details.
 
 > ClickHouse and LibSQL are available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
@@ -494,7 +494,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 21 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 22 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 

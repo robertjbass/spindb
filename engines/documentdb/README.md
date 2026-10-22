@@ -1,6 +1,6 @@
 # Standalone DocumentDB 1.0
 
-Candidate implementation, not yet published. Tracker: https://github.com/Layerbase-LLC/layerbase-cloud/issues/3359
+Tracker: https://github.com/Layerbase-LLC/layerbase-cloud/issues/3359
 
 The native bundle combines the official GA Rust MongoDB wire gateway, PostgreSQL
 17.11 and DocumentDB extensions. This is separate from the FerretDB
@@ -30,10 +30,12 @@ spindb url documents
 `tests/integration/documentdb.test.ts` exercises the real CLI: authenticated
 queries, persisted restart, branch isolation/reset, archive backup/restore,
 stopped rename, exact-pin refusal and recovery. It accepts
-`DOCUMENTDB_TEST_BUNDLE` for an explicitly supplied candidate artifact and
+`DOCUMENTDB_TEST_CLI` for a compiled or installed CLI entry point,
+`DOCUMENTDB_TEST_BUNDLE` for an explicitly supplied candidate artifact, and
 `DOCUMENTDB_TEST_MONGODB_BUNDLE`/`DOCUMENTDB_TEST_MONGODB_VERSION` to reuse clients.
 It uses an isolated temporary home and leaves failed fixtures for diagnostics.
 
-Release order: publish qualified HostDB artifacts and package, verify availability,
-then update SpinDB's exact HostDB dependency and qualify the published downloads.
-The current dependency deliberately remains on the last published HostDB package.
+Published archives: https://github.com/robertjbass/hostdb/releases/tag/documentdb-1.0.0.
+The normal integration test uses a fresh isolated home and downloads the exact
+runtime from the registry. Candidate overrides are optional; release CI uses
+published packages and actual downloads.
