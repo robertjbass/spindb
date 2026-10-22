@@ -203,6 +203,16 @@ export type InstalledFerretDBEngine = {
   source: 'downloaded'
 }
 
+export type InstalledDocumentDBEngine = {
+  engine: 'documentdb'
+  version: string
+  platform: string
+  arch: string
+  path: string
+  sizeBytes: number
+  source: 'downloaded'
+}
+
 export type InstalledCouchDBEngine = {
   engine: 'couchdb'
   version: string
@@ -301,6 +311,7 @@ export type InstalledEngine =
   | InstalledDuckDBEngine
   | InstalledMongodbEngine
   | InstalledFerretDBEngine
+  | InstalledDocumentDBEngine
   | InstalledRedisEngine
   | InstalledValkeyEngine
   | InstalledClickHouseEngine
@@ -1330,6 +1341,65 @@ async function getInstalledFerretDBEngines(): Promise<
   return engines
 }
 
+async function getDocumentDBVersion(binPath: string): Promise<string | null> {
+  const ext = platformService.getExecutableExtension()
+  const documentdbPath = join(binPath, 'bin', `documentdb_gateway${ext}`)
+  if (!existsSync(documentdbPath)) {
+    return null
+  }
+
+  try {
+    const { stdout } = await execFileAsync(documentdbPath, ['--version'])
+    // Parse output like "documentdb version 2.7.0" or "v2.7.0"
+    const match = stdout.match(
+      /(?:documentdb\s+)?(?:version\s+)?v?(\d+\.\d+\.\d+)/,
+    )
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+// Get installed DocumentDB engines from downloaded binaries
+async function getInstalledDocumentDBEngines(): Promise<
+  InstalledDocumentDBEngine[]
+> {
+  const binDir = paths.bin
+
+  if (!existsSync(binDir)) {
+    return []
+  }
+
+  const entries = await readdir(binDir, { withFileTypes: true })
+  const engines: InstalledDocumentDBEngine[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith('documentdb-')) continue
+
+    const parsed = parseEngineDirectory(entry.name, 'documentdb-', binDir)
+    if (!parsed) continue
+
+    const actualVersion =
+      (await getDocumentDBVersion(parsed.path)) || parsed.version
+    const sizeBytes = await calculateDirectorySize(parsed.path)
+
+    engines.push({
+      engine: 'documentdb',
+      version: actualVersion,
+      platform: parsed.platform,
+      arch: parsed.arch,
+      path: parsed.path,
+      sizeBytes,
+      source: 'downloaded',
+    })
+  }
+
+  engines.sort((a, b) => compareVersions(b.version, a.version))
+
+  return engines
+}
+
 // Get Weaviate version from binary path
 async function getWeaviateVersion(binPath: string): Promise<string | null> {
   const ext = platformService.getExecutableExtension()
@@ -1526,6 +1596,7 @@ const ENGINE_PREFIXES = [
   'duckdb-',
   'mongodb-',
   'ferretdb-',
+  'documentdb-',
   'postgresql-documentdb-',
   'redis-',
   'valkey-',
@@ -1578,6 +1649,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     duckdbEngines,
     mongodbEngines,
     ferretdbEngines,
+    documentdbEngines,
     redisEngines,
     valkeyEngines,
     clickhouseEngines,
@@ -1600,6 +1672,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     getInstalledDuckDBEngines(),
     getInstalledMongodbEngines(),
     getInstalledFerretDBEngines(),
+    getInstalledDocumentDBEngines(),
     getInstalledRedisEngines(),
     getInstalledValkeyEngines(),
     getInstalledClickHouseEngines(),
@@ -1624,6 +1697,7 @@ export async function getInstalledEngines(): Promise<InstalledEngine[]> {
     ...duckdbEngines,
     ...mongodbEngines,
     ...ferretdbEngines,
+    ...documentdbEngines,
     ...redisEngines,
     ...valkeyEngines,
     ...clickhouseEngines,
@@ -1648,6 +1722,7 @@ export {
   getInstalledDuckDBEngines,
   getInstalledMongodbEngines,
   getInstalledFerretDBEngines,
+  getInstalledDocumentDBEngines,
   getInstalledRedisEngines,
   getInstalledValkeyEngines,
   getInstalledClickHouseEngines,

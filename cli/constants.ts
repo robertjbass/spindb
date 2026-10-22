@@ -66,6 +66,7 @@ export const ENGINE_BRAND_COLORS: Record<Engine, BrandColor> = {
   [Engine.DuckDB]: { foreground: '#000000', background: '#FFF100' }, // Black on yellow
   [Engine.MongoDB]: { foreground: '#FFFFFF', background: '#00684A' }, // White on green
   [Engine.FerretDB]: { foreground: '#FFFFFF', background: '#F7931E' }, // White on orange
+  [Engine.DocumentDB]: { foreground: '#FFFFFF', background: '#F7931E' }, // White on orange
   [Engine.Redis]: { foreground: '#FFFFFF', background: '#D82C20' }, // White on red
   [Engine.Valkey]: { foreground: '#FFFFFF', background: '#00B5AD' }, // White on teal
   [Engine.ClickHouse]: { foreground: '#000000', background: '#FCFF74' }, // Black on yellow
@@ -91,6 +92,7 @@ const ASCII_ICONS: Record<Engine, string> = {
   [Engine.DuckDB]: '[DK]',
   [Engine.MongoDB]: '[MG]',
   [Engine.FerretDB]: '[FD]',
+  [Engine.DocumentDB]: '[DC]',
   [Engine.Redis]: '[RD]',
   [Engine.Valkey]: '[VK]',
   [Engine.ClickHouse]: '[CH]',
@@ -117,6 +119,7 @@ const NERD_ICONS: Record<Engine, string> = {
   [Engine.DuckDB]: '\ueef7', // nf-md-duck (closest match)
   [Engine.MongoDB]: '\ue7a4', // nf-dev-mongodb
   [Engine.FerretDB]: '\uf06c', // nf-fa-leaf (MongoDB-compatible)
+  [Engine.DocumentDB]: '\uf06c', // nf-fa-leaf (MongoDB-compatible)
   [Engine.Redis]: '\ue76d', // nf-dev-redis
   [Engine.Valkey]: '\uf29f', // nf-fa-diamond (Redis fork)
   [Engine.ClickHouse]: '\uf015', // nf-fa-house
@@ -142,6 +145,7 @@ const EMOJI_ICONS: Record<Engine, string> = {
   [Engine.DuckDB]: '🦆',
   [Engine.MongoDB]: '🍃',
   [Engine.FerretDB]: '🦔',
+  [Engine.DocumentDB]: '📄',
   [Engine.Redis]: '🔴',
   [Engine.Valkey]: '🔷',
   [Engine.ClickHouse]: '🏠',

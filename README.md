@@ -35,7 +35,7 @@ spindb create cache --engine redis
 
 ## Supported Engines & Platforms
 
-SpinDB supports **21 database engines** across **5 platform architectures**—all with a consistent API.
+SpinDB supports **22 database engines** across **5 platform architectures**—all with a consistent API.
 
 | Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
 |--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
@@ -45,6 +45,7 @@ SpinDB supports **21 database engines** across **5 platform architectures**—al
 | 🪶 **SQLite** | Embedded SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🦆 **DuckDB** | Embedded OLAP | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🍃 **MongoDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 📄 **DocumentDB** | Document Store | ❌ | ❌ | ✅ | ✅ | ❌ |
 | 🦔 **FerretDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ⚠️ |
 | 🔴 **Redis** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -62,6 +63,8 @@ SpinDB supports **21 database engines** across **5 platform architectures**—al
 | 📚 **LibSQL** | Embedded SQL Server | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 **101+ supported combinations. One CLI. Zero configuration.**
+
+> DocumentDB uses an authenticated loopback listener on Linux. See [its engine notes](engines/documentdb/README.md) for connection and platform details.
 
 > ClickHouse and LibSQL are available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 
@@ -202,7 +205,7 @@ spindb connect mydb --ui                         # Built-in Web UI (DuckDB)
 ### Any Engine
 
 ```bash
-spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb|weaviate|tigerbeetle|libsql]
+spindb create mydb --engine [postgresql|mysql|mariadb|mongodb|documentdb|ferretdb|redis|valkey|clickhouse|sqlite|duckdb|qdrant|meilisearch|couchdb|cockroachdb|surrealdb|questdb|typedb|influxdb|weaviate|tigerbeetle|libsql]
 spindb start mydb
 spindb connect mydb
 spindb backup mydb
@@ -491,7 +494,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 21 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 22 engines across all major platforms. Makes Docker-free multi-version database support possible.
 
 ---
 
