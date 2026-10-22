@@ -64,8 +64,11 @@ jobs:
           sha256sum -c *.sha256
           mkdir -p "$RUNNER_TEMP/relocated bundle"
           tar -xzf 'documentdb-1.0.0-${{ matrix.platform }}.tar.gz' -C "$RUNNER_TEMP/relocated bundle"
+      - name: Build the distributable CLI
+        run: pnpm build
       - name: Run real isolated CLI lifecycle and refusal tests
         env:
+          DOCUMENTDB_TEST_CLI: ${{ github.workspace }}/dist/cli/bin.js
           DOCUMENTDB_TEST_BUNDLE: ${{ runner.temp }}/relocated bundle/documentdb
         run: node --import tsx --test tests/integration/documentdb.test.ts
       - name: Record candidate provenance

@@ -321,9 +321,10 @@
       "scriptFileLabel": "Run script file",
       "connectionScheme": "mongodb",
       "superuser": "spindb",
-      "clientTools": ["ferretdb", "mongosh", "mongodump", "mongorestore"],
-      "licensing": "Apache-2.0",
-      "notes": "Standalone official gateway and PostgreSQL bundle. Linux only; authenticated loopback listener."
+      "clientTools": ["mongosh", "mongodump", "mongorestore"],
+      "licensing": "MIT AND PostgreSQL AND GPL-2.0-or-later",
+      "notes": "Standalone official gateway and PostgreSQL bundle. Linux only; authenticated loopback listener.",
+      "platforms": ["linux-arm64", "linux-x64"]
     }
   }
 }

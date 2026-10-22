@@ -53,7 +53,12 @@ test(
       return new Promise((resolve, reject) => {
         const proc = spawn(
           process.execPath,
-          ['--import', 'tsx', 'cli/bin.ts', ...args],
+          [
+            ...(process.env.DOCUMENTDB_TEST_CLI
+              ? [process.env.DOCUMENTDB_TEST_CLI]
+              : ['--import', 'tsx', 'cli/bin.ts']),
+            ...args,
+          ],
           { cwd: repository, env, stdio: ['ignore', 'pipe', 'pipe'] },
         )
         let stdout = ''
