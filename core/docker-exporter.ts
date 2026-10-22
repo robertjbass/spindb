@@ -190,11 +190,11 @@ function getConnectionStringTemplate(
         ? `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?ssl=true`
         : `mysql://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}`
 
-    case Engine.MongoDB:
     case Engine.DocumentDB:
       throw new Error(
         'DocumentDB Docker export is unavailable until remote TLS support is qualified',
       )
+    case Engine.MongoDB:
     case Engine.FerretDB:
       return useTLS
         ? `mongodb://\${SPINDB_USER}:\${SPINDB_PASSWORD}@<host>:${port}/${database}?tls=true`
@@ -443,11 +443,11 @@ rm -f /tmp/create-user.sql
 `
       break
 
-    case Engine.MongoDB:
     case Engine.DocumentDB:
       throw new Error(
         'DocumentDB Docker export is unavailable until remote TLS support is qualified',
       )
+    case Engine.MongoDB:
     case Engine.FerretDB:
       userCreationCommands = `
 # Create user with password
@@ -1324,11 +1324,11 @@ export async function getDockerConnectionString(
     case Engine.MariaDB:
       return `mysql://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 
-    case Engine.MongoDB:
     case Engine.DocumentDB:
       throw new Error(
         'DocumentDB Docker export is unavailable until remote TLS support is qualified',
       )
+    case Engine.MongoDB:
     case Engine.FerretDB:
       return `mongodb://${encodedUsername}:${encodedPassword}@${host}:${port}/${encodedDatabase}`
 

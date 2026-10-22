@@ -2,6 +2,14 @@ name: Qualify DocumentDB CLI
 on:
   pull_request:
     paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'cli/**'
+      - 'config/**'
+      - 'core/**'
+      - 'types/**'
+      - 'engines/base-engine.ts'
+      - 'engines/index.ts'
       - 'engines/documentdb/**'
       - 'engines/mongodb/**'
       - 'tests/integration/documentdb.test.ts'
