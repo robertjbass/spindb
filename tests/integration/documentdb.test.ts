@@ -164,6 +164,15 @@ test(
       await assertRow('source')
       await assertPin('source')
       await cli('stop', 'source')
+      const rejectedBind = await invoke([
+        'start',
+        'source',
+        '--bind',
+        '0.0.0.0',
+        '--json',
+      ])
+      assert.notEqual(rejectedBind.code, 0)
+      assert.match(rejectedBind.stdout, /supports --bind 127\.0\.0\.1 only/)
       const unauthenticated = await invoke([
         'start',
         'source',
@@ -244,6 +253,16 @@ test(
         version: '1.0.0',
         port,
       })
+      await pinnedRuntime.stop()
+      await pinnedRuntime.stop()
+      assert.equal(await hash(), before)
+      const invalidRuntime = new DocumentDBNativeRuntime({
+        bundlePath: binaryPath,
+        containerPath: join(home, 'missing-container'),
+        version: '1.0.0',
+        port,
+      })
+      await assert.rejects(() => invalidRuntime.stop(), /does not exist/)
       try {
         await rm(pinPath)
         await assert.rejects(() => pinnedRuntime.start(), /ENOENT/)

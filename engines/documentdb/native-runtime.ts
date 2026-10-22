@@ -1,4 +1,4 @@
-import { spawn } from 'child_process'
+import { spawn, execFile } from 'child_process'
 import { existsSync } from 'fs'
 import {
   mkdir,
@@ -151,7 +151,28 @@ export class DocumentDBNativeRuntime {
             '30',
           ]
         : ['stop', '-D', this.dataPath, '-m', 'fast', '-w', '-t', '30']
-    await spawnAsync(this.tool('pg_ctl'), args, { timeout: 45000 })
+    try {
+      await spawnAsync(this.tool('pg_ctl'), args, { timeout: 45000 })
+    } catch (error) {
+      if (action !== 'stop') throw error
+      // Only pg_ctl status 3 with its exact no-server result is idempotent.
+      // Missing/invalid data directories, timeouts and permission failures
+      // must still surface the original shutdown error.
+      const stopped = await new Promise<boolean>((resolveStatus) => {
+        execFile(
+          this.tool('pg_ctl'),
+          ['status', '-D', this.dataPath],
+          { timeout: 5000, env: { ...process.env, LC_ALL: 'C' } },
+          (statusError, stdout) => {
+            resolveStatus(
+              statusError?.code === 3 &&
+                stdout.trim() === 'pg_ctl: no server running',
+            )
+          },
+        )
+      })
+      if (!stopped) throw error
+    }
   }
 
   // Credential-bearing SQL goes through stdin; errors never echo its input.

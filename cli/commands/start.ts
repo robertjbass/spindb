@@ -205,20 +205,29 @@ export const startCommand = new Command('start')
           return
         }
 
+        // Reject unsupported DocumentDB options before persisting either one.
+        if (engineName === Engine.DocumentDB) {
+          if (options.auth === false) {
+            return exitWithError({
+              message:
+                'DocumentDB requires authentication; --no-auth is unsupported',
+              json: options.json,
+            })
+          }
+          if (options.bind && options.bind !== '127.0.0.1') {
+            return exitWithError({
+              message: 'DocumentDB currently supports --bind 127.0.0.1 only',
+              json: options.json,
+            })
+          }
+        }
+
         // Persist bind address if provided
         if (options.bind) {
           await containerManager.updateConfig(containerName, {
             bindAddress: options.bind,
           })
           config.bindAddress = options.bind
-        }
-
-        if (engineName === Engine.DocumentDB && options.auth === false) {
-          return exitWithError({
-            message:
-              'DocumentDB requires authentication; --no-auth is unsupported',
-            json: options.json,
-          })
         }
 
         // Persist auth mode if --auth or --no-auth was provided
