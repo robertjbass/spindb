@@ -79,9 +79,30 @@ describe('DocumentDB private backend configuration', () => {
           socketDirectory: '/tmp/s',
           backendPort: 5432,
           port: 27019,
-          bindAddress: '0.0.0.0',
+          bindAddress: '192.0.2.1',
         }),
       /127.0.0.1/,
     )
   })
+})
+
+it('permits explicit external gateway binding without exposing PostgreSQL', () => {
+  const config = buildGatewayConfig({
+    socketDirectory: '/tmp/s',
+    backendPort: 5432,
+    port: 27019,
+    bindAddress: '0.0.0.0',
+  })
+  assert.equal(config.UseLocalHost, false)
+  assert.equal(config.PostgresHostName, '/tmp/s')
+  assert.equal(config.EnforceTls, false)
+  assert.equal(
+    buildGatewayConfig({
+      socketDirectory: '/tmp/s',
+      backendPort: 5432,
+      port: 27019,
+      bindAddress: '127.0.0.1',
+    }).UseLocalHost,
+    true,
+  )
 })

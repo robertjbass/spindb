@@ -1,12 +1,16 @@
+import type { ContainerConfig } from '../../types'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { listEngines } from '../../engines'
+import { getEngine, listEngines } from '../../engines'
 import { platformService } from '../../core/platform-service'
 import { Engine, Platform } from '../../types'
-import { verifyDocumentDBBundle } from '../../engines/documentdb/native-runtime'
+import {
+  DocumentDBNativeRuntime,
+  verifyDocumentDBBundle,
+} from '../../engines/documentdb/native-runtime'
 
 describe('DocumentDB exact bundle validation', () => {
   it('refuses absent provenance instead of assigning the current default', async () => {
@@ -76,4 +80,31 @@ describe('DocumentDB platform discovery', () => {
       }
     }
   })
+})
+
+it(
+  'supports a Cloud UUID path without exceeding the private socket limit',
+  { skip: process.platform !== 'linux' },
+  () => {
+    const runtime = new DocumentDBNativeRuntime({
+      bundlePath: '/tmp/bundle',
+      containerPath:
+        '/home/layerbase/.spindb/containers/documentdb/cloud_00000000-0000-0000-0000-000000000000',
+      version: '1.0.0',
+      port: 27019,
+    })
+    assert.ok(Buffer.byteLength(runtime.socketPath) + 15 < 108)
+  },
+)
+
+it('refuses database-scoped grants instead of silently granting global access', async () => {
+  const engine = getEngine(Engine.DocumentDB)
+  await assert.rejects(
+    engine.createUser({ name: 'fixture', database: 'app' } as ContainerConfig, {
+      username: 'fixture',
+      password: 'not-a-real-secret',
+      database: 'app',
+    }),
+    /requires --database admin/,
+  )
 })

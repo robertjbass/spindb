@@ -104,7 +104,8 @@ export class DocumentDBNativeRuntime {
       containerPath: resolve(options.containerPath),
     }
     this.dataPath = join(this.options.containerPath, 'data')
-    this.socketPath = join(this.options.containerPath, 'socket')
+    // Keep Cloud's UUID container paths below sockaddr_un's length limit.
+    this.socketPath = join(this.options.containerPath, 's')
     this.configPath = join(
       this.options.containerPath,
       'documentdb-gateway.json',
@@ -209,6 +210,58 @@ export class DocumentDBNativeRuntime {
       proc.stdin.on('error', () => {})
       proc.stdin.end(input)
     })
+  }
+
+  async provisionAdministrator(
+    username: string,
+    password: string,
+  ): Promise<void> {
+    await this.verifyRuntimePin()
+    if (
+      !/^[a-zA-Z][a-zA-Z0-9_]{0,62}$/.test(username) ||
+      /^(pg_|documentdb|spindb_)/.test(username) ||
+      username === 'postgres' ||
+      !password ||
+      /[\r\n\0]/.test(password)
+    ) {
+      throw new Error('Invalid DocumentDB administrator credentials')
+    }
+    const command = JSON.stringify({
+      createUser: username,
+      pwd: password,
+      roles: [
+        { role: 'readWriteAnyDatabase', db: 'admin' },
+        { role: 'clusterAdmin', db: 'admin' },
+      ],
+      $db: 'admin',
+    })
+    const update = JSON.stringify({
+      updateUser: username,
+      pwd: password,
+      $db: 'admin',
+    })
+    const literal = (value: string) => `'${value.replace(/'/g, "''")}'`
+    // Owner-only local operation, matching upstream's gateway-admin tooling.
+    // Refuse collisions with an unrelated PostgreSQL role rather than adopting it.
+    const exists = await this.sql(
+      `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${literal(username)});`,
+    )
+    if (exists === 't') {
+      if (
+        (await this.sql(
+          `SELECT NOT rolsuper AND pg_has_role(rolname, 'documentdb_admin_role', 'MEMBER') FROM pg_roles WHERE rolname = ${literal(username)};`,
+        )) !== 't'
+      ) {
+        throw new Error('Existing role is not a DocumentDB administrator')
+      }
+      await this.sql(
+        `SELECT documentdb_api.update_user(${literal(update)}::documentdb_core.bson);`,
+      )
+    } else {
+      await this.sql(
+        `SELECT documentdb_api.create_user(${literal(command)}::documentdb_core.bson);`,
+      )
+    }
   }
 
   async initialize(credentials: {
@@ -331,7 +384,7 @@ export class DocumentDBNativeRuntime {
     )
   }
 
-  async start(): Promise<void> {
+  private async verifyRuntimePin(): Promise<void> {
     const metadata = await verifyDocumentDBBundle(
       this.options.bundlePath,
       this.options.version,
@@ -350,6 +403,10 @@ export class DocumentDBNativeRuntime {
     // Socket paths and listener ports change after a branch or rename.
     await mkdir(this.socketPath, { recursive: true, mode: 0o700 })
     await chmod(this.socketPath, 0o700)
+  }
+
+  async start(): Promise<void> {
+    await this.verifyRuntimePin()
     await this.writeConfiguration()
     await this.pgControl('start')
     try {
@@ -393,23 +450,51 @@ export class DocumentDBNativeRuntime {
       const pid = Number((await readFile(pidFile, 'utf8')).trim())
       if (!Number.isInteger(pid) || pid <= 1)
         throw new Error('Invalid DocumentDB gateway PID file')
+      const alive = (): boolean => {
+        try {
+          process.kill(pid, 0)
+          return true
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false
+          throw error
+        }
+      }
       const procPath = `/proc/${pid}/cmdline`
-      if (existsSync(procPath)) {
-        const args = (await readFile(procPath, 'utf8')).split('\0')
-        if (
-          args[0] !== this.tool('documentdb_gateway') ||
-          args[1] !== 'run' ||
-          args[2] !== '--config' ||
-          args[3] !== this.configPath
-        ) {
+      const present = () =>
+        process.platform === 'darwin' ? alive() : existsSync(procPath)
+      if (present()) {
+        const expected = [
+          this.tool('documentdb_gateway'),
+          'run',
+          '--config',
+          this.configPath,
+        ]
+        let matches: boolean
+        if (process.platform === 'darwin') {
+          const command = await spawnAsync('/bin/ps', [
+            '-p',
+            String(pid),
+            '-o',
+            'command=',
+          ])
+          matches = command.stdout.trim() === expected.join(' ')
+        } else {
+          const args = (await readFile(procPath, 'utf8'))
+            .split('\0')
+            .filter(Boolean)
+          matches =
+            args.length === expected.length &&
+            args.every((arg, i) => arg === expected[i])
+        }
+        if (!matches) {
           throw new Error(
             'DocumentDB gateway PID belongs to another process; refusing to stop it',
           )
         }
         process.kill(pid, 'SIGTERM')
-        for (let attempt = 0; attempt < 100 && existsSync(procPath); attempt++)
+        for (let attempt = 0; attempt < 100 && present(); attempt++)
           await delay(100)
-        if (existsSync(procPath))
+        if (present())
           throw new Error(
             'DocumentDB gateway did not exit; backend kept running',
           )

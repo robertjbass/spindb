@@ -28,8 +28,11 @@ export function buildPostgresConfig(options: {
     throw new Error('DocumentDB requires an absolute private socket directory')
   }
   // The longest PostgreSQL socket filename is /.s.PGSQL.65535. Linux sockaddr_un
-  // has a 108-byte limit, including the terminating NUL.
-  if (Buffer.byteLength(options.socketDirectory) + 15 >= 108) {
+  // has a 108-byte limit, including the terminating NUL (104 on Darwin).
+  if (
+    Buffer.byteLength(options.socketDirectory) + 15 >=
+    (process.platform === 'darwin' ? 104 : 108)
+  ) {
     throw new Error(
       'DocumentDB socket path is too long; use a shorter SPINDB_HOME',
     )
@@ -85,10 +88,13 @@ export function buildGatewayConfig(options: {
 }): Record<string, unknown> {
   assertPort(options.port)
   assertPort(options.backendPort)
-  // Keep the first native implementation local. Remote TLS qualification must
-  // precede exposing the SCRAM listener on other interfaces.
-  if (options.bindAddress && options.bindAddress !== '127.0.0.1') {
-    throw new Error('DocumentDB currently supports --bind 127.0.0.1 only')
+  // Explicit external binding is for a trusted network behind a TLS terminator.
+  // The gateway always requires SCRAM; PostgreSQL stays on its private socket.
+  if (
+    options.bindAddress &&
+    !['127.0.0.1', '0.0.0.0'].includes(options.bindAddress)
+  ) {
+    throw new Error('DocumentDB supports --bind 127.0.0.1 or 0.0.0.0')
   }
   return {
     NodeHostName: 'localhost',
@@ -105,7 +111,7 @@ export function buildGatewayConfig(options: {
     PostgresPort: options.backendPort,
     PostgresDatabase: 'postgres',
     GatewayListenPort: options.port,
-    UseLocalHost: true,
+    UseLocalHost: options.bindAddress !== '0.0.0.0',
     EnforceTls: false,
     EnableV2Runtime: true,
     AsyncRuntimeWorkerThreads: 2,
