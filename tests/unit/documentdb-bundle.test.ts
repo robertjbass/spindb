@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { listEngines } from '../../engines'
+import { platformService } from '../../core/platform-service'
+import { Engine, Platform } from '../../types'
 import { verifyDocumentDBBundle } from '../../engines/documentdb/native-runtime'
 
 describe('DocumentDB exact bundle validation', () => {
@@ -50,6 +53,27 @@ describe('DocumentDB exact bundle validation', () => {
       )
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('DocumentDB platform discovery', () => {
+  it('offers standalone DocumentDB only on qualified Linux platforms', (context) => {
+    const original = platformService.getPlatformInfo()
+    for (const platform of [Platform.Linux, Platform.Darwin, Platform.Win32]) {
+      const mocked = context.mock.method(
+        platformService,
+        'getPlatformInfo',
+        () => ({ ...original, platform }),
+      )
+      try {
+        assert.equal(
+          listEngines().some((engine) => engine.name === Engine.DocumentDB),
+          platform === Platform.Linux,
+        )
+      } finally {
+        mocked.mock.restore()
+      }
     }
   })
 })

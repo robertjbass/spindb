@@ -125,6 +125,10 @@ export function listEngines(): EngineInfo[] {
     .filter(([, engine]) => {
       if (seen.has(engine)) return false
       seen.add(engine)
+      // The standalone gateway bundle is currently qualified on Linux only.
+      if (engine.name === Engine.DocumentDB && platform !== Platform.Linux) {
+        return false
+      }
       // Filter out unsupported engines on Windows
       if (isWindows && WINDOWS_UNSUPPORTED_ENGINES.has(engine.name as Engine)) {
         return false
