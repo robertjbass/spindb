@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.75.1] - Unreleased
+
+- Add owner-authorized DocumentDB administrator provisioning through `users create --database admin` and optional `--password-stdin` input.
+- Prepare DocumentDB for Cloud with explicit external gateway binding, mandatory authentication, and a short private socket path that supports Cloud UUID names.
+- Prepare exact-process gateway shutdown for macOS; native macOS support remains unavailable pending artifact qualification.
+
 ## [0.75.0] - 2026-10-22
 
 - Add standalone DocumentDB 1.0 for native Linux x64 and ARM64, separate from FerretDB. Includes an authenticated MongoDB wire gateway and private PostgreSQL backend, exact runtime pins, lifecycle operations and archive backup/restore. Loopback only initially.
