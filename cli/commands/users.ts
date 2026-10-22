@@ -40,6 +40,10 @@ usersCommand
   .argument('<container>', 'Container name')
   .argument('[username]', 'Username to create')
   .option('-p, --password <password>', 'Use specific password')
+  .option(
+    '--password-stdin',
+    'Read the password from stdin without exposing it in process arguments',
+  )
   .option('-d, --database <database>', 'Target database for grants')
   .option('-c, --copy', 'Copy connection string to clipboard')
   .option('-j, --json', 'Output as JSON')
@@ -51,6 +55,7 @@ usersCommand
       username: string | undefined,
       options: {
         password?: string
+        passwordStdin?: boolean
         database?: string
         copy?: boolean
         json?: boolean
@@ -89,8 +94,32 @@ usersCommand
 
         const engine = getEngine(engineName)
 
+        let stdinPassword: string | undefined
+        if (options.passwordStdin) {
+          if (options.password !== undefined || process.stdin.isTTY) {
+            throw new Error(
+              '--password-stdin requires piped input and cannot be combined with --password',
+            )
+          }
+          const chunks: Buffer[] = []
+          let length = 0
+          for await (const chunk of process.stdin) {
+            const bytes = Buffer.from(chunk)
+            length += bytes.length
+            if (length > 4096)
+              throw new Error('Password input exceeds 4096 bytes')
+            chunks.push(bytes)
+          }
+          stdinPassword = Buffer.concat(chunks)
+            .toString('utf8')
+            .replace(/\r?\n$/, '')
+          if (!stdinPassword || /[\r\n\0]/.test(stdinPassword))
+            throw new Error('Password input must contain one non-empty line')
+        }
+
         // Generate or use provided password
         const password =
+          stdinPassword ||
           options.password ||
           generatePassword({
             length: DEFAULT_PASSWORD_LENGTH,

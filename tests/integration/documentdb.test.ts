@@ -49,6 +49,7 @@ test(
     let complete = false
     async function invoke(
       args: string[],
+      input?: string,
     ): Promise<{ code: number | null; stdout: string }> {
       return new Promise((resolve, reject) => {
         const proc = spawn(
@@ -59,8 +60,13 @@ test(
               : ['--import', 'tsx', 'cli/bin.ts']),
             ...args,
           ],
-          { cwd: repository, env, stdio: ['ignore', 'pipe', 'pipe'] },
+          {
+            cwd: repository,
+            env,
+            stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+          },
         )
+        if (input !== undefined) proc.stdin?.end(input)
         let stdout = ''
         const timer = setTimeout(() => {
           proc.kill('SIGTERM')
@@ -163,16 +169,57 @@ test(
       )
       await assertRow('source')
       await assertPin('source')
+      // The GA gateway cannot create PostgreSQL roles. The owner-authorized
+      // users command must provision and update an admin through its private socket.
+      const administratorArgs = [
+        'users',
+        'create',
+        'source',
+        'cloudadmin',
+        '--database',
+        'admin',
+        '--password-stdin',
+        '--no-save',
+        '--json',
+      ]
+      for (const password of ['Disposable_admin_1', 'Disposable_admin_2']) {
+        const administrator = await invoke(administratorArgs, password)
+        assert.equal(
+          administrator.code,
+          0,
+          'native administrator provisioning failed',
+        )
+      }
+      const emptyPassword = await invoke(administratorArgs, '')
+      assert.notEqual(emptyPassword.code, 0)
+      const protectedRole = await invoke(
+        [
+          'users',
+          'create',
+          'source',
+          'postgres',
+          '--database',
+          'admin',
+          '--password-stdin',
+          '--no-save',
+          '--json',
+        ],
+        'Disposable_admin_3',
+      )
+      assert.notEqual(protectedRole.code, 0)
       await cli('stop', 'source')
       const rejectedBind = await invoke([
         'start',
         'source',
         '--bind',
-        '0.0.0.0',
+        '192.0.2.1',
         '--json',
       ])
       assert.notEqual(rejectedBind.code, 0)
-      assert.match(rejectedBind.stdout, /supports --bind 127\.0\.0\.1 only/)
+      assert.match(
+        rejectedBind.stdout,
+        /supports --bind 127\.0\.0\.1 or 0\.0\.0\.0/,
+      )
       const unauthenticated = await invoke([
         'start',
         'source',
@@ -181,7 +228,7 @@ test(
       ])
       assert.notEqual(unauthenticated.code, 0)
       assert.match(unauthenticated.stdout, /requires authentication/)
-      await cli('start', 'source', '--strict-port')
+      await cli('start', 'source', '--strict-port', '--bind', '0.0.0.0')
       await assertRow('source')
       const backupDirectory = join(home, 'backups')
       await mkdir(backupDirectory)

@@ -214,9 +214,12 @@ export const startCommand = new Command('start')
               json: options.json,
             })
           }
-          if (options.bind && options.bind !== '127.0.0.1') {
+          if (
+            options.bind &&
+            !['127.0.0.1', '0.0.0.0'].includes(options.bind)
+          ) {
             return exitWithError({
-              message: 'DocumentDB currently supports --bind 127.0.0.1 only',
+              message: 'DocumentDB supports --bind 127.0.0.1 or 0.0.0.0',
               json: options.json,
             })
           }

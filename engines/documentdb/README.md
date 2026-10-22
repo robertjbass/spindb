@@ -7,7 +7,9 @@ The native bundle combines the official GA Rust MongoDB wire gateway, PostgreSQL
 `postgresql-documentdb` backend. No runtime Docker dependency.
 
 Initial support: Linux x64 and ARM64 with glibc 2.35 or newer. macOS, Windows,
-non-loopback binds and Docker export are unavailable until qualified. The gateway
+and Docker export are unavailable until qualified. Explicit `--bind 0.0.0.0`
+is available for trusted container networks behind a TLS terminator. The gateway
+listener does not terminate TLS itself. Localhost remains the default. The gateway
 requires SCRAM client authentication. SpinDB creates a random administrator
 credential and saves it with its normal credential manager; `spindb url` returns
 the connection URI. `--no-auth` is refused. Telemetry is disabled.
@@ -39,3 +41,5 @@ Published archives: https://github.com/robertjbass/hostdb/releases/tag/documentd
 The normal integration test uses a fresh isolated home and downloads the exact
 runtime from the registry. Candidate overrides are optional; release CI uses
 published packages and actual downloads.
+
+Cloud administrator provisioning uses `spindb users create NAME USER --database admin --password-stdin`. This is an owner-only local operation through PostgreSQL's private socket, matching upstream gateway-admin tooling. It grants full DocumentDB administrator access, validates the exact runtime pin and refuses an existing unrelated PostgreSQL role. Database-scoped user grants remain unsupported. Passwords supplied on stdin do not appear in process arguments.

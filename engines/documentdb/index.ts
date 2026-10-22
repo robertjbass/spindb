@@ -9,6 +9,8 @@ import { spawnAsync } from '../../core/spawn-utils'
 import {
   Engine,
   type ContainerConfig,
+  type CreateUserOptions,
+  type UserCredentials,
   type ProgressCallback,
   type Platform,
   type Arch,
@@ -96,6 +98,30 @@ export class DocumentDBEngine extends MongoDBEngine {
       bindAddress: container.bindAddress,
     })
   }
+  override async createUser(
+    container: ContainerConfig,
+    options: CreateUserOptions,
+  ): Promise<UserCredentials> {
+    if (options.database !== 'admin') {
+      throw new Error(
+        'DocumentDB user provisioning currently requires --database admin and grants administrator access; database-scoped grants are unsupported',
+      )
+    }
+    await this.runtime(container).provisionAdministrator(
+      options.username,
+      options.password,
+    )
+    return {
+      username: options.username,
+      password: options.password,
+      connectionString: `mongodb://${encodeURIComponent(options.username)}:${encodeURIComponent(options.password)}@127.0.0.1:${container.port}/admin?authSource=admin`,
+      engine: Engine.DocumentDB,
+      container: container.name,
+      database: 'admin',
+      authSource: 'admin',
+    }
+  }
+
   override async initDataDir(
     containerName: string,
     version: string,
