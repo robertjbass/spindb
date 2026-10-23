@@ -43,3 +43,13 @@ runtime from the registry. Candidate overrides are optional; release CI uses
 published packages and actual downloads.
 
 Cloud administrator provisioning uses `spindb users create NAME USER --database admin --password-stdin`. This is an owner-only local operation through PostgreSQL's private socket, matching upstream gateway-admin tooling. It grants full DocumentDB administrator access, validates the exact runtime pin and refuses an existing unrelated PostgreSQL role. Database-scoped user grants remain unsupported. Passwords supplied on stdin do not appear in process arguments.
+
+## macOS ARM64 release candidate
+
+The native-platform feature branch prepares Mac discovery and a manual candidate
+qualification job. It is not a published platform release. HostDB PR257 must
+pass native authentication, CRUD and persistence first; then dispatch
+`qualify-documentdb.yml` with its `candidate_run` to exercise the compiled CLI's
+branch/reset, backup/restore, rename and exact-pin checks. Publish HostDB and pin
+that verified npm release before promoting this branch. Windows remains blocked
+pending native gateway/backend qualification (HostDB issue134 / PR258).

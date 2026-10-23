@@ -7,9 +7,14 @@ export function getBinaryUrl(
   platform: Platform,
   arch: Arch,
 ): string {
-  if (platform !== 'linux' || !['x64', 'arm64'].includes(arch)) {
+  if (
+    !(
+      (platform === 'linux' && ['x64', 'arm64'].includes(arch)) ||
+      (platform === 'darwin' && arch === 'arm64')
+    )
+  ) {
     throw new Error(
-      `Native DocumentDB is not available for ${platform}-${arch}; currently Linux x64 and ARM64 only`,
+      `Native DocumentDB is not available for ${platform}-${arch}; requires Linux x64/ARM64 or macOS ARM64`,
     )
   }
   return buildHostdbUrl(Engine.DocumentDB, {

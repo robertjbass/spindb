@@ -35,8 +35,9 @@ test(
   'DocumentDB CLI preserves documents and exact runtime pins through its lifecycle',
   {
     skip:
-      process.platform !== 'linux'
-        ? 'Native DocumentDB currently supports Linux only'
+      process.platform !== 'linux' &&
+      !(process.platform === 'darwin' && process.arch === 'arm64')
+        ? 'Native DocumentDB requires Linux or macOS ARM64'
         : false,
     timeout: 600000,
   },

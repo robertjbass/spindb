@@ -15,6 +15,11 @@ on:
       - 'tests/integration/documentdb.test.ts'
       - '.github/workflows/qualify-documentdb.yml'
   workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: HostDB Mac qualification run containing the candidate archive
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -53,3 +58,37 @@ jobs:
         if: always()
         run: |
           echo "Published HostDB pin: $(node -p 'require("./package.json").dependencies.hostdb'). The isolated CLI fixture downloads real registry artifacts without an injected runtime cache." >> "$GITHUB_STEP_SUMMARY"
+
+  mac-candidate:
+    if: github.event_name == 'workflow_dispatch' && inputs.candidate_run != ''
+    runs-on: macos-14
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=1536
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          repository: robertjbass/hostdb
+          run-id: ${{ inputs.candidate_run }}
+          github-token: ${{ github.token }}
+          name: documentdb-1.0.0-darwin-arm64
+          path: candidate
+      - name: Verify and relocate unpublished candidate
+        run: |
+          cd candidate
+          shasum -a 256 -c documentdb-1.0.0-darwin-arm64.tar.gz.sha256
+          mkdir relocated
+          tar -xzf documentdb-1.0.0-darwin-arm64.tar.gz -C relocated
+      - run: pnpm build
+      - name: Qualify the actual CLI with the Mac candidate
+        env:
+          DOCUMENTDB_TEST_CLI: ${{ github.workspace }}/dist/cli/bin.js
+          DOCUMENTDB_TEST_BUNDLE: ${{ github.workspace }}/candidate/relocated/documentdb
+        run: node --import tsx --test tests/integration/documentdb.test.ts
