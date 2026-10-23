@@ -1474,6 +1474,12 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
+          - os: ubuntu-24.04-arm
+            icon: 🐧
+            label: Linux ARM64
+          - os: macos-15-intel
+            icon: 🍏
+            label: macOS Intel
           - os: macos-14
             icon: 🍏
             label: macOS ARM64
@@ -1502,7 +1508,7 @@ jobs:
         id: typedb-cache
         with:
           path: ~/.spindb/bin
-          key: spindb-typedb-3-${{ runner.os }}-${{ runner.arch }}
+          key: spindb-typedb-${{ hashFiles('pnpm-lock.yaml') }}-${{ runner.os }}-${{ runner.arch }}
 
       # Use SpinDB to download TypeDB binaries
       - name: Install TypeDB via SpinDB

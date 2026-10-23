@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.0] - 2026-10-23
+
+### Changed
+
+- TypeDB defaults to stable 3.14.1 through the exact HostDB 0.47.0 pin. Explicit older-version creation and existing exact runtime pins remain available.
+- TypeDB release qualification includes native Linux ARM64 and Intel macOS alongside Linux x64, Apple Silicon and Windows.
+
 ## [0.76.0] - 2026-10-23
 
 ### Added
