@@ -323,8 +323,8 @@
       "superuser": "spindb",
       "clientTools": ["mongosh", "mongodump", "mongorestore"],
       "licensing": "MIT AND PostgreSQL AND GPL-2.0-or-later",
-      "notes": "Standalone official gateway and PostgreSQL bundle. Linux only; authenticated loopback listener.",
-      "platforms": ["linux-arm64", "linux-x64"]
+      "notes": "Standalone official gateway and PostgreSQL bundle. Linux and macOS ARM64; authenticated listener.",
+      "platforms": ["linux-arm64", "linux-x64", "darwin-arm64"]
     }
   }
 }

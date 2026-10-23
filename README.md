@@ -45,7 +45,7 @@ SpinDB supports **22 database engines** across **5 platform architectures**—al
 | 🪶 **SQLite** | Embedded SQL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🦆 **DuckDB** | Embedded OLAP | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🍃 **MongoDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 📄 **DocumentDB** | Document Store | ❌ | ❌ | ✅ | ✅ | ❌ |
+| 📄 **DocumentDB** | Document Store | ✅ | ❌ | ✅ | ✅ | ❌ |
 | 🦔 **FerretDB** | Document Store | ✅ | ✅ | ✅ | ✅ | ⚠️ |
 | 🔴 **Redis** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 🔷 **Valkey** | Key-Value | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -64,7 +64,7 @@ SpinDB supports **22 database engines** across **5 platform architectures**—al
 
 **101+ supported combinations. One CLI. Zero configuration.**
 
-> DocumentDB defaults to an authenticated loopback listener on Linux. Explicit external binding is available for trusted networks behind a TLS terminator. See [its engine notes](engines/documentdb/README.md) for connection and platform details.
+> DocumentDB supports Linux x64/ARM64 and macOS 14+ ARM64, with an authenticated loopback listener by default. Explicit external binding is available for trusted networks behind a TLS terminator. See [its engine notes](engines/documentdb/README.md) for connection and platform details.
 
 > ClickHouse and LibSQL are available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
 

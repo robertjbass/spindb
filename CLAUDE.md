@@ -355,7 +355,7 @@ artifacts or package versions.
 ## Standalone DocumentDB
 
 See `engines/documentdb/README.md`. The official native gateway and backend are one
-versioned HostDB bundle. Linux only initially, loopback gateway with mandatory
+versioned HostDB bundle. Linux x64/ARM64 and macOS 14+ ARM64, loopback gateway with mandatory
 authentication, private peer-authenticated PostgreSQL socket. Do not reuse the
 FerretDB backend mapping or infer a runtime pin for existing data. Candidate
 qualification may explicitly link a HostDB checkout; published dependencies must

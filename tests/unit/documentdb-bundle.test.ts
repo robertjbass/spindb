@@ -6,7 +6,8 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { getEngine, listEngines } from '../../engines'
 import { platformService } from '../../core/platform-service'
-import { Engine, Platform } from '../../types'
+import { supportsDocumentDBPlatform } from '../../engines/documentdb/binary-urls'
+import { Arch, Engine, Platform } from '../../types'
 import {
   DocumentDBNativeRuntime,
   verifyDocumentDBBundle,
@@ -62,21 +63,35 @@ describe('DocumentDB exact bundle validation', () => {
 })
 
 describe('DocumentDB platform discovery', () => {
-  it('offers standalone DocumentDB only on qualified Linux platforms', (context) => {
+  it('refuses a platform when the exact artifact is absent from the pinned HostDB snapshot', () => {
+    assert.equal(
+      supportsDocumentDBPlatform(Platform.Darwin, Arch.ARM64, '9.9.9'),
+      false,
+    )
+  })
+  it('offers standalone DocumentDB on Linux and macOS ARM64', (context) => {
     const original = platformService.getPlatformInfo()
-    for (const platform of [Platform.Linux, Platform.Darwin, Platform.Win32]) {
-      const mocked = context.mock.method(
-        platformService,
-        'getPlatformInfo',
-        () => ({ ...original, platform }),
-      )
-      try {
-        assert.equal(
-          listEngines().some((engine) => engine.name === Engine.DocumentDB),
-          platform === Platform.Linux,
+    for (const arch of ['x64', 'arm64'] as const) {
+      for (const platform of [
+        Platform.Linux,
+        Platform.Darwin,
+        Platform.Win32,
+      ]) {
+        const mocked = context.mock.method(
+          platformService,
+          'getPlatformInfo',
+          () => ({ ...original, platform, arch }),
         )
-      } finally {
-        mocked.mock.restore()
+        try {
+          assert.equal(
+            listEngines().some((engine) => engine.name === Engine.DocumentDB),
+            platform === Platform.Linux ||
+              (platform === Platform.Darwin && arch === 'arm64'),
+            `${platform}-${arch}`,
+          )
+        } finally {
+          mocked.mock.restore()
+        }
       }
     }
   })

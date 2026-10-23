@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.0] - 2026-10-23
+
+### Added
+
+- Native standalone DocumentDB 1.0 on Apple Silicon running macOS 14 or newer, without Docker. Native Linux x64/ARM64 support is retained; Intel Mac and native Windows remain unavailable.
+- Normal platform discovery requires the exact runtime artifact in the pinned HostDB snapshot. Native CI exercises fresh registry downloads, authenticated queries, restart, branch/reset, backup/restore, rename and exact-pin refusal on both Linux architectures and Mac ARM64.
+
 ## [0.75.1] - Unreleased
 
 - Add owner-authorized DocumentDB administrator provisioning through `users create --database admin` and optional `--password-stdin` input.

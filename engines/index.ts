@@ -6,6 +6,7 @@ import { duckdbEngine } from './duckdb'
 import { mongodbEngine } from './mongodb'
 import { ferretdbEngine } from './ferretdb'
 import { documentdbEngine } from './documentdb'
+import { supportsDocumentDBPlatform } from './documentdb/binary-urls'
 import { redisEngine } from './redis'
 import { valkeyEngine } from './valkey'
 import { clickhouseEngine } from './clickhouse'
@@ -117,7 +118,7 @@ export function getEngine(name: string): BaseEngine {
 
 // List all available engines (filtered by platform support)
 export function listEngines(): EngineInfo[] {
-  const { platform } = platformService.getPlatformInfo()
+  const { platform, arch } = platformService.getPlatformInfo()
   const isWindows = platform === Platform.Win32
   const seen = new Set<BaseEngine>()
 
@@ -125,8 +126,11 @@ export function listEngines(): EngineInfo[] {
     .filter(([, engine]) => {
       if (seen.has(engine)) return false
       seen.add(engine)
-      // The standalone gateway bundle is currently qualified on Linux only.
-      if (engine.name === Engine.DocumentDB && platform !== Platform.Linux) {
+      // Match discovery to the standalone bundle platform resolver.
+      if (
+        engine.name === Engine.DocumentDB &&
+        !supportsDocumentDBPlatform(platform, arch)
+      ) {
         return false
       }
       // Filter out unsupported engines on Windows
