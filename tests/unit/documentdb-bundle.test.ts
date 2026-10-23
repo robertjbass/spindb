@@ -6,6 +6,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { getEngine, listEngines } from '../../engines'
 import { platformService } from '../../core/platform-service'
+import { supportsDocumentDBPlatform } from '../../engines/documentdb/binary-urls'
 import { Engine, Platform } from '../../types'
 import {
   DocumentDBNativeRuntime,
@@ -62,6 +63,12 @@ describe('DocumentDB exact bundle validation', () => {
 })
 
 describe('DocumentDB platform discovery', () => {
+  it('refuses a platform when the exact artifact is absent from the pinned HostDB snapshot', () => {
+    assert.equal(
+      supportsDocumentDBPlatform(Platform.Darwin, 'arm64', '9.9.9'),
+      false,
+    )
+  })
   it('offers standalone DocumentDB on Linux and macOS ARM64', (context) => {
     const original = platformService.getPlatformInfo()
     for (const arch of ['x64', 'arm64'] as const) {
