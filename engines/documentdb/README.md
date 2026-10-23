@@ -6,8 +6,8 @@ The native bundle combines the official GA Rust MongoDB wire gateway, PostgreSQL
 17.11 and DocumentDB extensions. This is separate from the FerretDB
 `postgresql-documentdb` backend. No runtime Docker dependency.
 
-Initial support: Linux x64 and ARM64 with glibc 2.35 or newer. macOS, Windows,
-and Docker export are unavailable until qualified. Explicit `--bind 0.0.0.0`
+Supported platforms: Linux x64 and ARM64 with glibc 2.35 or newer, and Apple
+Silicon on macOS 14 or newer. Intel Mac, Windows and Docker export are unavailable. Explicit `--bind 0.0.0.0`
 is available for trusted container networks behind a TLS terminator. The gateway
 listener does not terminate TLS itself. Localhost remains the default. The gateway
 requires SCRAM client authentication. SpinDB creates a random administrator
@@ -43,3 +43,14 @@ runtime from the registry. Candidate overrides are optional; release CI uses
 published packages and actual downloads.
 
 Cloud administrator provisioning uses `spindb users create NAME USER --database admin --password-stdin`. This is an owner-only local operation through PostgreSQL's private socket, matching upstream gateway-admin tooling. It grants full DocumentDB administrator access, validates the exact runtime pin and refuses an existing unrelated PostgreSQL role. Database-scoped user grants remain unsupported. Passwords supplied on stdin do not appear in process arguments.
+
+## Native platform qualification
+
+The Mac ARM64 bundle passed native authentication, CRUD and persisted restart,
+then compiled CLI branch/reset, backup/restore, rename and exact-pin checks:
+https://github.com/robertjbass/spindb/actions/runs/39893571815.
+The normal native CI matrix qualifies both Linux architectures and Mac ARM64
+using the exact published HostDB dependency and fresh registry downloads.
+The manual `candidate_run` input remains available for future unpublished bundle
+qualification. Windows remains blocked pending native gateway/backend portability
+(HostDB issue134 / PR258); no Windows or Intel Mac artifact is advertised.

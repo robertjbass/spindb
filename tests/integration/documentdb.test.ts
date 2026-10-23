@@ -35,13 +35,18 @@ test(
   'DocumentDB CLI preserves documents and exact runtime pins through its lifecycle',
   {
     skip:
-      process.platform !== 'linux'
-        ? 'Native DocumentDB currently supports Linux only'
+      process.platform !== 'linux' &&
+      !(process.platform === 'darwin' && process.arch === 'arm64')
+        ? 'Native DocumentDB requires Linux or macOS ARM64'
         : false,
     timeout: 600000,
   },
   async () => {
-    const home = await mkdtemp(join(tmpdir(), 'docdb-cli-'))
+    // Darwin's per-user temp directory can exceed Unix socket limits once
+    // container names are appended. Keep this isolated fixture path short.
+    const home = await mkdtemp(
+      join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'docdb-cli-'),
+    )
     const env = { ...process.env, SPINDB_HOME: home }
     const platform = `${process.platform}-${process.arch}`
     const binaryPath = join(home, 'bin', `documentdb-1.0.0-${platform}`)

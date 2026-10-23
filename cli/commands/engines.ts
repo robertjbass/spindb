@@ -10,6 +10,7 @@ import { containerManager } from '../../core/container-manager'
 import { processManager } from '../../core/process-manager'
 import { configManager } from '../../core/config-manager'
 import { getEngine } from '../../engines'
+import { supportsDocumentDBPlatform } from '../../engines/documentdb/binary-urls'
 import { postgresqlBinaryManager } from '../../engines/postgresql/binary-manager'
 import { hasPgCron } from '../../engines/postgresql/cron-config'
 import { paths } from '../../config/paths'
@@ -1917,7 +1918,10 @@ enginesCommand
         ...rawData,
         engines: Object.fromEntries(
           Object.entries(rawData.engines).filter(
-            ([, c]) => !c.platforms || c.platforms.includes(platformKey),
+            ([name, c]) =>
+              (!c.platforms || c.platforms.includes(platformKey)) &&
+              (name !== Engine.DocumentDB ||
+                supportsDocumentDBPlatform(platform, arch)),
           ),
         ) as typeof rawData.engines,
       }
