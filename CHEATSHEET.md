@@ -1102,6 +1102,8 @@ spindb export docker mydb --json
 spindb bin-path postgresql --json
 ```
 
+`spindb list --json` and `spindb --version` load only the code they need, so they are cheap enough to poll (for example a per-container health probe). Root `--help` still loads every command.
+
 ## Common Workflows
 
 ```bash
