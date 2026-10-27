@@ -1,9 +1,8 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import inquirer from 'inquirer'
 import { dirname, basename } from 'path'
 import { containerManager } from '../../core/container-manager'
-import { getEngine } from '../../engines'
+import { loadEngine } from '../../engines/loader'
 import { uiInfo, uiError, formatBytes } from '../ui/theme'
 import { getEngineIcon } from '../constants'
 import { isLayerbaseCloudRemote } from '../../core/remote-container'
@@ -38,6 +37,9 @@ async function promptUnregisteredFiles(): Promise<boolean> {
     return false
   }
 
+  // Loaded here, not at module scope: inquirer (and rxjs under it) is a large
+  // share of startup cost, and `spindb list --json` never prompts.
+  const { default: inquirer } = await import('inquirer')
   let anyRegistered = false
 
   for (let i = 0; i < unregistered.length; i++) {
@@ -124,7 +126,7 @@ async function getContainerSize(
   // File-based engines can always get size (it's just file size)
   if (isFileBasedEngine(container.engine)) {
     try {
-      const engine = getEngine(container.engine)
+      const engine = await loadEngine(container.engine)
       return await engine.getDatabaseSize(container)
     } catch {
       return null
@@ -136,7 +138,7 @@ async function getContainerSize(
     return null
   }
   try {
-    const engine = getEngine(container.engine)
+    const engine = await loadEngine(container.engine)
     return await engine.getDatabaseSize(container)
   } catch {
     return null

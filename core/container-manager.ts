@@ -18,15 +18,17 @@ import { cloneDirectory, type CopyMethod } from './cow-copy'
 import { logDebug, UnsupportedOperationError } from './error-handler'
 import { classifyDatabasePresence } from './database-presence'
 import { getEngineDefaults, getSupportedEngines } from '../config/defaults'
-import { getEngine } from '../engines'
+import { loadEngine } from '../engines/loader'
 import { sqliteRegistry } from '../engines/sqlite/registry'
 import { duckdbRegistry } from '../engines/duckdb/registry'
 
 // Legacy file entries have no recorded runtime version. Keep their existing
 // display fallback without persisting it as an inferred binary pin.
-function fileBasedEngineVersion(engine: Engine.SQLite | Engine.DuckDB): string {
+async function fileBasedEngineVersion(
+  engine: Engine.SQLite | Engine.DuckDB,
+): Promise<string> {
   const major = getEngineDefaults(engine).defaultVersion
-  const dbEngine = getEngine(engine)
+  const dbEngine = await loadEngine(engine)
   return dbEngine.resolveFullVersion(major)
 }
 import type {
@@ -208,17 +210,17 @@ export class ContainerManager {
   // Convert a file-based registry entry to ContainerConfig format. Shared by
   // getConfig and list so branch lineage (branchParent/branchedAt/gitBranch) is
   // surfaced consistently. "running" status = the backing file exists.
-  private fileBasedEntryToConfig(
+  private async fileBasedEntryToConfig(
     entry: SQLiteRegistryEntry | DuckDBRegistryEntry,
     engine: Engine.SQLite | Engine.DuckDB,
-  ): ContainerConfig {
+  ): Promise<ContainerConfig> {
     const fileExists = existsSync(entry.filePath)
     return {
       name: entry.name,
       engine,
       version:
         ('version' in entry ? entry.version : undefined) ??
-        fileBasedEngineVersion(engine),
+        (await fileBasedEngineVersion(engine)),
       port: 0,
       database: entry.filePath, // file-based: database field stores file path
       databases: [entry.filePath],
@@ -341,13 +343,13 @@ export class ContainerManager {
     // List SQLite containers from registry
     const sqliteEntries = await sqliteRegistry.list()
     for (const entry of sqliteEntries) {
-      containers.push(this.fileBasedEntryToConfig(entry, Engine.SQLite))
+      containers.push(await this.fileBasedEntryToConfig(entry, Engine.SQLite))
     }
 
     // List DuckDB containers from registry
     const duckdbEntries = await duckdbRegistry.list()
     for (const entry of duckdbEntries) {
-      containers.push(this.fileBasedEntryToConfig(entry, Engine.DuckDB))
+      containers.push(await this.fileBasedEntryToConfig(entry, Engine.DuckDB))
     }
 
     // List server-based containers (PostgreSQL, MySQL, etc.)
@@ -552,7 +554,9 @@ export class ContainerManager {
       if (options.online) {
         await mkdir(targetPath, { mode: 0o700 })
         ownsOnlineTarget = true
-        await getEngine(engine).copyOnlineContainerData(sourceConfig, {
+        await (
+          await loadEngine(engine)
+        ).copyOnlineContainerData(sourceConfig, {
           targetPath,
         })
       } else if (strategy === 'cow') {
@@ -610,7 +614,9 @@ export class ContainerManager {
 
       // Let the engine fix up any identity/paths baked into the copied data
       // dir for the new name and port (e.g. ClickHouse regenerates config.xml).
-      await getEngine(engine).prepareBranchedDataDir(config, { sourceName })
+      await (
+        await loadEngine(engine)
+      ).prepareBranchedDataDir(config, { sourceName })
 
       return { config, method }
     } catch (error) {
@@ -780,7 +786,7 @@ export class ContainerManager {
 
     // ClickHouse stores absolute paths in config.xml - regenerate with new paths
     if (engine === Engine.ClickHouse) {
-      const clickhouseEngine = getEngine(Engine.ClickHouse)
+      const clickhouseEngine = await loadEngine(Engine.ClickHouse)
       if ('regenerateConfig' in clickhouseEngine) {
         await (
           clickhouseEngine as {
@@ -940,7 +946,7 @@ export class ContainerManager {
       )
     }
 
-    const engine = getEngine(config.engine)
+    const engine = await loadEngine(config.engine)
 
     // Query the actual database server for all databases
     let actualDatabases: string[]
@@ -973,8 +979,11 @@ export class ContainerManager {
     return { databases, primaryMissing }
   }
 
-  getConnectionString(config: ContainerConfig, database?: string): string {
-    const engine = getEngine(config.engine)
+  async getConnectionString(
+    config: ContainerConfig,
+    database?: string,
+  ): Promise<string> {
+    const engine = await loadEngine(config.engine)
     return engine.getConnectionString(config, database)
   }
 }

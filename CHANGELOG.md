@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.77.1] - 2026-10-27
+
+### Changed
+
+- **Faster startup for cheap commands.** The CLI used to import every command module, and through them every engine (about 377 modules), on each invocation. Commands now load only when dispatched (`COMMAND_ENTRIES` in `cli/index.ts`), and `core/container-manager.ts` plus `spindb list` load just the engines they touch through the new `loadEngine()` (`engines/loader.ts`), which returns the same singleton as `getEngine()`. `spindb list --json` now loads 59 modules and `spindb --version` 21. On an Apple Silicon Mac (median of 21 runs, built CLI, Node 24) `list --json` went from 0.23 s wall / 0.31 CPU-seconds to 0.05 s / 0.06, and `--version` from 0.23 s / 0.30 to 0.03 s / 0.03. Layerbase Cloud runs `spindb list --json` in every container once a minute on a 0.5-CPU budget, where startup dominated the probe. Root help, `help <command>`, unknown commands and options still load every command in the original order, so all output, help text and errors are unchanged; `list --json` output is byte-identical.
+- `containerManager.getConnectionString()` is now async (it had no callers).
+
+### Testing
+
+- `tests/unit/cli-lazy-load.test.ts` pins every registry entry to its command's real name and aliases, checks which commands load for a given argv, and checks that `loadEngine()` returns the `getEngine()` instance for every engine, aliases and unknown names included.
+
 ## [0.77.0] - 2026-10-23
 
 ### Changed
