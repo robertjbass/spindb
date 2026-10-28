@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.77.2] - 2026-10-28
+
+### Fixed
+
+- **Redis and Valkey `stop` no longer kills a server in the middle of its snapshot.** `stop` ran `SHUTDOWN SAVE` with a 10 s client timeout, waited 2 s, sent SIGTERM and SIGKILLed 2 s later. A large dataset's foreground save takes far longer (a 1.4 GB Valkey takes about 25 s), so the kill discarded the temp RDB, the previous `dump.rdb` loaded on the next start, and with `appendonly no` every write since the last background save was lost. Both engines now share `core/kv-shutdown.ts`: the wait budget scales with the dataset (30 s plus 1 s per 10 MB of `used_memory` or `dump.rdb`), a timed-out CLI keeps waiting on the pid, the wait continues past the budget for as long as a `temp-*.rdb` is still growing, and SIGKILL is only sent after SIGTERM when the budget is spent and no save has progressed for 30 s.
+- If the server refuses to shut down because its save failed, `stop` now throws `KvSaveFailedError` and leaves the server running with its data intact, instead of force killing it.
+
+### Testing
+
+- `tests/unit/kv-shutdown.test.ts` covers the budget formula, the progress-aware wait, refusal handling and the signal escalation order on a fake clock.
+- Checked against real binaries with a 300,000-key dataset and `rdb-key-save-delay` making the save take about 30 s: Valkey 9.0.5 and Redis 8.4.5 stop in about 40 s and keep a write made after the last snapshot. The previous code stopped Valkey in 13 s and lost that write.
+
 ## [0.77.1] - 2026-10-27
 
 ### Changed

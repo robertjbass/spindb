@@ -53,6 +53,10 @@ spindb ports --running                  # Only running containers
 spindb ports --json                     # JSON output
 ```
 
+### Redis and Valkey stop waits for the snapshot
+
+`spindb stop` on Redis or Valkey runs `SHUTDOWN SAVE` and waits for the process to exit. The wait scales with the dataset (`used_memory` or `dump.rdb`, whichever is larger: 30 s plus 1 s per 10 MB) and keeps going while the snapshot's `temp-*.rdb` is still growing, so a large dataset is never killed mid-save. If the server refuses to shut down because its save failed (disk full, permissions), `stop` exits non-zero and leaves the server running with its data intact.
+
 ### A dropped primary database is reported, not hidden
 
 `spindb start` makes sure the container's primary database exists. On

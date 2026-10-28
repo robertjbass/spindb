@@ -18,6 +18,11 @@ import {
   assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
+import {
+  parseUsedMemoryBytes,
+  stopKvServer,
+  type ShutdownSaveResult,
+} from '../../core/kv-shutdown'
 import { valkeyBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import {
@@ -980,59 +985,60 @@ export class ValkeyEngine extends BaseEngine {
 
     logDebug(`Stopping Valkey container "${name}" on port ${port}`)
 
-    // Try graceful shutdown via valkey-cli
-    const valkeyCli = await this.getValkeyCliPathForVersion(version)
-    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
-    const host = getLocalCliHost(container)
-    if (valkeyCli) {
-      try {
-        const auth = await this.getLocalAuth(name)
-        const args = ['-h', host, '-p', String(port)]
-        if (shouldPassValkeyCliUsername(auth.username)) {
-          args.push('--user', auth.username)
-        }
-        args.push('SHUTDOWN', 'SAVE')
-        await runValkeyCliCommand(valkeyCli, args, {
-          timeout: 10000,
-          password: auth.password,
-          libraryEnv,
-        })
-        logDebug('Valkey shutdown command sent')
-        // Wait a bit for process to exit
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-      } catch (error) {
-        logDebug(`valkey-cli shutdown failed: ${error}`)
-        // Continue to PID-based shutdown
-      }
-    }
-
-    // Get PID and force kill if needed
     let pid: number | null = null
-
     if (existsSync(pidFile)) {
       try {
-        const content = await readFile(pidFile, 'utf8')
-        pid = parseInt(content.trim(), 10)
+        const parsed = parseInt((await readFile(pidFile, 'utf8')).trim(), 10)
+        pid = Number.isFinite(parsed) && parsed > 0 ? parsed : null
       } catch {
         // Ignore
       }
     }
 
-    // Kill process if still running
-    if (pid && platformService.isProcessRunning(pid)) {
-      logDebug(`Killing Valkey process ${pid}`)
-      try {
-        await platformService.terminateProcess(pid, false)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
-        if (platformService.isProcessRunning(pid)) {
-          logWarning(`Graceful termination failed, force killing ${pid}`)
-          await platformService.terminateProcess(pid, true)
-        }
-      } catch (error) {
-        logDebug(`Process termination error: ${error}`)
-      }
+    const valkeyCli = await this.getValkeyCliPathForVersion(version)
+    const libraryEnv = getResolvedValkeyCliLibraryEnv(valkeyCli)
+    const host = getLocalCliHost(container)
+    const auth = valkeyCli
+      ? await this.getLocalAuth(name).catch(() => null)
+      : null
+    const baseArgs = ['-h', host, '-p', String(port)]
+    if (auth && shouldPassValkeyCliUsername(auth.username)) {
+      baseArgs.push('--user', auth.username)
     }
+    const runCli = (args: string[], timeout: number) =>
+      runValkeyCliCommand(valkeyCli as string, [...baseArgs, ...args], {
+        timeout,
+        password: auth?.password,
+        libraryEnv,
+      })
+
+    await stopKvServer({
+      engineLabel: 'Valkey',
+      pid,
+      dataDir: paths.getContainerDataPath(name, { engine: ENGINE }),
+      readUsedMemory: async () => {
+        if (!valkeyCli) return null
+        const { stdout } = await runCli(['INFO', 'memory'], 5000)
+        return parseUsedMemoryBytes(stdout)
+      },
+      sendShutdownSave: async (timeoutMs): Promise<ShutdownSaveResult> => {
+        if (!valkeyCli) {
+          return { kind: 'error', output: '', message: 'valkey-cli not found' }
+        }
+        try {
+          const { stdout, stderr } = await runCli(
+            ['SHUTDOWN', 'SAVE'],
+            timeoutMs,
+          )
+          logDebug('Valkey shutdown command sent')
+          return { kind: 'ok', output: `${stdout}${stderr}` }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (message.includes('timed out')) return { kind: 'timeout' }
+          return { kind: 'error', output: message, message }
+        }
+      },
+    })
 
     // Cleanup PID file
     if (existsSync(pidFile)) {

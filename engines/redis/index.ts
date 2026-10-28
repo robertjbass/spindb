@@ -18,6 +18,11 @@ import {
   assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
+import {
+  parseUsedMemoryBytes,
+  stopKvServer,
+  type ShutdownSaveResult,
+} from '../../core/kv-shutdown'
 import { redisBinaryManager } from './binary-manager'
 import { getBinaryUrl } from './binary-urls'
 import {
@@ -894,60 +899,71 @@ export class RedisEngine extends BaseEngine {
 
     logDebug(`Stopping Redis container "${name}" on port ${port}`)
 
-    // Try graceful shutdown via redis-cli
-    const redisCli = await this.getRedisCliPathForVersion(version)
-    if (redisCli) {
-      try {
-        const savedCreds = await loadCredentials(
-          name,
-          Engine.Redis,
-          getDefaultUsername(Engine.Redis),
-        )
-        const args = ['-h', '127.0.0.1', '-p', String(port)]
-        if (shouldPassRedisCliUsername(savedCreds?.username)) {
-          args.push('--user', savedCreds.username)
-        }
-        args.push('SHUTDOWN', 'SAVE')
-        await execFileAsync(redisCli, args, {
-          timeout: 10000,
-          env: buildRedisCliEnv(savedCreds?.password),
-        })
-        logDebug('Redis shutdown command sent')
-        // Wait a bit for process to exit
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-      } catch (error) {
-        logDebug(`redis-cli shutdown failed: ${error}`)
-        // Continue to PID-based shutdown
-      }
-    }
-
-    // Get PID and force kill if needed
     let pid: number | null = null
-
     if (existsSync(pidFile)) {
       try {
-        const content = await readFile(pidFile, 'utf8')
-        pid = parseInt(content.trim(), 10)
+        const parsed = parseInt((await readFile(pidFile, 'utf8')).trim(), 10)
+        pid = Number.isFinite(parsed) && parsed > 0 ? parsed : null
       } catch {
         // Ignore
       }
     }
 
-    // Kill process if still running
-    if (pid && platformService.isProcessRunning(pid)) {
-      logDebug(`Killing Redis process ${pid}`)
-      try {
-        await platformService.terminateProcess(pid, false)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
-        if (platformService.isProcessRunning(pid)) {
-          logWarning(`Graceful termination failed, force killing ${pid}`)
-          await platformService.terminateProcess(pid, true)
-        }
-      } catch (error) {
-        logDebug(`Process termination error: ${error}`)
-      }
+    const redisCli = await this.getRedisCliPathForVersion(version)
+    const savedCreds = redisCli
+      ? await loadCredentials(
+          name,
+          Engine.Redis,
+          getDefaultUsername(Engine.Redis),
+        ).catch(() => null)
+      : null
+    const baseArgs = ['-h', '127.0.0.1', '-p', String(port)]
+    if (savedCreds && shouldPassRedisCliUsername(savedCreds.username)) {
+      baseArgs.push('--user', savedCreds.username)
     }
+    const runCli = (args: string[], timeout: number) =>
+      execFileAsync(redisCli as string, [...baseArgs, ...args], {
+        timeout,
+        env: buildRedisCliEnv(savedCreds?.password),
+      })
+
+    await stopKvServer({
+      engineLabel: 'Redis',
+      pid,
+      dataDir: paths.getContainerDataPath(name, { engine: ENGINE }),
+      readUsedMemory: async () => {
+        if (!redisCli) return null
+        const { stdout } = await runCli(['INFO', 'memory'], 5000)
+        return parseUsedMemoryBytes(String(stdout))
+      },
+      sendShutdownSave: async (timeoutMs): Promise<ShutdownSaveResult> => {
+        if (!redisCli) {
+          return { kind: 'error', output: '', message: 'redis-cli not found' }
+        }
+        try {
+          const { stdout, stderr } = await runCli(
+            ['SHUTDOWN', 'SAVE'],
+            timeoutMs,
+          )
+          logDebug('Redis shutdown command sent')
+          return { kind: 'ok', output: `${stdout}${stderr}` }
+        } catch (error) {
+          const failure = error as {
+            killed?: boolean
+            message?: string
+            stdout?: string
+            stderr?: string
+          }
+          if (failure.killed) return { kind: 'timeout' }
+          const message = failure.message ?? String(error)
+          return {
+            kind: 'error',
+            output: `${failure.stdout ?? ''}${failure.stderr ?? ''}${message}`,
+            message,
+          }
+        }
+      },
+    })
 
     // Cleanup PID file
     if (existsSync(pidFile)) {
