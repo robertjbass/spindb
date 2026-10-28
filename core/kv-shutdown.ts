@@ -2,7 +2,7 @@ import { readdir, readFile, readlink, realpath, stat } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { connect } from 'net'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { platformService } from './platform-service'
 import { logDebug } from './error-handler'
 
@@ -200,7 +200,88 @@ export async function listListenerCwds(
   if (process.platform === 'darwin') {
     return darwinListenerCwds(port, answeringHosts)
   }
+  if (process.platform === 'win32') {
+    return windowsListenerIdentities(port, answeringHosts)
+  }
   return null
+}
+
+/**
+ * `netstat -ano` LISTENING rows on `port`: pid and normalized host ('*' for
+ * a wildcard). netstat lists every user's listeners with their pid.
+ */
+export function parseNetstatListeners(
+  output: string,
+  port: number,
+): { pid: string; host: string }[] {
+  const listeners: { pid: string; host: string }[] = []
+  for (const line of output.split(/\r?\n/)) {
+    const cols = line.trim().split(/\s+/)
+    if (cols[0] !== 'TCP' || cols[3] !== 'LISTENING' || !cols[4]) continue
+    const match = cols[1]?.match(/^\[?(.*?)\]?:(\d+)$/)
+    if (!match || Number(match[2]) !== port) continue
+    const host = match[1]
+    listeners.push({
+      pid: cols[4],
+      host: host === '0.0.0.0' || host === '::' ? '*' : host,
+    })
+  }
+  return listeners
+}
+
+/**
+ * Windows has no /proc and no lsof, and another process's working directory
+ * is not readable, so a listener is identified by its command line instead:
+ * spindb starts redis-server and valkey-server with the container's config
+ * file (inside the container directory) as their argument. A pid whose
+ * command line cannot be read (another user's process) is unresolved, which
+ * attributeListeners turns into "unknown".
+ */
+async function windowsListenerIdentities(
+  port: number,
+  answeringHosts: string[],
+): Promise<string[] | null> {
+  try {
+    const { stdout } = await execFileAsync('netstat', ['-ano', '-p', 'TCP'], {
+      timeout: 10000,
+      windowsHide: true,
+    })
+    const { stdout: stdout6 } = await execFileAsync(
+      'netstat',
+      ['-ano', '-p', 'TCPv6'],
+      { timeout: 10000, windowsHide: true },
+    )
+    const listeners = parseNetstatListeners(`${stdout}\n${stdout6}`, port)
+    const identityById = new Map<string, string>()
+    for (const pid of new Set(listeners.map((entry) => entry.pid))) {
+      try {
+        const { stdout: commandLine } = await execFileAsync(
+          'powershell',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`,
+          ],
+          { timeout: 15000, windowsHide: true },
+        )
+        const text = String(commandLine).trim()
+        if (text) identityById.set(pid, text)
+      } catch {
+        // Unresolved: attributeListeners fails closed on it.
+      }
+    }
+    return attributeListeners({
+      listeners: listeners.map((entry) => ({
+        id: entry.pid,
+        host: entry.host,
+      })),
+      cwdById: identityById,
+      answeringHosts,
+    })
+  } catch {
+    return null
+  }
 }
 
 async function linuxListenerCwds(port: number): Promise<string[] | null> {
@@ -210,8 +291,16 @@ async function linuxListenerCwds(port: number): Promise<string[] | null> {
     let text: string
     try {
       text = await readFile(table, 'utf8')
-    } catch {
-      continue
+    } catch (error) {
+      // tcp6 is absent only on a kernel without IPv6, where nothing can listen
+      // on it; any other unreadable table leaves the listing incomplete.
+      if (
+        table.endsWith('tcp6') &&
+        (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ) {
+        continue
+      }
+      return null
     }
     for (const line of text.split('\n').slice(1)) {
       const cols = line.trim().split(/\s+/)
@@ -320,6 +409,17 @@ async function darwinListenerCwds(
   }
 }
 
+/**
+ * Lowercase, forward slashes, and a Cygwin `/cygdrive/c/...` rewritten to
+ * `c:/...`, so a Windows command line and a native path compare.
+ */
+export function normalizeForMatch(path: string): string {
+  return path
+    .replace(/\\/g, '/')
+    .replace(/\/cygdrive\/([a-z])\//gi, '$1:/')
+    .toLowerCase()
+}
+
 async function canonicalPath(path: string): Promise<string> {
   try {
     return await realpath(path)
@@ -357,8 +457,12 @@ export async function classifyKvPort(options: {
   ).catch(() => null)
   if (!cwds || cwds.length === 0) return 'maybe'
   const mine = await canonicalPath(options.dataDir)
-  for (const cwd of cwds) {
-    if ((await canonicalPath(cwd)) === mine) return 'maybe'
+  const containerDir = normalizeForMatch(dirname(mine))
+  for (const identity of cwds) {
+    // A cwd (Linux, macOS) equals the data dir; a command line (Windows)
+    // carries the container's config file, inside the container directory.
+    if ((await canonicalPath(identity)) === mine) return 'maybe'
+    if (normalizeForMatch(identity).includes(`${containerDir}/`)) return 'maybe'
   }
   return 'other'
 }

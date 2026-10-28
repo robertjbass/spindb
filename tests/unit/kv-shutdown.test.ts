@@ -11,6 +11,8 @@ import {
   isAuthRejection,
   isKvPortProvenFree,
   attributeListeners,
+  normalizeForMatch,
+  parseNetstatListeners,
   classifyKvPort,
   listListenerCwds,
   kvProbeHosts,
@@ -498,8 +500,13 @@ describe('classifyKvPort', () => {
   it('identifies a real listener by its working directory', async () => {
     if (process.platform !== 'linux' && process.platform !== 'darwin') return
     const { spawn } = await import('child_process')
-    const mine = await mkdtemp(join(tmpdir(), 'kv-mine-'))
-    const other = await mkdtemp(join(tmpdir(), 'kv-other-'))
+    // The real layout: containers/<engine>/<name>/data, one dir per container.
+    const root = await mkdtemp(join(tmpdir(), 'kv-containers-'))
+    const mine = join(root, 'a', 'data')
+    const other = join(root, 'b', 'data')
+    const { mkdir } = await import('fs/promises')
+    await mkdir(mine, { recursive: true })
+    await mkdir(other, { recursive: true })
     const child = spawn(
       process.execPath,
       [
@@ -528,8 +535,7 @@ describe('classifyKvPort', () => {
       )
     } finally {
       child.kill()
-      await rm(mine, { recursive: true, force: true })
-      await rm(other, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
     }
   })
 })
@@ -570,5 +576,73 @@ describe('attributeListeners', () => {
       answeringHosts: ['127.0.0.1', '::1'],
     })
     assertDeepEqual(result, ['/a', '/b'], 'complete')
+  })
+})
+
+describe('Windows listener identification', () => {
+  it('parses netstat LISTENING rows for the port', () => {
+    const out = [
+      '  Proto  Local Address          Foreign Address        State           PID',
+      '  TCP    0.0.0.0:6379           0.0.0.0:0              LISTENING       4120',
+      '  TCP    127.0.0.1:6380         0.0.0.0:0              LISTENING       999',
+      '  TCP    127.0.0.1:6379         127.0.0.1:51000        ESTABLISHED     77',
+      '  TCP    [::1]:6379             [::]:0                 LISTENING       5000',
+      '  TCP    [::]:6379              [::]:0                 LISTENING       4120',
+    ].join('\r\n')
+    assertDeepEqual(
+      parseNetstatListeners(out, 6379),
+      [
+        { pid: '4120', host: '*' },
+        { pid: '5000', host: '::1' },
+        { pid: '4120', host: '*' },
+      ],
+      'listeners on 6379 only, LISTENING only',
+    )
+  })
+
+  it('normalizes Windows and Cygwin paths for matching', () => {
+    assertEqual(
+      normalizeForMatch(
+        'C:\\Users\\Me\\.spindb\\containers\\redis\\a\\redis.conf',
+      ),
+      'c:/users/me/.spindb/containers/redis/a/redis.conf',
+      'backslashes',
+    )
+    assertEqual(
+      normalizeForMatch(
+        'redis-server.exe /cygdrive/c/Users/Me/.spindb/containers/redis/a/redis.conf',
+      ),
+      'redis-server.exe c:/users/me/.spindb/containers/redis/a/redis.conf',
+      'cygdrive',
+    )
+  })
+
+  it('classifies a listener by its command line', async () => {
+    const open: ConnectProbe = async () => 'open'
+    const dataDir = '/nonexistent/.spindb/containers/redis/a/data'
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir,
+        probe: open,
+        listListeners: async () => [
+          'redis-server.exe /nonexistent/.spindb/containers/redis/a/redis.conf',
+        ],
+      }),
+      'maybe',
+      'its own server',
+    )
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir,
+        probe: open,
+        listListeners: async () => [
+          'redis-server.exe /nonexistent/.spindb/containers/redis/ab/redis.conf',
+        ],
+      }),
+      'other',
+      'a different container whose name shares a prefix',
+    )
   })
 })

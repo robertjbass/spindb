@@ -463,18 +463,27 @@ export class ContainerManager {
     // Redis and Valkey: the pid file is not proof the server is gone (it can be
     // missing while the server runs, for example bound only to ::1). Deleting
     // the directory under a live server orphans it and loses its data, so
-    // require that nothing at all still listens on its port.
-    if (
-      (engine === Engine.Redis || engine === Engine.Valkey) &&
-      (await classifyKvPort({
-        port: config.port,
-        bindAddress: config.bindAddress,
-        dataDir: paths.getContainerDataPath(name, { engine }),
-      })) === 'maybe'
-    ) {
-      throw new KvStopRefusedError(
-        `Container "${name}" was not deleted: its port ${config.port} is held by its own server or by a listener that could not be identified, so its server may still be running. Stop it (or the process holding the port) first, then delete it.`,
-      )
+    // require that its own server no longer holds the port. With `force`, stop
+    // it first through the engine's safe stop, which saves its snapshot and
+    // refuses (throwing) rather than risk data; then check again.
+    if (engine === Engine.Redis || engine === Engine.Valkey) {
+      const classify = () =>
+        classifyKvPort({
+          port: config.port,
+          bindAddress: config.bindAddress,
+          dataDir: paths.getContainerDataPath(name, { engine }),
+        })
+      let portState = await classify()
+      if (portState === 'maybe' && force) {
+        const engineImpl = await loadEngine(engine)
+        await engineImpl.stop(config)
+        portState = await classify()
+      }
+      if (portState === 'maybe') {
+        throw new KvStopRefusedError(
+          `Container "${name}" was not deleted: its port ${config.port} is held by its own server or by a listener that could not be identified, so its server may still be running. Stop it (or the process holding the port) first, then delete it.`,
+        )
+      }
     }
 
     const containerPath = paths.getContainerPath(name, { engine })
