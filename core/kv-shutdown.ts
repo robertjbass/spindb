@@ -1,4 +1,5 @@
 import { stat } from 'fs/promises'
+import { connect } from 'net'
 import { join } from 'path'
 import { platformService } from './platform-service'
 import { logDebug } from './error-handler'
@@ -67,6 +68,76 @@ async function fileSize(path: string): Promise<number> {
   } catch {
     return 0
   }
+}
+
+export type ConnectProbe = (
+  host: string,
+  port: number,
+) => Promise<'open' | 'refused' | 'unusable' | 'unknown'>
+
+const CONNECT_PROBE_TIMEOUT_MS = 2_000
+
+/** One TCP connect attempt: did anything accept on host:port? */
+export const tcpConnectProbe: ConnectProbe = (host, port) =>
+  new Promise((resolve) => {
+    const socket = connect({ host, port })
+    const finish = (answer: 'open' | 'refused' | 'unusable' | 'unknown') => {
+      socket.destroy()
+      resolve(answer)
+    }
+    socket.setTimeout(CONNECT_PROBE_TIMEOUT_MS, () => finish('unknown'))
+    socket.once('connect', () => finish('open'))
+    socket.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ECONNREFUSED') finish('refused')
+      else if (
+        ['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'ENETUNREACH'].includes(
+          error.code ?? '',
+        )
+      )
+        finish('unusable')
+      else finish('unknown')
+    })
+  })
+
+/**
+ * The addresses a Redis/Valkey `bind` line can make it reachable on, as
+ * connectable hosts: every configured address (wildcards mapped to their
+ * loopback), plus both loopbacks.
+ */
+export function kvProbeHosts(bindAddress: string | undefined): string[] {
+  const hosts = new Set<string>(['127.0.0.1', '::1'])
+  for (const raw of (bindAddress ?? '').split(/\s+/)) {
+    const address = raw.replace(/^-/, '').trim()
+    if (!address) continue
+    if (address === '0.0.0.0' || address === '*') hosts.add('127.0.0.1')
+    else if (address === '::' || address === '::*') hosts.add('::1')
+    else hosts.add(address)
+  }
+  return [...hosts]
+}
+
+/**
+ * True only when a connect to the port is definitively refused on every
+ * address the server could be bound to (an IPv6 loopback the host cannot use
+ * counts as refused). Anything that accepts, times out or errors otherwise
+ * means "not proven free": fail closed. Independent of lsof, which is missing
+ * on some Linux hosts and also lists clients.
+ */
+export async function isKvPortProvenFree(options: {
+  port: number
+  bindAddress?: string
+  probe?: ConnectProbe
+}): Promise<boolean> {
+  const probe = options.probe ?? tcpConnectProbe
+  const answers = await Promise.all(
+    kvProbeHosts(options.bindAddress).map((host) =>
+      probe(host, options.port).then((answer) => ({ host, answer })),
+    ),
+  )
+  return answers.every(
+    ({ host, answer }) =>
+      answer === 'refused' || (answer === 'unusable' && host === '::1'),
+  )
 }
 
 export type KvWaitDeps = {

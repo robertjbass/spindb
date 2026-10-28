@@ -2,13 +2,16 @@ import { describe, it, before, after } from 'node:test'
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { assert, assertEqual } from '../utils/assertions'
+import { assert, assertDeepEqual, assertEqual } from '../utils/assertions'
 import {
   KV_SAVE_BYTES_PER_SECOND,
   KV_SHUTDOWN_BASE_WAIT_MS,
   KvSaveFailedError,
   KvStopRefusedError,
   isAuthRejection,
+  isKvPortProvenFree,
+  kvProbeHosts,
+  type ConnectProbe,
   isShutdownRefusal,
   kvShutdownBudgetMs,
   parseUsedMemoryBytes,
@@ -361,5 +364,82 @@ describe('stopKvServer', () => {
       error instanceof KvStopRefusedError,
       'unreachable server on a held port',
     )
+  })
+})
+
+describe('isKvPortProvenFree', () => {
+  const probeWith =
+    (
+      answers: Record<string, Awaited<ReturnType<ConnectProbe>>>,
+    ): ConnectProbe =>
+    async (host) =>
+      answers[host] ?? 'refused'
+
+  it('probes every bind address plus both loopbacks', () => {
+    assertDeepEqual(
+      kvProbeHosts('10.0.0.5 -::1').sort(),
+      ['10.0.0.5', '127.0.0.1', '::1'].sort(),
+      'hosts',
+    )
+    assertDeepEqual(
+      kvProbeHosts('0.0.0.0').sort(),
+      ['127.0.0.1', '::1'].sort(),
+      'wildcard',
+    )
+  })
+
+  it('is free only when every address refuses', async () => {
+    assert(
+      await isKvPortProvenFree({ port: 1, probe: probeWith({}) }),
+      'all refused',
+    )
+    assert(
+      await isKvPortProvenFree({
+        port: 1,
+        probe: probeWith({ '::1': 'unusable' }),
+      }),
+      'no IPv6 loopback on this host',
+    )
+  })
+
+  it('fails closed on a listener on ::1, a timeout, or an unusable bind address', async () => {
+    assert(
+      !(await isKvPortProvenFree({
+        port: 1,
+        probe: probeWith({ '::1': 'open' }),
+      })),
+      '::1 listener',
+    )
+    assert(
+      !(await isKvPortProvenFree({
+        port: 1,
+        probe: probeWith({ '127.0.0.1': 'unknown' }),
+      })),
+      'timeout',
+    )
+    assert(
+      !(await isKvPortProvenFree({
+        port: 1,
+        bindAddress: '10.0.0.5',
+        probe: probeWith({ '10.0.0.5': 'unusable' }),
+      })),
+      'unusable configured address',
+    )
+  })
+
+  it('sees a real listener on ::1 or 127.0.0.1', async () => {
+    const { createServer } = await import('net')
+    for (const host of ['127.0.0.1', '::1']) {
+      const server = createServer()
+      const bound = await new Promise<boolean>((resolve) => {
+        server.once('error', () => resolve(false))
+        server.listen(0, host, () => resolve(true))
+      })
+      if (!bound) continue
+      const { port } = server.address() as { port: number }
+      assert(!(await isKvPortProvenFree({ port })), `listener on ${host}`)
+      await new Promise((resolve) => server.close(resolve))
+      assert(await isKvPortProvenFree({ port }), `closed on ${host}`)
+    }
   })
 })
