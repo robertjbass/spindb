@@ -1007,6 +1007,7 @@ export const createCommand = new Command('create')
         }
 
         const tx = new TransactionManager()
+        let stopRefused = false
 
         const createSpinnerInstance = createSpinner('Creating container...')
         createSpinnerInstance.start()
@@ -1026,6 +1027,11 @@ export const createCommand = new Command('create')
           tx.addRollback({
             description: `Delete container "${containerName}"`,
             execute: async () => {
+              if (stopRefused) {
+                throw new Error(
+                  `Left container "${containerName}" in place: its server is still running because stopping it could lose data. Stop it with "spindb stop ${containerName}", then delete it.`,
+                )
+              }
               await containerManager.delete(containerName, { force: true })
             },
           })
@@ -1110,8 +1116,10 @@ export const createCommand = new Command('create')
               execute: async () => {
                 try {
                   await dbEngine.stop(config)
-                } catch {
-                  // Ignore stop errors during rollback
+                } catch (error) {
+                  // A refused stop left the server running: the delete
+                  // rollback below must not remove its directory.
+                  if (error instanceof KvStopRefusedError) stopRefused = true
                 }
               },
             })

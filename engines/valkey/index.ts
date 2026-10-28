@@ -1021,6 +1021,8 @@ export class ValkeyEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(stdout)
       },
+      findServerPid: async () =>
+        (await platformService.findProcessByPort(port))[0] ?? null,
       isServing: async () => {
         if (!valkeyCli) return false
         try {

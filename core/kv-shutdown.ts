@@ -1,7 +1,7 @@
 import { stat } from 'fs/promises'
 import { join } from 'path'
 import { platformService } from './platform-service'
-import { logDebug, logWarning } from './error-handler'
+import { logDebug } from './error-handler'
 
 /**
  * Stops a Redis-compatible server (Redis, Valkey) without ever killing it
@@ -21,7 +21,6 @@ export const KV_SHUTDOWN_BASE_WAIT_MS = 30_000
 // How long a temp RDB may go without growing before the save counts as stuck.
 export const KV_SAVE_STALL_MS = 30_000
 const POLL_INTERVAL_MS = 250
-const KILL_VERIFY_MS = 5_000
 
 export function kvShutdownBudgetMs(datasetBytes: number): number {
   const bytes =
@@ -167,17 +166,24 @@ export async function stopKvServer(options: {
   sendShutdownSave: (timeoutMs: number) => Promise<ShutdownSaveResult>
   /** True when the server answers a command, i.e. is up and serving. */
   isServing: () => Promise<boolean>
+  /** Recovers the server pid (by its port) when the pid file is missing. */
+  findServerPid?: () => Promise<number | null>
   terminate?: (pid: number, force: boolean) => Promise<void>
   deps?: Partial<KvWaitDeps>
   stallMs?: number
 }): Promise<void> {
-  const { engineLabel, pid, dataDir } = options
+  const { engineLabel, dataDir } = options
   const deps = { ...defaultWaitDeps, ...options.deps }
   const terminate =
     options.terminate ??
     ((target: number, force: boolean) =>
       platformService.terminateProcess(target, force))
   const stallSeconds = Math.round((options.stallMs ?? KV_SAVE_STALL_MS) / 1000)
+
+  let pid = options.pid
+  if (pid === null || !deps.isRunning(pid)) {
+    pid = (await options.findServerPid?.().catch(() => null)) ?? null
+  }
 
   const usedMemory = (await options.readUsedMemory().catch(() => null)) ?? 0
   const rdbSize = await fileSize(join(dataDir, 'dump.rdb'))
@@ -204,17 +210,30 @@ export async function stopKvServer(options: {
   }
 
   if (pid === null || !deps.isRunning(pid)) {
-    // Without a live pid there is nothing to wait on or signal; make sure the
-    // server is not still up before calling it stopped.
+    if (result.kind === 'timeout') {
+      // A server busy writing its snapshot answers nothing, so without a pid
+      // there is no way to tell "still saving" from "gone".
+      throw new KvStopRefusedError(
+        `${engineLabel} did not confirm its shutdown and its process could not be found to wait on. ` +
+          'It may still be writing its snapshot; check that it has exited before stopping again or deleting it.',
+      )
+    }
     await stillServing('the server is still serving after SHUTDOWN SAVE')
     return
   }
 
+  const livePid = pid
   const wait = () =>
-    waitForKvExit({ pid, dataDir, budgetMs, stallMs: options.stallMs, deps })
+    waitForKvExit({
+      pid: livePid,
+      dataDir,
+      budgetMs,
+      stallMs: options.stallMs,
+      deps,
+    })
   const stuck = () =>
     new KvStopRefusedError(
-      `${engineLabel} process ${pid} is still writing its snapshot but it has not changed for ${stallSeconds}s. ` +
+      `${engineLabel} process ${livePid} is still writing its snapshot but it has not changed for ${stallSeconds}s. ` +
         'It was left running rather than killed mid-save. Check disk health and the server log, then stop again.',
     )
 
@@ -228,10 +247,12 @@ export async function stopKvServer(options: {
     await stillServing(`SHUTDOWN SAVE failed (${result.message})`)
   }
 
-  // The server is up but not answering, and not writing a snapshot: hung.
-  logDebug(`Sending SIGTERM to ${engineLabel} process ${pid}`)
+  // Not answering and not writing a snapshot. SIGTERM makes the server save
+  // under its save rules and refuse to exit if that save fails, so it is safe.
+  // SIGKILL is never sent: whether the data reached disk cannot be confirmed.
+  logDebug(`Sending SIGTERM to ${engineLabel} process ${livePid}`)
   try {
-    await terminate(pid, false)
+    await terminate(livePid, false)
   } catch (error) {
     logDebug(`${engineLabel} SIGTERM failed: ${error}`)
   }
@@ -239,22 +260,8 @@ export async function stopKvServer(options: {
   if (afterTerm === 'exited') return
   if (afterTerm === 'stuck') throw stuck()
   await stillServing('the server is still serving after SIGTERM')
-
-  logWarning(
-    `${engineLabel} process ${pid} is not answering and not writing a snapshot; force killing`,
+  throw new KvStopRefusedError(
+    `${engineLabel} process ${livePid} did not exit after SHUTDOWN SAVE or SIGTERM and is not answering. ` +
+      'It was left running because killing it could lose data that has not reached disk. Check the server log; if the data is expendable, kill the process yourself.',
   )
-  try {
-    await terminate(pid, true)
-  } catch (error) {
-    logDebug(`${engineLabel} SIGKILL failed: ${error}`)
-  }
-  const killDeadline = deps.now() + KILL_VERIFY_MS
-  while (deps.isRunning(pid) && deps.now() < killDeadline) {
-    await deps.sleep(POLL_INTERVAL_MS)
-  }
-  if (deps.isRunning(pid)) {
-    throw new KvStopRefusedError(
-      `${engineLabel} process ${pid} survived SIGKILL. Check for a stuck process (for example uninterruptible disk I/O), then stop again.`,
-    )
-  }
 }

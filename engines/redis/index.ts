@@ -936,6 +936,8 @@ export class RedisEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(String(stdout))
       },
+      findServerPid: async () =>
+        (await platformService.findProcessByPort(port))[0] ?? null,
       isServing: async () => {
         if (!redisCli) return false
         try {
