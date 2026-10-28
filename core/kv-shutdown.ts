@@ -1,4 +1,6 @@
-import { stat } from 'fs/promises'
+import { readdir, readFile, readlink, realpath, stat } from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { connect } from 'net'
 import { join } from 'path'
 import { platformService } from './platform-service'
@@ -140,6 +142,149 @@ export async function isKvPortProvenFree(options: {
   )
 }
 
+const execFileAsync = promisify(execFile)
+
+/**
+ * Working directories of the processes LISTENING on `port`, or null when the
+ * platform cannot tell (Windows, lsof missing or failing on macOS). Redis and
+ * Valkey chdir to their data dir, so this identifies a listener without
+ * talking to it (a password-protected server answers nothing useful).
+ * Linux reads /proc directly; macOS uses lsof, which ships with the OS.
+ */
+export async function listListenerCwds(port: number): Promise<string[] | null> {
+  if (process.platform === 'linux') return linuxListenerCwds(port)
+  if (process.platform === 'darwin') return darwinListenerCwds(port)
+  return null
+}
+
+async function linuxListenerCwds(port: number): Promise<string[] | null> {
+  const inodes = new Set<string>()
+  const hexPort = port.toString(16).toUpperCase().padStart(4, '0')
+  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let text: string
+    try {
+      text = await readFile(table, 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split('\n').slice(1)) {
+      const cols = line.trim().split(/\s+/)
+      // local_address is HEXIP:HEXPORT, st 0A is LISTEN, col 9 is the inode.
+      if (
+        cols.length > 9 &&
+        cols[1]?.endsWith(`:${hexPort}`) &&
+        cols[3] === '0A'
+      ) {
+        inodes.add(cols[9])
+      }
+    }
+  }
+  if (inodes.size === 0) return []
+  const cwds: string[] = []
+  let pids: string[]
+  try {
+    pids = (await readdir('/proc')).filter((entry) => /^\d+$/.test(entry))
+  } catch {
+    return null
+  }
+  for (const pid of pids) {
+    let fds: string[]
+    try {
+      fds = await readdir(`/proc/${pid}/fd`)
+    } catch {
+      continue
+    }
+    for (const fd of fds) {
+      try {
+        const target = await readlink(`/proc/${pid}/fd/${fd}`)
+        const match = target.match(/^socket:\[(\d+)\]$/)
+        if (match && inodes.has(match[1])) {
+          cwds.push(await readlink(`/proc/${pid}/cwd`))
+          break
+        }
+      } catch {
+        // The fd closed, or the process is not ours to read.
+      }
+    }
+  }
+  // A listener we could not attribute (another user's process) is unknown.
+  return cwds.length > 0 ? cwds : null
+}
+
+async function darwinListenerCwds(port: number): Promise<string[] | null> {
+  try {
+    const { stdout: pidOut } = await execFileAsync(
+      'lsof',
+      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'],
+      { timeout: 5000 },
+    ).catch((error: { code?: number; stdout?: string }) => {
+      // lsof exits 1 with no output when nothing matches.
+      if (error.code === 1 && !error.stdout) return { stdout: '' }
+      throw error
+    })
+    const pids = [...new Set(String(pidOut).split('\n').filter(Boolean))]
+    if (pids.length === 0) return null
+    const cwds: string[] = []
+    for (const pid of pids) {
+      const { stdout } = await execFileAsync(
+        'lsof',
+        ['-a', '-p', pid, '-d', 'cwd', '-Fn'],
+        { timeout: 5000 },
+      )
+      const line = String(stdout)
+        .split('\n')
+        .find((entry) => entry.startsWith('n'))
+      if (!line) return null
+      cwds.push(line.slice(1))
+    }
+    return cwds
+  } catch {
+    return null
+  }
+}
+
+async function canonicalPath(path: string): Promise<string> {
+  try {
+    return await realpath(path)
+  } catch {
+    return path
+  }
+}
+
+/**
+ * Whether a Redis/Valkey container's server could still be running on its
+ * port: 'free' (nothing listens), 'other' (only listeners provably running in
+ * another directory, i.e. a different server reusing the port), or 'maybe'
+ * (a listener in this container's data dir, or one that cannot be identified;
+ * callers fail closed on it).
+ */
+export async function classifyKvPort(options: {
+  port: number
+  bindAddress?: string
+  dataDir: string
+  probe?: ConnectProbe
+  listListeners?: (port: number) => Promise<string[] | null>
+}): Promise<'free' | 'other' | 'maybe'> {
+  if (
+    await isKvPortProvenFree({
+      port: options.port,
+      bindAddress: options.bindAddress,
+      probe: options.probe,
+    })
+  ) {
+    return 'free'
+  }
+  const cwds = await (options.listListeners ?? listListenerCwds)(
+    options.port,
+  ).catch(() => null)
+  if (!cwds || cwds.length === 0) return 'maybe'
+  const mine = await canonicalPath(options.dataDir)
+  for (const cwd of cwds) {
+    if ((await canonicalPath(cwd)) === mine) return 'maybe'
+  }
+  return 'other'
+}
+
 export type KvWaitDeps = {
   isRunning: (pid: number) => boolean
   readProgress: (dataDir: string, pid: number) => Promise<SaveProgress>
@@ -238,10 +383,11 @@ export async function stopKvServer(options: {
   /** True when the server answers a command, i.e. is up and serving. */
   isServing: () => Promise<boolean>
   /**
-   * True only when nothing at all holds the server's port. Used when there is
-   * no pid to wait on, to tell "already gone" from "unreachable".
+   * True only when this server is provably gone from its port (nothing
+   * listens, or only a different server reusing it). Used when there is no pid
+   * to wait on, to tell "already gone" from "unreachable".
    */
-  isPortFree: () => Promise<boolean>
+  isServerGone: () => Promise<boolean>
   terminate?: (pid: number, force: boolean) => Promise<void>
   deps?: Partial<KvWaitDeps>
   stallMs?: number
@@ -294,7 +440,7 @@ export async function stopKvServer(options: {
     // The shutdown never reached a server (connection refused, no cli). With
     // no pid, the only proof it is gone is a port nothing holds; a server bound
     // to another address is otherwise indistinguishable.
-    if (await options.isPortFree().catch(() => false)) return
+    if (await options.isServerGone().catch(() => false)) return
     throw new KvStopRefusedError(
       `${engineLabel} could not be reached to shut it down (${result.message}) and its process could not be found, but something still holds its port. ` +
         'It was left alone rather than reported stopped. Check what is listening on the port before stopping again or deleting it.',

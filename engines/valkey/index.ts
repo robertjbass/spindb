@@ -19,7 +19,7 @@ import {
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
 import {
-  isKvPortProvenFree,
+  classifyKvPort,
   parseUsedMemoryBytes,
   stopKvServer,
   type ShutdownSaveResult,
@@ -1022,8 +1022,12 @@ export class ValkeyEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(stdout)
       },
-      isPortFree: () =>
-        isKvPortProvenFree({ port, bindAddress: container.bindAddress }),
+      isServerGone: async () =>
+        (await classifyKvPort({
+          port,
+          bindAddress: container.bindAddress,
+          dataDir: paths.getContainerDataPath(name, { engine: ENGINE }),
+        })) !== 'maybe',
       isServing: async () => {
         if (!valkeyCli) return false
         try {

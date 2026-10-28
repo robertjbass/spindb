@@ -12,7 +12,7 @@ import {
 } from 'fs/promises'
 import { paths } from '../config/paths'
 import { processManager } from './process-manager'
-import { isKvPortProvenFree, KvStopRefusedError } from './kv-shutdown'
+import { classifyKvPort, KvStopRefusedError } from './kv-shutdown'
 import { portManager } from './port-manager'
 import { isWindows } from './platform-service'
 import { cloneDirectory, type CopyMethod } from './cow-copy'
@@ -466,13 +466,14 @@ export class ContainerManager {
     // require that nothing at all still listens on its port.
     if (
       (engine === Engine.Redis || engine === Engine.Valkey) &&
-      !(await isKvPortProvenFree({
+      (await classifyKvPort({
         port: config.port,
         bindAddress: config.bindAddress,
-      }))
+        dataDir: paths.getContainerDataPath(name, { engine }),
+      })) === 'maybe'
     ) {
       throw new KvStopRefusedError(
-        `Container "${name}" was not deleted: something is still listening on its port ${config.port}, so its server may still be running. Stop it (or the process holding the port) first, then delete it.`,
+        `Container "${name}" was not deleted: its port ${config.port} is held by its own server or by a listener that could not be identified, so its server may still be running. Stop it (or the process holding the port) first, then delete it.`,
       )
     }
 

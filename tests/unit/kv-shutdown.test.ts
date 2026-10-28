@@ -10,6 +10,8 @@ import {
   KvStopRefusedError,
   isAuthRejection,
   isKvPortProvenFree,
+  classifyKvPort,
+  listListenerCwds,
   kvProbeHosts,
   type ConnectProbe,
   isShutdownRefusal,
@@ -218,7 +220,7 @@ describe('stopKvServer', () => {
         readUsedMemory: async () => 1024 * 1024 * 1024,
         sendShutdownSave: async () => o.result,
         isServing: async () => Boolean(o.serving),
-        isPortFree: async () => !o.portHeld,
+        isServerGone: async () => !o.portHeld,
         terminate: async (_pid, force) => {
           signals.push(force ? 'SIGKILL' : 'SIGTERM')
           if (force || o.exitOnSignal === 'SIGTERM') {
@@ -440,6 +442,93 @@ describe('isKvPortProvenFree', () => {
       assert(!(await isKvPortProvenFree({ port })), `listener on ${host}`)
       await new Promise((resolve) => server.close(resolve))
       assert(await isKvPortProvenFree({ port }), `closed on ${host}`)
+    }
+  })
+})
+
+describe('classifyKvPort', () => {
+  const open: ConnectProbe = async () => 'open'
+  it('is free when nothing listens', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: '/a',
+        probe: async () => 'refused',
+      }),
+      'free',
+      'free',
+    )
+  })
+  it('lets a different server reusing the port through', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: '/a/data',
+        probe: open,
+        listListeners: async () => ['/b/data'],
+      }),
+      'other',
+      'port reused by another server',
+    )
+  })
+  it('fails closed on its own server or an unidentified listener', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: '/a/data',
+        probe: open,
+        listListeners: async () => ['/b/data', '/a/data'],
+      }),
+      'maybe',
+      'own server',
+    )
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: '/a/data',
+        probe: open,
+        listListeners: async () => null,
+      }),
+      'maybe',
+      'cannot tell',
+    )
+  })
+
+  it('identifies a real listener by its working directory', async () => {
+    if (process.platform !== 'linux' && process.platform !== 'darwin') return
+    const { spawn } = await import('child_process')
+    const mine = await mkdtemp(join(tmpdir(), 'kv-mine-'))
+    const other = await mkdtemp(join(tmpdir(), 'kv-other-'))
+    const child = spawn(
+      process.execPath,
+      [
+        '-e',
+        "const s=require('net').createServer().listen(0,'127.0.0.1',()=>console.log(s.address().port))",
+      ],
+      { cwd: other, stdio: ['ignore', 'pipe', 'ignore'] },
+    )
+    try {
+      const port = await new Promise<number>((resolve) =>
+        child.stdout!.once('data', (data) =>
+          resolve(Number(String(data).trim())),
+        ),
+      )
+      const cwds = await listListenerCwds(port)
+      if (cwds === null) return // listener discovery unavailable here
+      assertEqual(
+        await classifyKvPort({ port, dataDir: mine }),
+        'other',
+        'stopped container whose port another server reuses',
+      )
+      assertEqual(
+        await classifyKvPort({ port, dataDir: other }),
+        'maybe',
+        'its own listener',
+      )
+    } finally {
+      child.kill()
+      await rm(mine, { recursive: true, force: true })
+      await rm(other, { recursive: true, force: true })
     }
   })
 })
