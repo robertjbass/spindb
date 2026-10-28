@@ -7,13 +7,14 @@ import {
   KV_SAVE_BYTES_PER_SECOND,
   KV_SHUTDOWN_BASE_WAIT_MS,
   KvSaveFailedError,
+  KvStopRefusedError,
+  isAuthRejection,
   isShutdownRefusal,
   kvShutdownBudgetMs,
   parseUsedMemoryBytes,
   readTempRdbProgress,
   stopKvServer,
   waitForKvExit,
-  type KvWaitDeps,
   type SaveProgress,
   type ShutdownSaveResult,
 } from '../../core/kv-shutdown'
@@ -85,65 +86,92 @@ describe('readTempRdbProgress', () => {
 
   it('returns null with no temp RDB and ignores dump.rdb', async () => {
     await writeFile(join(dir, 'dump.rdb'), 'x')
-    assertEqual(await readTempRdbProgress(dir), null, 'no temp file')
+    assertEqual(await readTempRdbProgress(dir, 4242), null, 'no temp file')
   })
 
-  it('reports the temp RDB being written', async () => {
+  it("reports only the server's own temp RDB, not a BGSAVE child's", async () => {
     await writeFile(join(dir, 'temp-4242.rdb'), 'abcdef')
-    const progress = await readTempRdbProgress(dir)
-    assertEqual(progress?.size, 6, 'size')
+    await writeFile(join(dir, 'temp-5555.rdb'), 'child')
+    assertEqual((await readTempRdbProgress(dir, 4242))?.size, 6, 'own save')
+    assertEqual(await readTempRdbProgress(dir, 1), null, 'other pids ignored')
   })
 
   it('returns null for a missing dir', async () => {
-    assertEqual(
-      await readTempRdbProgress(join(dir, 'nope')),
-      null,
-      'missing dir',
+    assertEqual(await readTempRdbProgress(join(dir, 'nope'), 1), null, 'dir')
+  })
+})
+
+describe('reply classification', () => {
+  it('recognizes auth and permission rejections', () => {
+    assert(isAuthRejection('NOAUTH Authentication required.'), 'NOAUTH')
+    assert(
+      isAuthRejection('WRONGPASS invalid username-password pair'),
+      'WRONGPASS',
     )
+    assert(
+      isAuthRejection(
+        "NOPERM User x has no permissions to run the 'shutdown' command",
+      ),
+      'NOPERM',
+    )
+    assert(!isAuthRejection(''), 'empty')
   })
 })
 
 describe('waitForKvExit', () => {
-  it('keeps waiting past the budget while the temp RDB grows', async () => {
+  it('keeps waiting past the budget while the snapshot grows', async () => {
     const clock = fakeClock()
     let size = 0
-    const deps: Partial<KvWaitDeps> = {
-      now: clock.now,
-      sleep: clock.sleep,
-      // The save grows for 200 s, far past the 10 s budget, then exits.
-      isRunning: () => clock.now() < 200_000,
-      readProgress: async (): Promise<SaveProgress> => {
-        size += 1
-        return { size, mtimeMs: clock.now() }
-      },
-    }
     const result = await waitForKvExit({
       pid: 1,
       dataDir: '/x',
       budgetMs: 10_000,
       stallMs: 5_000,
-      deps,
+      deps: {
+        now: clock.now,
+        sleep: clock.sleep,
+        isRunning: () => clock.now() < 200_000,
+        readProgress: async (): Promise<SaveProgress> => {
+          size += 1
+          return { size, mtimeMs: clock.now() }
+        },
+      },
     })
     assertEqual(result, 'exited', 'never gives up on a progressing save')
   })
 
-  it('gives up only after the budget AND a stall', async () => {
+  it('reports a snapshot that stopped changing as stuck, after the budget', async () => {
     const clock = fakeClock()
-    const deps: Partial<KvWaitDeps> = {
-      now: clock.now,
-      sleep: clock.sleep,
-      isRunning: () => true,
-      readProgress: async () => ({ size: 10, mtimeMs: 1 }),
-    }
     const result = await waitForKvExit({
       pid: 1,
       dataDir: '/x',
       budgetMs: 10_000,
       stallMs: 5_000,
-      deps,
+      deps: {
+        now: clock.now,
+        sleep: clock.sleep,
+        isRunning: () => true,
+        readProgress: async () => ({ size: 10, mtimeMs: 1 }),
+      },
     })
-    assertEqual(result, 'stalled', 'stuck temp file')
+    assertEqual(result, 'stuck', 'unchanged temp file')
     assert(clock.now() >= 10_000, 'waited the full budget')
+  })
+
+  it('reports idle once the budget is spent with no snapshot', async () => {
+    const clock = fakeClock()
+    const result = await waitForKvExit({
+      pid: 1,
+      dataDir: '/x',
+      budgetMs: 10_000,
+      deps: {
+        now: clock.now,
+        sleep: clock.sleep,
+        isRunning: () => true,
+        readProgress: async () => null,
+      },
+    })
+    assertEqual(result, 'idle', 'idle')
   })
 
   it('returns exited as soon as the process is gone', async () => {
@@ -165,49 +193,53 @@ describe('waitForKvExit', () => {
 })
 
 describe('stopKvServer', () => {
-  type Harness = {
-    signals: string[]
-    clock: ReturnType<typeof fakeClock>
-    run: (options: {
-      result: ShutdownSaveResult
-      exitAt?: number
-      exitOnSignal?: 'SIGTERM'
-      saving?: (now: number) => boolean
-    }) => Promise<void>
+  type RunOptions = {
+    result: ShutdownSaveResult
+    pid?: number | null
+    exitAt?: number
+    exitOnSignal?: 'SIGTERM'
+    surviveKill?: boolean
+    serving?: boolean
+    saving?: (now: number) => SaveProgress
   }
 
-  function harness(): Harness {
+  function harness() {
     const signals: string[] = []
     const clock = fakeClock()
-    return {
-      signals,
-      clock,
-      run: async ({ result, exitAt, exitOnSignal, saving }) => {
-        let exited = false
-        await stopKvServer({
-          engineLabel: 'Valkey',
-          pid: 99,
-          dataDir: '/nonexistent-kv-dir',
-          readUsedMemory: async () => 1024 * 1024 * 1024,
-          sendShutdownSave: async () => result,
-          terminate: async (_pid, force) => {
-            signals.push(force ? 'SIGKILL' : 'SIGTERM')
-            if (force || exitOnSignal === 'SIGTERM') exited = true
-          },
-          stallMs: 5_000,
-          deps: {
-            now: clock.now,
-            sleep: clock.sleep,
-            isRunning: () =>
-              !exited && (exitAt === undefined || clock.now() < exitAt),
-            readProgress: async () =>
-              saving?.(clock.now())
-                ? { size: clock.now(), mtimeMs: clock.now() }
-                : null,
-          },
-        })
-      },
+    const run = async (o: RunOptions) => {
+      let exited = false
+      await stopKvServer({
+        engineLabel: 'Valkey',
+        pid: o.pid === undefined ? 99 : o.pid,
+        dataDir: '/nonexistent-kv-dir',
+        readUsedMemory: async () => 1024 * 1024 * 1024,
+        sendShutdownSave: async () => o.result,
+        isServing: async () => Boolean(o.serving),
+        terminate: async (_pid, force) => {
+          signals.push(force ? 'SIGKILL' : 'SIGTERM')
+          if ((force && !o.surviveKill) || o.exitOnSignal === 'SIGTERM') {
+            exited = true
+          }
+        },
+        stallMs: 5_000,
+        deps: {
+          now: clock.now,
+          sleep: clock.sleep,
+          isRunning: () =>
+            !exited && (o.exitAt === undefined || clock.now() < o.exitAt),
+          readProgress: async () => o.saving?.(clock.now()) ?? null,
+        },
+      })
     }
+    const runCatching = async (o: RunOptions) => {
+      try {
+        await run(o)
+        return null
+      } catch (error) {
+        return error
+      }
+    }
+    return { signals, clock, run, runCatching }
   }
 
   it('never signals a server that exits after a long save', async () => {
@@ -222,26 +254,56 @@ describe('stopKvServer', () => {
     await h.run({
       result: { kind: 'timeout' },
       exitAt: 600_000,
-      saving: (now) => now < 600_000,
+      saving: (now) => (now < 600_000 ? { size: now, mtimeMs: now } : null),
     })
     assertEqual(h.signals.length, 0, 'a progressing save is never signalled')
   })
 
-  it('throws and leaves the server running when the save is refused', async () => {
+  it('leaves a stuck save running and throws instead of killing it', async () => {
     const h = harness()
-    let threw: unknown = null
-    try {
-      await h.run({
+    const error = await h.runCatching({
+      result: { kind: 'timeout' },
+      saving: () => ({ size: 10, mtimeMs: 1 }),
+    })
+    assert(error instanceof KvStopRefusedError, 'KvStopRefusedError')
+    assertEqual(h.signals.length, 0, 'no signal during a save')
+  })
+
+  it('throws on a refused save, even without a pid', async () => {
+    for (const pid of [99, null]) {
+      const h = harness()
+      const error = await h.runCatching({
+        pid,
         result: {
           kind: 'ok',
           output: 'ERR Errors trying to SHUTDOWN. Check logs.',
         },
       })
-    } catch (error) {
-      threw = error
+      assert(
+        error instanceof KvSaveFailedError,
+        `KvSaveFailedError (pid ${pid})`,
+      )
+      assertEqual(h.signals.length, 0, 'no signal after a refused save')
     }
-    assert(threw instanceof KvSaveFailedError, 'KvSaveFailedError')
-    assertEqual(h.signals.length, 0, 'no signal after a refused save')
+  })
+
+  it('throws on an auth rejection instead of signalling', async () => {
+    const h = harness()
+    const error = await h.runCatching({
+      result: { kind: 'ok', output: 'NOPERM no permissions' },
+    })
+    assert(error instanceof KvStopRefusedError, 'KvStopRefusedError')
+    assertEqual(h.signals.length, 0, 'no signal')
+  })
+
+  it('throws when the server is still serving after a timed-out shutdown', async () => {
+    const h = harness()
+    const error = await h.runCatching({
+      result: { kind: 'timeout' },
+      serving: true,
+    })
+    assert(error instanceof KvSaveFailedError, 'still serving = save failed')
+    assertEqual(h.signals.length, 0, 'no signal to a serving server')
   })
 
   it('sends SIGTERM straight away when the CLI could not connect', async () => {
@@ -258,9 +320,18 @@ describe('stopKvServer', () => {
     assert(h.clock.now() < 1_000, 'did not wait a budget first')
   })
 
-  it('force kills only a hung server with no save progress', async () => {
+  it('force kills only a hung server that is neither serving nor saving', async () => {
     const h = harness()
     await h.run({ result: { kind: 'ok', output: '' } })
     assertEqual(h.signals.join(','), 'SIGTERM,SIGKILL', 'escalation order')
+  })
+
+  it('throws when the process survives SIGKILL', async () => {
+    const h = harness()
+    const error = await h.runCatching({
+      result: { kind: 'ok', output: '' },
+      surviveKill: true,
+    })
+    assert(error instanceof KvStopRefusedError, 'not reported as stopped')
   })
 })

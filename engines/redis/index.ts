@@ -936,6 +936,15 @@ export class RedisEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(String(stdout))
       },
+      isServing: async () => {
+        if (!redisCli) return false
+        try {
+          const { stdout } = await runCli(['PING'], 3000)
+          return String(stdout).trim().length > 0
+        } catch {
+          return false
+        }
+      },
       sendShutdownSave: async (timeoutMs): Promise<ShutdownSaveResult> => {
         if (!redisCli) {
           return { kind: 'error', output: '', message: 'redis-cli not found' }

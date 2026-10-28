@@ -46,6 +46,7 @@ import {
 } from '../../engines/ferretdb/version-maps'
 import type { BaseEngine } from '../../engines/base-engine'
 import { getEngineMetadata } from '../helpers'
+import { KvStopRefusedError } from '../../core/kv-shutdown'
 
 async function ensureFileBasedBinaries(
   dbEngine: BaseEngine,
@@ -975,8 +976,11 @@ export const createCommand = new Command('create')
               }
               try {
                 await dbEngine.stop(existingConfig)
-              } catch {
-                // Ignore stop errors - container may already be stopped
+              } catch (error) {
+                // A stop that refused to risk the data left the server
+                // running: never delete its directory underneath it.
+                if (error instanceof KvStopRefusedError) throw error
+                // Ignore other stop errors - container may already be stopped
               }
             }
             if (!options.json) {

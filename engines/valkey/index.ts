@@ -1021,6 +1021,15 @@ export class ValkeyEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(stdout)
       },
+      isServing: async () => {
+        if (!valkeyCli) return false
+        try {
+          const { stdout } = await runCli(['PING'], 3000)
+          return String(stdout).trim().length > 0
+        } catch {
+          return false
+        }
+      },
       sendShutdownSave: async (timeoutMs): Promise<ShutdownSaveResult> => {
         if (!valkeyCli) {
           return { kind: 'error', output: '', message: 'valkey-cli not found' }

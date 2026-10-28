@@ -1,4 +1,4 @@
-import { readdir, stat } from 'fs/promises'
+import { stat } from 'fs/promises'
 import { join } from 'path'
 import { platformService } from './platform-service'
 import { logDebug, logWarning } from './error-handler'
@@ -21,6 +21,7 @@ export const KV_SHUTDOWN_BASE_WAIT_MS = 30_000
 // How long a temp RDB may go without growing before the save counts as stuck.
 export const KV_SAVE_STALL_MS = 30_000
 const POLL_INTERVAL_MS = 250
+const KILL_VERIFY_MS = 5_000
 
 export function kvShutdownBudgetMs(datasetBytes: number): number {
   const bytes =
@@ -43,31 +44,22 @@ export function isShutdownRefusal(output: string): boolean {
 export type SaveProgress = { size: number; mtimeMs: number } | null
 
 /**
- * Size and mtime of the newest temp RDB (`temp-<pid>.rdb`) the server is
- * writing in its data dir, or null when no save is in progress on disk.
+ * Size and mtime of the temp RDB the server process itself is writing
+ * (`temp-<pid>.rdb`: the foreground save SHUTDOWN SAVE and SIGTERM run), or
+ * null when it is not writing one. Background-save children write under their
+ * own pid and are deliberately not counted: shutdown kills them and does its
+ * own foreground save.
  */
 export async function readTempRdbProgress(
   dataDir: string,
+  pid: number,
 ): Promise<SaveProgress> {
-  let entries: string[]
   try {
-    entries = await readdir(dataDir)
+    const info = await stat(join(dataDir, `temp-${pid}.rdb`))
+    return { size: info.size, mtimeMs: info.mtimeMs }
   } catch {
     return null
   }
-  let newest: SaveProgress = null
-  for (const entry of entries) {
-    if (!/^temp-.*\.rdb$/.test(entry)) continue
-    try {
-      const info = await stat(join(dataDir, entry))
-      if (!newest || info.mtimeMs > newest.mtimeMs) {
-        newest = { size: info.size, mtimeMs: info.mtimeMs }
-      }
-    } catch {
-      // The file was renamed into place between readdir and stat.
-    }
-  }
-  return newest
 }
 
 async function fileSize(path: string): Promise<number> {
@@ -80,7 +72,7 @@ async function fileSize(path: string): Promise<number> {
 
 export type KvWaitDeps = {
   isRunning: (pid: number) => boolean
-  readProgress: (dataDir: string) => Promise<SaveProgress>
+  readProgress: (dataDir: string, pid: number) => Promise<SaveProgress>
   now: () => number
   sleep: (ms: number) => Promise<void>
 }
@@ -93,9 +85,13 @@ const defaultWaitDeps: KvWaitDeps = {
 }
 
 /**
- * Waits for the server process to exit. Past the budget it keeps waiting as
- * long as the temp RDB is still changing, and gives up ('stalled') only when
- * the budget is spent AND no save has made progress for KV_SAVE_STALL_MS.
+ * Waits for the server process to exit.
+ *   'exited' - it is gone.
+ *   'idle'   - the budget is spent and the server is not writing a snapshot.
+ *   'stuck'  - the budget is spent and its snapshot has not changed for
+ *              stallMs. A save can sit in fsync with an unchanged file, so this
+ *              is reported, never treated as permission to kill.
+ * A snapshot that is still changing is always waited out, budget or not.
  */
 export async function waitForKvExit(options: {
   pid: number
@@ -103,7 +99,7 @@ export async function waitForKvExit(options: {
   budgetMs: number
   stallMs?: number
   deps?: Partial<KvWaitDeps>
-}): Promise<'exited' | 'stalled'> {
+}): Promise<'exited' | 'idle' | 'stuck'> {
   const deps = { ...defaultWaitDeps, ...options.deps }
   const stallMs = options.stallMs ?? KV_SAVE_STALL_MS
   const start = deps.now()
@@ -112,7 +108,7 @@ export async function waitForKvExit(options: {
   let lastChangeAt = start
 
   while (deps.isRunning(options.pid)) {
-    const progress = await deps.readProgress(options.dataDir)
+    const progress = await deps.readProgress(options.dataDir, options.pid)
     const now = deps.now()
     if (
       progress &&
@@ -123,8 +119,9 @@ export async function waitForKvExit(options: {
       lastChangeAt = now
     }
     lastProgress = progress
-    if (now >= deadline && now - lastChangeAt >= stallMs) {
-      return 'stalled'
+    if (now >= deadline) {
+      if (!progress) return 'idle'
+      if (now - lastChangeAt >= stallMs) return 'stuck'
     }
     await deps.sleep(POLL_INTERVAL_MS)
   }
@@ -136,14 +133,30 @@ export type ShutdownSaveResult =
   | { kind: 'timeout' }
   | { kind: 'error'; output: string; message: string }
 
-export class KvSaveFailedError extends Error {
+/**
+ * `stop` could not shut the server down without risking its data, so it left
+ * the server running. Callers must not treat the container as stopped or
+ * delete its data on the strength of this stop.
+ */
+export class KvStopRefusedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'KvStopRefusedError'
+  }
+}
+
+export class KvSaveFailedError extends KvStopRefusedError {
   constructor(engineLabel: string, detail: string) {
     super(
-      `${engineLabel} refused to shut down because its snapshot save failed: ${detail.trim()}. ` +
+      `${engineLabel} refused to shut down because its snapshot save failed: ${detail.trim().replace(/\.+$/, '')}. ` +
         'The server is still running and its data is intact. Check the server log for the save error (often disk space or permissions), fix it, then stop again.',
     )
     this.name = 'KvSaveFailedError'
   }
+}
+
+export function isAuthRejection(output: string): boolean {
+  return /\b(NOAUTH|WRONGPASS|NOPERM)\b|invalid username-password/i.test(output)
 }
 
 export async function stopKvServer(options: {
@@ -152,6 +165,8 @@ export async function stopKvServer(options: {
   dataDir: string
   readUsedMemory: () => Promise<number | null>
   sendShutdownSave: (timeoutMs: number) => Promise<ShutdownSaveResult>
+  /** True when the server answers a command, i.e. is up and serving. */
+  isServing: () => Promise<boolean>
   terminate?: (pid: number, force: boolean) => Promise<void>
   deps?: Partial<KvWaitDeps>
   stallMs?: number
@@ -162,6 +177,7 @@ export async function stopKvServer(options: {
     options.terminate ??
     ((target: number, force: boolean) =>
       platformService.terminateProcess(target, force))
+  const stallSeconds = Math.round((options.stallMs ?? KV_SAVE_STALL_MS) / 1000)
 
   const usedMemory = (await options.readUsedMemory().catch(() => null)) ?? 0
   const rdbSize = await fileSize(join(dataDir, 'dump.rdb'))
@@ -169,45 +185,76 @@ export async function stopKvServer(options: {
   logDebug(`${engineLabel} shutdown budget ${budgetMs}ms`)
 
   const result = await options.sendShutdownSave(budgetMs)
-  const isAlive = () => pid !== null && deps.isRunning(pid)
-
   if (result.kind !== 'timeout') {
-    const output = result.output
-    if (isShutdownRefusal(output) && isAlive()) {
-      throw new KvSaveFailedError(engineLabel, output)
+    if (isShutdownRefusal(result.output)) {
+      throw new KvSaveFailedError(engineLabel, result.output)
+    }
+    if (isAuthRejection(result.output)) {
+      throw new KvStopRefusedError(
+        `${engineLabel} rejected SHUTDOWN SAVE: ${result.output.trim()}. ` +
+          'The server is still running and was not signalled, because a stop without that save can lose data. Check the stored credentials for this container, then stop again.',
+      )
     }
   }
-  if (pid === null || !isAlive()) return
+
+  const stillServing = async (detail: string) => {
+    if (await options.isServing().catch(() => false)) {
+      throw new KvSaveFailedError(engineLabel, detail)
+    }
+  }
+
+  if (pid === null || !deps.isRunning(pid)) {
+    // Without a live pid there is nothing to wait on or signal; make sure the
+    // server is not still up before calling it stopped.
+    await stillServing('the server is still serving after SHUTDOWN SAVE')
+    return
+  }
 
   const wait = () =>
     waitForKvExit({ pid, dataDir, budgetMs, stallMs: options.stallMs, deps })
+  const stuck = () =>
+    new KvStopRefusedError(
+      `${engineLabel} process ${pid} is still writing its snapshot but it has not changed for ${stallSeconds}s. ` +
+        'It was left running rather than killed mid-save. Check disk health and the server log, then stop again.',
+    )
 
-  // A timed-out CLI means the save may still be running: wait first. A CLI
-  // that failed outright (unreachable, auth) never started a shutdown, so ask
-  // the process directly; SIGTERM also saves under the configured save rules.
   if (result.kind === 'timeout' || result.kind === 'ok') {
-    if ((await wait()) === 'exited') return
-  }
-  if (result.kind === 'error') {
+    const outcome = await wait()
+    if (outcome === 'exited') return
+    if (outcome === 'stuck') throw stuck()
+    await stillServing('the server is still serving after SHUTDOWN SAVE')
+  } else {
     logDebug(`${engineLabel} shutdown command failed: ${result.message}`)
+    await stillServing(`SHUTDOWN SAVE failed (${result.message})`)
   }
 
+  // The server is up but not answering, and not writing a snapshot: hung.
   logDebug(`Sending SIGTERM to ${engineLabel} process ${pid}`)
   try {
     await terminate(pid, false)
   } catch (error) {
     logDebug(`${engineLabel} SIGTERM failed: ${error}`)
   }
-  if ((await wait()) === 'exited') return
+  const afterTerm = await wait()
+  if (afterTerm === 'exited') return
+  if (afterTerm === 'stuck') throw stuck()
+  await stillServing('the server is still serving after SIGTERM')
 
   logWarning(
-    `${engineLabel} process ${pid} did not exit and no snapshot save made progress for ${Math.round(
-      (options.stallMs ?? KV_SAVE_STALL_MS) / 1000,
-    )}s; force killing`,
+    `${engineLabel} process ${pid} is not answering and not writing a snapshot; force killing`,
   )
   try {
     await terminate(pid, true)
   } catch (error) {
     logDebug(`${engineLabel} SIGKILL failed: ${error}`)
+  }
+  const killDeadline = deps.now() + KILL_VERIFY_MS
+  while (deps.isRunning(pid) && deps.now() < killDeadline) {
+    await deps.sleep(POLL_INTERVAL_MS)
+  }
+  if (deps.isRunning(pid)) {
+    throw new KvStopRefusedError(
+      `${engineLabel} process ${pid} survived SIGKILL. Check for a stuck process (for example uninterruptible disk I/O), then stop again.`,
+    )
   }
 }
