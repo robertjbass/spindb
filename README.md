@@ -14,7 +14,7 @@
 
 **One CLI for all your local databases.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 21 different database engines—all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 22 different database engines, all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
 
 ```bash
 npm install -g spindb
@@ -35,7 +35,7 @@ spindb create cache --engine redis
 
 ## Supported Engines & Platforms
 
-SpinDB supports **22 database engines** across **5 platform architectures**—all with a consistent API.
+SpinDB supports **22 database engines** across **5 platform architectures**, all with a consistent API. Most engines run on every platform; DocumentDB, ClickHouse, LibSQL and FerretDB v2 have platform limits, noted below the table.
 
 | Engine | Type | macOS ARM | macOS Intel | Linux x64 | Linux ARM | Windows |
 |--------|------|:---------:|:-----------:|:---------:|:---------:|:-------:|
