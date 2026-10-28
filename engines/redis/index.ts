@@ -18,6 +18,7 @@ import {
   assertValidUsername,
 } from '../../core/error-handler'
 import { processManager } from '../../core/process-manager'
+import { portManager } from '../../core/port-manager'
 import {
   parseUsedMemoryBytes,
   stopKvServer,
@@ -936,6 +937,9 @@ export class RedisEngine extends BaseEngine {
         const { stdout } = await runCli(['INFO', 'memory'], 5000)
         return parseUsedMemoryBytes(String(stdout))
       },
+      isPortFree: async () =>
+        (await platformService.findProcessByPort(port)).length === 0 &&
+        (await portManager.isPortAvailable(port)),
       isServing: async () => {
         if (!redisCli) return false
         try {

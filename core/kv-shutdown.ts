@@ -166,6 +166,11 @@ export async function stopKvServer(options: {
   sendShutdownSave: (timeoutMs: number) => Promise<ShutdownSaveResult>
   /** True when the server answers a command, i.e. is up and serving. */
   isServing: () => Promise<boolean>
+  /**
+   * True only when nothing at all holds the server's port. Used when there is
+   * no pid to wait on, to tell "already gone" from "unreachable".
+   */
+  isPortFree: () => Promise<boolean>
   terminate?: (pid: number, force: boolean) => Promise<void>
   deps?: Partial<KvWaitDeps>
   stallMs?: number
@@ -214,7 +219,15 @@ export async function stopKvServer(options: {
       )
     }
     await stillServing('the server is still serving after SHUTDOWN SAVE')
-    return
+    if (result.kind === 'ok') return
+    // The shutdown never reached a server (connection refused, no cli). With
+    // no pid, the only proof it is gone is a port nothing holds; a server bound
+    // to another address is otherwise indistinguishable.
+    if (await options.isPortFree().catch(() => false)) return
+    throw new KvStopRefusedError(
+      `${engineLabel} could not be reached to shut it down (${result.message}) and its process could not be found, but something still holds its port. ` +
+        'It was left alone rather than reported stopped. Check what is listening on the port before stopping again or deleting it.',
+    )
   }
 
   const livePid = pid

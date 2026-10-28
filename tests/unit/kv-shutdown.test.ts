@@ -199,6 +199,7 @@ describe('stopKvServer', () => {
     exitAt?: number
     exitOnSignal?: 'SIGTERM'
     serving?: boolean
+    portHeld?: boolean
     saving?: (now: number) => SaveProgress
   }
 
@@ -214,6 +215,7 @@ describe('stopKvServer', () => {
         readUsedMemory: async () => 1024 * 1024 * 1024,
         sendShutdownSave: async () => o.result,
         isServing: async () => Boolean(o.serving),
+        isPortFree: async () => !o.portHeld,
         terminate: async (_pid, force) => {
           signals.push(force ? 'SIGKILL' : 'SIGTERM')
           if (force || o.exitOnSignal === 'SIGTERM') {
@@ -333,5 +335,31 @@ describe('stopKvServer', () => {
       result: { kind: 'timeout' },
     })
     assert(error instanceof KvStopRefusedError, 'cannot confirm the exit')
+  })
+
+  it('without a pid, a failed shutdown is success only when the port is free', async () => {
+    const free = harness()
+    await free.run({
+      pid: null,
+      result: {
+        kind: 'error',
+        output: 'Connection refused',
+        message: 'refused',
+      },
+    })
+    const held = harness()
+    const error = await held.runCatching({
+      pid: null,
+      portHeld: true,
+      result: {
+        kind: 'error',
+        output: 'Connection refused',
+        message: 'refused',
+      },
+    })
+    assert(
+      error instanceof KvStopRefusedError,
+      'unreachable server on a held port',
+    )
   })
 })
