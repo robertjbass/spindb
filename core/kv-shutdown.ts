@@ -166,8 +166,6 @@ export async function stopKvServer(options: {
   sendShutdownSave: (timeoutMs: number) => Promise<ShutdownSaveResult>
   /** True when the server answers a command, i.e. is up and serving. */
   isServing: () => Promise<boolean>
-  /** Recovers the server pid (by its port) when the pid file is missing. */
-  findServerPid?: () => Promise<number | null>
   terminate?: (pid: number, force: boolean) => Promise<void>
   deps?: Partial<KvWaitDeps>
   stallMs?: number
@@ -180,10 +178,7 @@ export async function stopKvServer(options: {
       platformService.terminateProcess(target, force))
   const stallSeconds = Math.round((options.stallMs ?? KV_SAVE_STALL_MS) / 1000)
 
-  let pid = options.pid
-  if (pid === null || !deps.isRunning(pid)) {
-    pid = (await options.findServerPid?.().catch(() => null)) ?? null
-  }
+  const pid = options.pid
 
   const usedMemory = (await options.readUsedMemory().catch(() => null)) ?? 0
   const rdbSize = await fileSize(join(dataDir, 'dump.rdb'))

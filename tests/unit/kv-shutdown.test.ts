@@ -334,32 +334,4 @@ describe('stopKvServer', () => {
     })
     assert(error instanceof KvStopRefusedError, 'cannot confirm the exit')
   })
-
-  it('recovers the pid from the port and waits out the save', async () => {
-    const clock = { now: 0 }
-    let exited = false
-    await stopKvServer({
-      engineLabel: 'Redis',
-      pid: null,
-      dataDir: '/nonexistent-kv-dir',
-      readUsedMemory: async () => null,
-      sendShutdownSave: async () => ({ kind: 'timeout' }),
-      isServing: async () => false,
-      findServerPid: async () => 77,
-      terminate: async () => {
-        throw new Error('must not signal')
-      },
-      deps: {
-        now: () => clock.now,
-        sleep: async (ms) => {
-          clock.now += ms
-          if (clock.now > 40_000) exited = true
-        },
-        isRunning: (pid) => pid === 77 && !exited,
-        readProgress: async (_dir, pid) =>
-          pid === 77 ? { size: clock.now, mtimeMs: clock.now } : null,
-      },
-    })
-    assert(exited, 'waited for the recovered pid to exit')
-  })
 })
