@@ -42,7 +42,7 @@ These engines bypass `spindb start` in layerbase-cloud's `setup-database.sh` due
 
 - [ ] **`spindb create --no-start` should skip tool check** — For file-based engines (SQLite, DuckDB), `spindb create --no-start` fails because it checks for the client tool (`sqlite3`) before downloading the binary that provides it. The `--no-start` flag should skip tool checks since nothing will run. This breaks the cloud Docker image prebake pattern (`create --no-start` + `delete --force`). Workaround: use `spindb engines download sqlite 3` instead.
 - [ ] **Pick logo and branding assets** - Review SVG concepts in `assets/` and `assets/concepts/`, finalize a logo for the tray icon, app badge, and wordmark
-- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 21 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
+- [ ] **Docker export testing for all engines** - Test and verify `spindb export docker` works correctly for all 22 database engines, including file-based databases (SQLite, DuckDB). Ensure exported containers start, connect, and persist data properly.
 - [ ] **Registry system for binary download locations** - Centralized configuration for where to download engine binaries
 - [ ] **WSL proxy for Windows** - Create a proxy layer for Windows computers to use WSL seamlessly
 - [ ] **Migrate binaries from hostdb to spindb** - Self-host compiled engine binaries under spindb infrastructure
