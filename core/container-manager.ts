@@ -12,6 +12,7 @@ import {
 } from 'fs/promises'
 import { paths } from '../config/paths'
 import { processManager } from './process-manager'
+import { classifyKvPort, KvStopRefusedError } from './kv-shutdown'
 import { portManager } from './port-manager'
 import { isWindows } from './platform-service'
 import { cloneDirectory, type CopyMethod } from './cow-copy'
@@ -456,6 +457,23 @@ export class ContainerManager {
     if (running && !force) {
       throw new Error(
         `Container "${name}" is running. Stop it first or use --force`,
+      )
+    }
+
+    // Redis and Valkey: the pid file is not proof the server is gone (it can be
+    // missing while the server runs, for example bound only to ::1). Deleting
+    // the directory under a live server orphans it and loses its data, so
+    // require that nothing at all still listens on its port.
+    if (
+      (engine === Engine.Redis || engine === Engine.Valkey) &&
+      (await classifyKvPort({
+        port: config.port,
+        bindAddress: config.bindAddress,
+        dataDir: paths.getContainerDataPath(name, { engine }),
+      })) === 'maybe'
+    ) {
+      throw new KvStopRefusedError(
+        `Container "${name}" was not deleted: its port ${config.port} is held by its own server or by a listener that could not be identified, so its server may still be running. Stop it (or the process holding the port) first, then delete it.`,
       )
     }
 

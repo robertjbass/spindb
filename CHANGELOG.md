@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.77.2] - 2026-10-28
+
+### Fixed
+
+- **Redis and Valkey `stop` no longer kills a server in the middle of its snapshot.** `stop` ran `SHUTDOWN SAVE` with a 10 s client timeout, waited 2 s, sent SIGTERM and SIGKILLed 2 s later. A large dataset's foreground save takes far longer (a 1.4 GB Valkey takes about 25 s), so the kill discarded the temp RDB, the previous `dump.rdb` loaded on the next start, and with `appendonly no` every write since the last background save was lost. Both engines now share `core/kv-shutdown.ts`: the wait budget scales with the dataset (30 s plus 1 s per 10 MB of `used_memory` or `dump.rdb`), a timed-out CLI keeps waiting on the pid, and a snapshot the server is writing (`temp-<pid>.rdb`) is always waited out while it changes. A server that is neither answering nor writing a snapshot gets SIGTERM, which saves under the save rules and refuses to exit if that save fails. `stop` never sends SIGKILL to Redis or Valkey.
+- **`stop` now refuses, and leaves the server running, whenever stopping could lose data.** It throws `KvStopRefusedError` (or its subclass `KvSaveFailedError`) when the save is refused (`Errors trying to SHUTDOWN`), when `SHUTDOWN SAVE` is rejected for auth or ACL reasons, when the server is still serving after the shutdown, when its snapshot has not changed for 30 s past the budget, when the process cannot be found after a timed-out shutdown or after a shutdown that never reached the server while its port is not proven free, or when it does not exit after SIGTERM. Deleting a Redis or Valkey container (`delete`, `create --force`, the `create` rollback) now refuses while its own server may still hold its port. A port is free when a TCP connect is refused on every bind address plus both loopbacks; a listener that does answer is identified by its working directory (Redis and Valkey chdir to their data dir; read from `/proc` on Linux, `lsof` on macOS), so a different server that reused the port lets the delete through, while the container's own server, or any listener that cannot be identified, is refused. The answer must be complete: every listening socket on Linux must map to a cwd, and on macOS (where `lsof` cannot see other users' processes) every address that answered must be covered by a visible listener with a resolved cwd. A server whose pid file went missing (one bound only to `::1`, say) is never orphaned with its directory deleted. `create --force` and the `create` rollback also no longer delete a container whose stop was refused, and `stop --all` reports a refused container, keeps going, and exits 1.
+
+### Testing
+
+- `tests/unit/kv-shutdown.test.ts` covers the budget formula, the progress-aware wait, every refusal, and the signal escalation order on a fake clock.
+- Checked against real binaries with a 300,000-key dataset and `rdb-key-save-delay` making the save take about 30 s: Valkey 9.0.5 and Redis 8.4.5 stop in about 40 s and keep a write made after the last snapshot. The previous code stopped Valkey in 13 s and lost that write. With the data dir made read-only, `stop` exits 1 with the refusal and Valkey keeps serving its data.
+
 ## [0.77.1] - 2026-10-27
 
 ### Changed
