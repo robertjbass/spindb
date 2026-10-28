@@ -10,6 +10,7 @@ import {
   KvStopRefusedError,
   isAuthRejection,
   isKvPortProvenFree,
+  attributeListeners,
   classifyKvPort,
   listListenerCwds,
   kvProbeHosts,
@@ -530,5 +531,44 @@ describe('classifyKvPort', () => {
       await rm(mine, { recursive: true, force: true })
       await rm(other, { recursive: true, force: true })
     }
+  })
+})
+
+describe('attributeListeners', () => {
+  it('fails closed when one of two listeners cannot be attributed', () => {
+    // The unrelated process on 127.0.0.1 is readable; the real server, another
+    // user's process on ::1, is not.
+    const result = attributeListeners({
+      listeners: [
+        { id: '111', host: '127.0.0.1' },
+        { id: '222', host: '::1' },
+      ],
+      cwdById: new Map([['111', '/srv/unrelated']]),
+    })
+    assertEqual(result, null, 'partial attribution is unknown')
+  })
+
+  it('fails closed when an answering address has no visible listener', () => {
+    const result = attributeListeners({
+      listeners: [{ id: '111', host: '127.0.0.1' }],
+      cwdById: new Map([['111', '/srv/unrelated']]),
+      answeringHosts: ['127.0.0.1', '::1'],
+    })
+    assertEqual(result, null, '::1 answered but nothing visible listens there')
+  })
+
+  it('returns every cwd when the answer is complete', () => {
+    const result = attributeListeners({
+      listeners: [
+        { id: '111', host: '127.0.0.1' },
+        { id: '222', host: '*' },
+      ],
+      cwdById: new Map([
+        ['111', '/a'],
+        ['222', '/b'],
+      ]),
+      answeringHosts: ['127.0.0.1', '::1'],
+    })
+    assertDeepEqual(result, ['/a', '/b'], 'complete')
   })
 })

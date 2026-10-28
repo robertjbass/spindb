@@ -130,19 +130,60 @@ export async function isKvPortProvenFree(options: {
   bindAddress?: string
   probe?: ConnectProbe
 }): Promise<boolean> {
+  return (await probeKvPortHosts(options)).length === 0
+}
+
+/**
+ * The probed addresses that are NOT proven free (something accepted, or the
+ * answer was inconclusive). Empty means the port is free everywhere.
+ */
+async function probeKvPortHosts(options: {
+  port: number
+  bindAddress?: string
+  probe?: ConnectProbe
+}): Promise<string[]> {
   const probe = options.probe ?? tcpConnectProbe
   const answers = await Promise.all(
     kvProbeHosts(options.bindAddress).map((host) =>
       probe(host, options.port).then((answer) => ({ host, answer })),
     ),
   )
-  return answers.every(
-    ({ host, answer }) =>
-      answer === 'refused' || (answer === 'unusable' && host === '::1'),
-  )
+  return answers
+    .filter(
+      ({ host, answer }) =>
+        !(answer === 'refused' || (answer === 'unusable' && host === '::1')),
+    )
+    .map(({ host }) => host)
 }
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * The cwds of every listener, or null unless the answer is complete: every
+ * listener must have a resolved cwd, and (when `answeringHosts` is checked)
+ * every address that answered the connect probe must be covered by a listener
+ * we can see. A partial answer could hide the real server, so it fails closed.
+ */
+export function attributeListeners(options: {
+  listeners: { id: string; host: string }[]
+  cwdById: Map<string, string>
+  answeringHosts?: string[]
+}): string[] | null {
+  const { listeners, cwdById } = options
+  if (listeners.length === 0) return null
+  for (const host of options.answeringHosts ?? []) {
+    if (!listeners.some((entry) => entry.host === '*' || entry.host === host)) {
+      return null
+    }
+  }
+  const cwds: string[] = []
+  for (const { id } of listeners) {
+    const cwd = cwdById.get(id)
+    if (cwd === undefined) return null
+    cwds.push(cwd)
+  }
+  return cwds
+}
 
 /**
  * Working directories of the processes LISTENING on `port`, or null when the
@@ -151,9 +192,14 @@ const execFileAsync = promisify(execFile)
  * talking to it (a password-protected server answers nothing useful).
  * Linux reads /proc directly; macOS uses lsof, which ships with the OS.
  */
-export async function listListenerCwds(port: number): Promise<string[] | null> {
+export async function listListenerCwds(
+  port: number,
+  answeringHosts: string[] = [],
+): Promise<string[] | null> {
   if (process.platform === 'linux') return linuxListenerCwds(port)
-  if (process.platform === 'darwin') return darwinListenerCwds(port)
+  if (process.platform === 'darwin') {
+    return darwinListenerCwds(port, answeringHosts)
+  }
   return null
 }
 
@@ -180,13 +226,13 @@ async function linuxListenerCwds(port: number): Promise<string[] | null> {
     }
   }
   if (inodes.size === 0) return []
-  const cwds: string[] = []
   let pids: string[]
   try {
     pids = (await readdir('/proc')).filter((entry) => /^\d+$/.test(entry))
   } catch {
     return null
   }
+  const cwdById = new Map<string, string>()
   for (const pid of pids) {
     let fds: string[]
     try {
@@ -198,46 +244,77 @@ async function linuxListenerCwds(port: number): Promise<string[] | null> {
       try {
         const target = await readlink(`/proc/${pid}/fd/${fd}`)
         const match = target.match(/^socket:\[(\d+)\]$/)
-        if (match && inodes.has(match[1])) {
-          cwds.push(await readlink(`/proc/${pid}/cwd`))
-          break
+        if (match && inodes.has(match[1]) && !cwdById.has(match[1])) {
+          cwdById.set(match[1], await readlink(`/proc/${pid}/cwd`))
         }
       } catch {
         // The fd closed, or the process is not ours to read.
       }
     }
   }
-  // A listener we could not attribute (another user's process) is unknown.
-  return cwds.length > 0 ? cwds : null
+  // /proc/net/tcp lists every listener in the namespace, whoever owns it, so
+  // no address coverage check is needed. One we could not attribute (another
+  // user's process) could be the real server: attributeListeners fails closed.
+  return attributeListeners({
+    listeners: [...inodes].map((inode) => ({ id: inode, host: '*' })),
+    cwdById,
+  })
 }
 
-async function darwinListenerCwds(port: number): Promise<string[] | null> {
+/** `lsof -F n` listener address, normalized: host only, '*' for any. */
+function lsofListenHost(name: string): string {
+  const host = name.replace(/:\d+$/, '').replace(/^\[|\]$/g, '')
+  return host === '*' || host === '0.0.0.0' || host === '::' ? '*' : host
+}
+
+async function darwinListenerCwds(
+  port: number,
+  answeringHosts: string[],
+): Promise<string[] | null> {
   try {
-    const { stdout: pidOut } = await execFileAsync(
+    const { stdout } = await execFileAsync(
       'lsof',
-      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'],
+      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-F', 'pn'],
       { timeout: 5000 },
     ).catch((error: { code?: number; stdout?: string }) => {
-      // lsof exits 1 with no output when nothing matches.
+      // lsof exits 1 with no output when nothing matches (or it can see none).
       if (error.code === 1 && !error.stdout) return { stdout: '' }
       throw error
     })
-    const pids = [...new Set(String(pidOut).split('\n').filter(Boolean))]
-    if (pids.length === 0) return null
-    const cwds: string[] = []
-    for (const pid of pids) {
-      const { stdout } = await execFileAsync(
-        'lsof',
-        ['-a', '-p', pid, '-d', 'cwd', '-Fn'],
-        { timeout: 5000 },
-      )
-      const line = String(stdout)
-        .split('\n')
-        .find((entry) => entry.startsWith('n'))
-      if (!line) return null
-      cwds.push(line.slice(1))
+    const listeners: { pid: string; host: string }[] = []
+    let pid = ''
+    for (const line of String(stdout).split('\n')) {
+      if (line.startsWith('p')) pid = line.slice(1)
+      else if (line.startsWith('n') && pid) {
+        listeners.push({ pid, host: lsofListenHost(line.slice(1)) })
+      }
     }
-    return cwds
+    // lsof does not show other users' processes without root, so every
+    // address that answered must be covered by a listener we can see.
+    const cwdById = new Map<string, string>()
+    for (const listenerPid of new Set(listeners.map((entry) => entry.pid))) {
+      try {
+        const { stdout: cwdOut } = await execFileAsync(
+          'lsof',
+          ['-a', '-p', listenerPid, '-d', 'cwd', '-Fn'],
+          { timeout: 5000 },
+        )
+        const line = String(cwdOut)
+          .split('\n')
+          .find((entry) => entry.startsWith('n'))
+        if (line) cwdById.set(listenerPid, line.slice(1))
+      } catch {
+        // Unresolved: attributeListeners fails closed on it.
+      }
+    }
+    return attributeListeners({
+      listeners: listeners.map((entry) => ({
+        id: entry.pid,
+        host: entry.host,
+      })),
+      cwdById,
+      answeringHosts,
+    })
   } catch {
     return null
   }
@@ -263,19 +340,20 @@ export async function classifyKvPort(options: {
   bindAddress?: string
   dataDir: string
   probe?: ConnectProbe
-  listListeners?: (port: number) => Promise<string[] | null>
+  listListeners?: (
+    port: number,
+    answeringHosts: string[],
+  ) => Promise<string[] | null>
 }): Promise<'free' | 'other' | 'maybe'> {
-  if (
-    await isKvPortProvenFree({
-      port: options.port,
-      bindAddress: options.bindAddress,
-      probe: options.probe,
-    })
-  ) {
-    return 'free'
-  }
+  const answering = await probeKvPortHosts({
+    port: options.port,
+    bindAddress: options.bindAddress,
+    probe: options.probe,
+  })
+  if (answering.length === 0) return 'free'
   const cwds = await (options.listListeners ?? listListenerCwds)(
     options.port,
+    answering,
   ).catch(() => null)
   if (!cwds || cwds.length === 0) return 'maybe'
   const mine = await canonicalPath(options.dataDir)
