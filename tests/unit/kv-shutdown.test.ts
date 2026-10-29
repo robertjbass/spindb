@@ -11,6 +11,7 @@ import {
   isAuthRejection,
   isKvPortProvenFree,
   attributeListeners,
+  configPathFromCommandLine,
   normalizeForMatch,
   parseNetstatListeners,
   classifyKvPort,
@@ -469,6 +470,7 @@ describe('classifyKvPort', () => {
         dataDir: '/a/data',
         probe: open,
         listListeners: async () => ['/b/data'],
+        resolvePath: async (path: string) => path,
       }),
       'other',
       'port reused by another server',
@@ -600,49 +602,115 @@ describe('Windows listener identification', () => {
     )
   })
 
-  it('normalizes Windows and Cygwin paths for matching', () => {
+  it('extracts the config path from a command line', () => {
     assertEqual(
-      normalizeForMatch(
-        'C:\\Users\\Me\\.spindb\\containers\\redis\\a\\redis.conf',
+      configPathFromCommandLine(
+        '"C:\\Program Files\\redis\\redis-server.exe" /cygdrive/c/Users/Me/.spindb/containers/redis/a/redis.conf',
       ),
-      'c:/users/me/.spindb/containers/redis/a/redis.conf',
-      'backslashes',
+      'C:/Users/Me/.spindb/containers/redis/a/redis.conf',
+      'cygdrive argument',
     )
     assertEqual(
-      normalizeForMatch(
-        'redis-server.exe /cygdrive/c/Users/Me/.spindb/containers/redis/a/redis.conf',
+      configPathFromCommandLine(
+        'valkey-server.exe "D:\\spin db\\containers\\valkey\\b\\valkey.conf"',
       ),
-      'redis-server.exe c:/users/me/.spindb/containers/redis/a/redis.conf',
-      'cygdrive',
+      'D:\\spin db\\containers\\valkey\\b\\valkey.conf',
+      'quoted path with a space',
+    )
+    assertEqual(
+      configPathFromCommandLine('redis-server.exe --port 6379'),
+      null,
+      'no config',
     )
   })
 
-  it('classifies a listener by its command line', async () => {
-    const open: ConnectProbe = async () => 'open'
-    const dataDir = '/nonexistent/.spindb/containers/redis/a/data'
+  it('normalizes paths, case-folding only where the filesystem does', () => {
+    assertEqual(
+      normalizeForMatch('C:\\Users\\Me\\.spindb\\', 'win32'),
+      'c:/users/me/.spindb',
+      'windows',
+    )
+    assertEqual(
+      normalizeForMatch('/cygdrive/c/Users/Me', 'win32'),
+      'c:/users/me',
+      'cygdrive',
+    )
+    assertEqual(
+      normalizeForMatch('/srv/Data', 'linux'),
+      '/srv/Data',
+      'linux keeps case',
+    )
+  })
+
+  // A stubbed realpath: the .spindb directory is a junction to D:\spindb.
+  const junction = async (path: string) => {
+    const p = path.replace(/\\/g, '/')
+    if (/^C:\/Users\/Me\/\.spindb/i.test(p))
+      return p.replace(/^C:\/Users\/Me\/\.spindb/i, 'D:/spindb')
+    if (/^D:\/spindb/i.test(p)) return p
+    if (/^D:\/other/i.test(p)) return p
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+  }
+  const open: ConnectProbe = async () => 'open'
+
+  it('treats its own server behind a junction as its own (never "other")', async () => {
+    // Our dataDir arrives through the junction-resolved home; the server's
+    // command line still names the C: path.
     assertEqual(
       await classifyKvPort({
         port: 1,
-        dataDir,
+        dataDir: 'D:/spindb/containers/redis/a/data',
         probe: open,
+        platform: 'win32',
+        resolvePath: junction,
         listListeners: async () => [
-          'redis-server.exe /nonexistent/.spindb/containers/redis/a/redis.conf',
+          'C:/Users/Me/.spindb/containers/redis/a/redis.conf',
         ],
       }),
       'maybe',
-      'its own server',
+      'raw paths differ, resolved paths match',
+    )
+  })
+
+  it('never infers "other" from a listener path that cannot be resolved', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['E:/gone/containers/redis/z/redis.conf'],
+      }),
+      'maybe',
+      'unresolvable listener',
+    )
+  })
+
+  it('classifies a provably different server as other', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['D:/other/containers/redis/b/redis.conf'],
+      }),
+      'other',
+      'resolved and different',
     )
     assertEqual(
       await classifyKvPort({
         port: 1,
-        dataDir,
+        dataDir: 'D:/spindb/containers/redis/a/data',
         probe: open,
-        listListeners: async () => [
-          'redis-server.exe /nonexistent/.spindb/containers/redis/ab/redis.conf',
-        ],
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['D:/spindb/containers/redis/ab/redis.conf'],
       }),
       'other',
-      'a different container whose name shares a prefix',
+      'a container whose name shares a prefix',
     )
   })
 })

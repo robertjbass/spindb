@@ -265,8 +265,9 @@ async function windowsListenerIdentities(
           ],
           { timeout: 15000, windowsHide: true },
         )
-        const text = String(commandLine).trim()
-        if (text) identityById.set(pid, text)
+        const configPath = configPathFromCommandLine(String(commandLine))
+        // No config path in the command line: unresolved, fails closed.
+        if (configPath) identityById.set(pid, configPath)
       } catch {
         // Unresolved: attributeListeners fails closed on it.
       }
@@ -410,21 +411,47 @@ async function darwinListenerCwds(
 }
 
 /**
- * Lowercase, forward slashes, and a Cygwin `/cygdrive/c/...` rewritten to
- * `c:/...`, so a Windows command line and a native path compare.
+ * The `.conf` argument of a redis-server / valkey-server command line, as a
+ * native path (a Cygwin `/cygdrive/c/...` becomes `C:/...`), or null.
  */
-export function normalizeForMatch(path: string): string {
-  return path
-    .replace(/\\/g, '/')
-    .replace(/\/cygdrive\/([a-z])\//gi, '$1:/')
-    .toLowerCase()
+export function configPathFromCommandLine(commandLine: string): string | null {
+  const quoted = commandLine.match(/"([^"]+\.conf)"/i)
+  const bare = commandLine.match(/(?:^|\s)([^\s"]+\.conf)(?=\s|$)/i)
+  const raw = quoted?.[1] ?? bare?.[1]
+  if (!raw) return null
+  return raw.replace(
+    /^\/cygdrive\/([a-z])\//i,
+    (_, drive: string) => `${drive.toUpperCase()}:/`,
+  )
 }
 
-async function canonicalPath(path: string): Promise<string> {
+/**
+ * A path in comparable form: forward slashes, a Cygwin drive rewritten, no
+ * trailing slash, and case-folded where the filesystem usually is
+ * case-insensitive (Windows, macOS).
+ */
+export function normalizeForMatch(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const slashed = path
+    .replace(/\\/g, '/')
+    .replace(/^\/cygdrive\/([a-z])\//i, '$1:/')
+    .replace(/\/+$/, '')
+  return platform === 'win32' || platform === 'darwin'
+    ? slashed.toLowerCase()
+    : slashed
+}
+
+/** realpath, or null when the path cannot be resolved (missing, no access). */
+async function resolvedPath(
+  path: string,
+  resolve: (path: string) => Promise<string>,
+): Promise<string | null> {
   try {
-    return await realpath(path)
+    return await resolve(path)
   } catch {
-    return path
+    return null
   }
 }
 
@@ -444,6 +471,9 @@ export async function classifyKvPort(options: {
     port: number,
     answeringHosts: string[],
   ) => Promise<string[] | null>
+  /** Test seams: realpath and the platform's path rules. */
+  resolvePath?: (path: string) => Promise<string>
+  platform?: NodeJS.Platform
 }): Promise<'free' | 'other' | 'maybe'> {
   const answering = await probeKvPortHosts({
     port: options.port,
@@ -456,13 +486,31 @@ export async function classifyKvPort(options: {
     answering,
   ).catch(() => null)
   if (!cwds || cwds.length === 0) return 'maybe'
-  const mine = await canonicalPath(options.dataDir)
-  const containerDir = normalizeForMatch(dirname(mine))
+  const resolve = options.resolvePath ?? realpath
+  const platform = options.platform ?? process.platform
+  const norm = (path: string) => normalizeForMatch(path, platform)
+
+  // Our own data dir and container dir, raw and resolved.
+  const ourDataRaw = norm(options.dataDir)
+  const ourDirRaw = norm(dirname(options.dataDir))
+  const ourDataReal = await resolvedPath(options.dataDir, resolve)
+  const ourDirReal = await resolvedPath(dirname(options.dataDir), resolve)
+
   for (const identity of cwds) {
-    // A cwd (Linux, macOS) equals the data dir; a command line (Windows)
-    // carries the container's config file, inside the container directory.
-    if ((await canonicalPath(identity)) === mine) return 'maybe'
-    if (normalizeForMatch(identity).includes(`${containerDir}/`)) return 'maybe'
+    // Each listener reduces to a directory to compare: its cwd (Linux,
+    // macOS) against our data dir, or its config file's directory (Windows)
+    // against our container dir.
+    const isConfig = /\.conf$/i.test(identity)
+    const theirs = isConfig ? dirname(identity) : identity
+    const oursRaw = isConfig ? ourDirRaw : ourDataRaw
+    const oursReal = isConfig ? ourDirReal : ourDataReal
+    if (norm(theirs) === oursRaw) return 'maybe'
+    const theirsReal = await resolvedPath(theirs, resolve)
+    // 'other' must be proven: a listener path that cannot be resolved, or
+    // an own path that cannot be, is never inferred to be someone else.
+    if (theirsReal === null || oursReal === null) return 'maybe'
+    if (norm(theirsReal) === norm(oursReal)) return 'maybe'
+    // Different raw AND different resolved: provably another server.
   }
   return 'other'
 }
