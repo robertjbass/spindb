@@ -22,6 +22,8 @@
 
 set -e
 
+source "$(dirname "${BASH_SOURCE[0]}")/download-with-retry.sh"
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -1383,7 +1385,7 @@ run_test() {
 
   log_step "Download $engine $version from hostdb"
   local download_output
-  if ! download_output=$(spindb engines download "$engine" "$version" 2>&1); then
+  if ! download_output=$(download_with_retry "$engine" "$version" 2>&1); then
     log_step_fail
     # Show the actual error for debugging
     if [ -n "$download_output" ]; then
@@ -1403,7 +1405,7 @@ run_test() {
   # QuestDB requires psql for connectivity tests (PostgreSQL wire protocol)
   if [ "$engine" = "questdb" ]; then
     log_step "Download postgresql 17 for psql (QuestDB dependency)"
-    if ! spindb engines download postgresql 17 &>/dev/null; then
+    if ! download_with_retry postgresql 17; then
       log_step_fail
       failure_reason="PostgreSQL download failed (needed for psql)"
       record_result "$engine" "$version" "FAILED" "$failure_reason"
