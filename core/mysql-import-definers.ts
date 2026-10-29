@@ -174,7 +174,12 @@ export class MysqlImportDefiners extends Transform {
       if (this.mode === 'quote') {
         this.append(ch, 'quoted')
         i++
-        if (this.backslashEscapes && ch === '\\' && next !== undefined) {
+        if (
+          this.quote !== '`' &&
+          this.backslashEscapes &&
+          ch === '\\' &&
+          next !== undefined
+        ) {
           this.append(next, 'quoted')
           i++
         } else if (ch === this.quote) {

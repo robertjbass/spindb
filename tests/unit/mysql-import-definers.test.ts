@@ -52,6 +52,19 @@ describe('remote MySQL-family import definers', () => {
     }
   })
 
+  it('keeps backslashes literal in backtick identifiers before a definer', async () => {
+    const input =
+      'CREATE TABLE t (`path\\` TEXT); CREATE DEFINER=`old`@`%` VIEW v AS SELECT 1;'
+    for (const size of [1, 2, 7, 65536]) {
+      const result = await rewrite(input, size)
+      assert.equal(result.count, 1)
+      assert.equal(
+        result.output.toString(),
+        input.replace('DEFINER=`old`@`%`', 'DEFINER=CURRENT_USER'),
+      )
+    }
+  })
+
   it('preserves arbitrary data bytes, comments, identifiers and existing CURRENT_USER owners', async () => {
     const input = Buffer.concat([
       Buffer.from(
