@@ -7,6 +7,7 @@ import { promptContainerSelect } from '../ui/prompts'
 import { createSpinner } from '../ui/spinner'
 import { uiSuccess, uiError, uiWarning } from '../ui/theme'
 import { Engine, isRemoteContainer } from '../../types'
+import { KvStopRefusedError } from '../../core/kv-shutdown'
 
 export const stopCommand = new Command('stop')
   .description('Stop a container')
@@ -89,7 +90,16 @@ export const stopCommand = new Command('stop')
             }
 
             if (!usedFallback) {
-              await engine.stop(container)
+              try {
+                await engine.stop(container)
+              } catch (error) {
+                if (!(error instanceof KvStopRefusedError)) throw error
+                // Left running on purpose: report it and stop the rest.
+                spinner?.fail(`Failed to stop "${container.name}"`)
+                if (!options.json) console.log(chalk.gray(`  ${error.message}`))
+                failedNames.push(container.name)
+                continue
+              }
             }
 
             await containerManager.updateConfig(container.name, {
@@ -113,7 +123,11 @@ export const stopCommand = new Command('stop')
             console.log(
               uiSuccess(`Stopped ${stoppedNames.length} container(s)`),
             )
+            if (failedNames.length > 0) {
+              console.log(chalk.red(`  Not stopped: ${failedNames.join(', ')}`))
+            }
           }
+          if (failedNames.length > 0) process.exitCode = 1
           return
         }
 

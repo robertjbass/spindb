@@ -46,6 +46,7 @@ import {
 } from '../../engines/ferretdb/version-maps'
 import type { BaseEngine } from '../../engines/base-engine'
 import { getEngineMetadata } from '../helpers'
+import { KvStopRefusedError } from '../../core/kv-shutdown'
 
 async function ensureFileBasedBinaries(
   dbEngine: BaseEngine,
@@ -975,8 +976,11 @@ export const createCommand = new Command('create')
               }
               try {
                 await dbEngine.stop(existingConfig)
-              } catch {
-                // Ignore stop errors - container may already be stopped
+              } catch (error) {
+                // A stop that refused to risk the data left the server
+                // running: never delete its directory underneath it.
+                if (error instanceof KvStopRefusedError) throw error
+                // Ignore other stop errors - container may already be stopped
               }
             }
             if (!options.json) {
@@ -1003,6 +1007,7 @@ export const createCommand = new Command('create')
         }
 
         const tx = new TransactionManager()
+        let stopRefused = false
 
         const createSpinnerInstance = createSpinner('Creating container...')
         createSpinnerInstance.start()
@@ -1022,6 +1027,14 @@ export const createCommand = new Command('create')
           tx.addRollback({
             description: `Delete container "${containerName}"`,
             execute: async () => {
+              if (stopRefused) {
+                logWarning(
+                  `Left container "${containerName}" in place: its server is still running because stopping it could lose data.`,
+                )
+                throw new Error(
+                  `Left container "${containerName}" in place: its server is still running because stopping it could lose data. Stop it with "spindb stop ${containerName}", then delete it.`,
+                )
+              }
               await containerManager.delete(containerName, { force: true })
             },
           })
@@ -1106,8 +1119,14 @@ export const createCommand = new Command('create')
               execute: async () => {
                 try {
                   await dbEngine.stop(config)
-                } catch {
-                  // Ignore stop errors during rollback
+                } catch (error) {
+                  // A refused stop left the server running: the delete
+                  // rollback below must not remove its directory.
+                  if (error instanceof KvStopRefusedError) {
+                    stopRefused = true
+                    // logWarning writes to stderr, so --json stdout stays valid.
+                    logWarning(error.message)
+                  }
                 }
               },
             })
