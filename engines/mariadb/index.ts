@@ -3,6 +3,7 @@
  * Manages MariaDB database containers using pre-built binaries from hostdb
  */
 
+import { normalizeRemoteDumpDefiners } from '../../core/mysql-import-definers'
 import { spawn, exec, type SpawnOptions } from 'child_process'
 import { existsSync, createReadStream } from 'fs'
 import { mkdir, writeFile, readFile, unlink, rm } from 'fs/promises'
@@ -1048,6 +1049,19 @@ export class MariaDBEngine extends BaseEngine {
     outputPath: string,
     options?: RemoteDumpOptions,
   ): Promise<DumpResult> {
+    const result = await this.dumpForRemoteImport(
+      connectionString,
+      outputPath,
+      options,
+    )
+    return normalizeRemoteDumpDefiners(result)
+  }
+
+  private async dumpForRemoteImport(
+    connectionString: string,
+    outputPath: string,
+    options?: RemoteDumpOptions,
+  ): Promise<DumpResult> {
     const dumpPath = await this.getDumpPath()
 
     const { host, port, user, password, database } =
@@ -1107,6 +1121,11 @@ export class MariaDBEngine extends BaseEngine {
             stdout,
             stderr,
             code,
+            remoteSource: {
+              flavor: source.flavor,
+              serverVersion: source.version || undefined,
+              dumpTool: 'mariadb-dump',
+            },
           })
         } else {
           reject(new Error(stderr || `mariadb-dump exited with code ${code}`))
