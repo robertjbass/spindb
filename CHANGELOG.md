@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.77.3] - 2026-10-29
+
+### Fixed
+
+- Remote MySQL and MariaDB imports reassign object `DEFINER` accounts to the importing login, so views, triggers, routines, and events no longer depend on source-only accounts. The streaming rewrite preserves row bytes and `SQL SECURITY` settings, reports `remoteSource.rewrites.definersRewritten`, and leaves local backup restores unchanged.
+
 ## [0.77.2] - 2026-10-28
 
 ### Fixed
