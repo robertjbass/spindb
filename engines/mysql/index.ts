@@ -3,6 +3,7 @@
  * Manages MySQL database containers using pre-built binaries from hostdb
  */
 
+import { normalizeRemoteDumpDefiners } from '../../core/mysql-import-definers'
 import { spawn, exec, execFile, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, createReadStream } from 'fs'
@@ -1171,6 +1172,19 @@ export class MySQLEngine extends BaseEngine {
    * could not be probed, takes the unchanged `mysqldump` path.
    */
   async dumpFromConnectionString(
+    connectionString: string,
+    outputPath: string,
+    options?: RemoteDumpOptions,
+  ): Promise<DumpResult> {
+    const result = await this.dumpForRemoteImport(
+      connectionString,
+      outputPath,
+      options,
+    )
+    return normalizeRemoteDumpDefiners(result)
+  }
+
+  private async dumpForRemoteImport(
     connectionString: string,
     outputPath: string,
     options?: RemoteDumpOptions,

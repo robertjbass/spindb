@@ -358,6 +358,12 @@ tool's raw error through:
 speak for the name (another engine, a system database) never blocks the
 backup: it proceeds exactly as before.
 
+Remote MySQL/MariaDB imports reassign explicit object `DEFINER` accounts to the
+importing login (`CURRENT_USER`). Row bytes and `SQL SECURITY` settings are
+preserved. The human-readable warning and
+`remoteSource.rewrites.definersRewritten` in `--json` report the number changed.
+Restoring a local backup keeps its original definers.
+
 If a `--from-url` restore is interrupted (Ctrl-C, or a `SIGTERM`/`SIGHUP` from
 whatever is supervising it), the partial dump it was writing to
 `$TMPDIR/spindb-dump-<timestamp>.dump` is deleted, the dump client is killed,
