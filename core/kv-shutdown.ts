@@ -2,7 +2,7 @@ import { readdir, readFile, readlink, realpath, stat } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { connect } from 'net'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { platformService } from './platform-service'
 import { logDebug } from './error-handler'
 
@@ -200,7 +200,89 @@ export async function listListenerCwds(
   if (process.platform === 'darwin') {
     return darwinListenerCwds(port, answeringHosts)
   }
+  if (process.platform === 'win32') {
+    return windowsListenerIdentities(port, answeringHosts)
+  }
   return null
+}
+
+/**
+ * `netstat -ano` LISTENING rows on `port`: pid and normalized host ('*' for
+ * a wildcard). netstat lists every user's listeners with their pid.
+ */
+export function parseNetstatListeners(
+  output: string,
+  port: number,
+): { pid: string; host: string }[] {
+  const listeners: { pid: string; host: string }[] = []
+  for (const line of output.split(/\r?\n/)) {
+    const cols = line.trim().split(/\s+/)
+    if (cols[0] !== 'TCP' || cols[3] !== 'LISTENING' || !cols[4]) continue
+    const match = cols[1]?.match(/^\[?(.*?)\]?:(\d+)$/)
+    if (!match || Number(match[2]) !== port) continue
+    const host = match[1]
+    listeners.push({
+      pid: cols[4],
+      host: host === '0.0.0.0' || host === '::' ? '*' : host,
+    })
+  }
+  return listeners
+}
+
+/**
+ * Windows has no /proc and no lsof, and another process's working directory
+ * is not readable, so a listener is identified by its command line instead:
+ * spindb starts redis-server and valkey-server with the container's config
+ * file (inside the container directory) as their argument. A pid whose
+ * command line cannot be read (another user's process) is unresolved, which
+ * attributeListeners turns into "unknown".
+ */
+async function windowsListenerIdentities(
+  port: number,
+  answeringHosts: string[],
+): Promise<string[] | null> {
+  try {
+    const { stdout } = await execFileAsync('netstat', ['-ano', '-p', 'TCP'], {
+      timeout: 10000,
+      windowsHide: true,
+    })
+    const { stdout: stdout6 } = await execFileAsync(
+      'netstat',
+      ['-ano', '-p', 'TCPv6'],
+      { timeout: 10000, windowsHide: true },
+    )
+    const listeners = parseNetstatListeners(`${stdout}\n${stdout6}`, port)
+    const identityById = new Map<string, string>()
+    for (const pid of new Set(listeners.map((entry) => entry.pid))) {
+      try {
+        const { stdout: commandLine } = await execFileAsync(
+          'powershell',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`,
+          ],
+          { timeout: 15000, windowsHide: true },
+        )
+        const configPath = configPathFromCommandLine(String(commandLine))
+        // No config path in the command line: unresolved, fails closed.
+        if (configPath) identityById.set(pid, configPath)
+      } catch {
+        // Unresolved: attributeListeners fails closed on it.
+      }
+    }
+    return attributeListeners({
+      listeners: listeners.map((entry) => ({
+        id: entry.pid,
+        host: entry.host,
+      })),
+      cwdById: identityById,
+      answeringHosts,
+    })
+  } catch {
+    return null
+  }
 }
 
 async function linuxListenerCwds(port: number): Promise<string[] | null> {
@@ -210,8 +292,16 @@ async function linuxListenerCwds(port: number): Promise<string[] | null> {
     let text: string
     try {
       text = await readFile(table, 'utf8')
-    } catch {
-      continue
+    } catch (error) {
+      // tcp6 is absent only on a kernel without IPv6, where nothing can listen
+      // on it; any other unreadable table leaves the listing incomplete.
+      if (
+        table.endsWith('tcp6') &&
+        (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ) {
+        continue
+      }
+      return null
     }
     for (const line of text.split('\n').slice(1)) {
       const cols = line.trim().split(/\s+/)
@@ -320,11 +410,48 @@ async function darwinListenerCwds(
   }
 }
 
-async function canonicalPath(path: string): Promise<string> {
+/**
+ * The `.conf` argument of a redis-server / valkey-server command line, as a
+ * native path (a Cygwin `/cygdrive/c/...` becomes `C:/...`), or null.
+ */
+export function configPathFromCommandLine(commandLine: string): string | null {
+  const quoted = commandLine.match(/"([^"]+\.conf)"/i)
+  const bare = commandLine.match(/(?:^|\s)([^\s"]+\.conf)(?=\s|$)/i)
+  const raw = quoted?.[1] ?? bare?.[1]
+  if (!raw) return null
+  return raw.replace(
+    /^\/cygdrive\/([a-z])\//i,
+    (_, drive: string) => `${drive.toUpperCase()}:/`,
+  )
+}
+
+/**
+ * A path in comparable form: forward slashes, a Cygwin drive rewritten, no
+ * trailing slash, and case-folded where the filesystem usually is
+ * case-insensitive (Windows, macOS).
+ */
+export function normalizeForMatch(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const slashed = path
+    .replace(/\\/g, '/')
+    .replace(/^\/cygdrive\/([a-z])\//i, '$1:/')
+    .replace(/\/+$/, '')
+  return platform === 'win32' || platform === 'darwin'
+    ? slashed.toLowerCase()
+    : slashed
+}
+
+/** realpath, or null when the path cannot be resolved (missing, no access). */
+async function resolvedPath(
+  path: string,
+  resolve: (path: string) => Promise<string>,
+): Promise<string | null> {
   try {
-    return await realpath(path)
+    return await resolve(path)
   } catch {
-    return path
+    return null
   }
 }
 
@@ -344,6 +471,9 @@ export async function classifyKvPort(options: {
     port: number,
     answeringHosts: string[],
   ) => Promise<string[] | null>
+  /** Test seams: realpath and the platform's path rules. */
+  resolvePath?: (path: string) => Promise<string>
+  platform?: NodeJS.Platform
 }): Promise<'free' | 'other' | 'maybe'> {
   const answering = await probeKvPortHosts({
     port: options.port,
@@ -356,9 +486,31 @@ export async function classifyKvPort(options: {
     answering,
   ).catch(() => null)
   if (!cwds || cwds.length === 0) return 'maybe'
-  const mine = await canonicalPath(options.dataDir)
-  for (const cwd of cwds) {
-    if ((await canonicalPath(cwd)) === mine) return 'maybe'
+  const resolve = options.resolvePath ?? realpath
+  const platform = options.platform ?? process.platform
+  const norm = (path: string) => normalizeForMatch(path, platform)
+
+  // Our own data dir and container dir, raw and resolved.
+  const ourDataRaw = norm(options.dataDir)
+  const ourDirRaw = norm(dirname(options.dataDir))
+  const ourDataReal = await resolvedPath(options.dataDir, resolve)
+  const ourDirReal = await resolvedPath(dirname(options.dataDir), resolve)
+
+  for (const identity of cwds) {
+    // Each listener reduces to a directory to compare: its cwd (Linux,
+    // macOS) against our data dir, or its config file's directory (Windows)
+    // against our container dir.
+    const isConfig = /\.conf$/i.test(identity)
+    const theirs = isConfig ? dirname(identity) : identity
+    const oursRaw = isConfig ? ourDirRaw : ourDataRaw
+    const oursReal = isConfig ? ourDirReal : ourDataReal
+    if (norm(theirs) === oursRaw) return 'maybe'
+    const theirsReal = await resolvedPath(theirs, resolve)
+    // 'other' must be proven: a listener path that cannot be resolved, or
+    // an own path that cannot be, is never inferred to be someone else.
+    if (theirsReal === null || oursReal === null) return 'maybe'
+    if (norm(theirsReal) === norm(oursReal)) return 'maybe'
+    // Different raw AND different resolved: provably another server.
   }
   return 'other'
 }

@@ -1028,6 +1028,9 @@ export const createCommand = new Command('create')
             description: `Delete container "${containerName}"`,
             execute: async () => {
               if (stopRefused) {
+                logWarning(
+                  `Left container "${containerName}" in place: its server is still running because stopping it could lose data.`,
+                )
                 throw new Error(
                   `Left container "${containerName}" in place: its server is still running because stopping it could lose data. Stop it with "spindb stop ${containerName}", then delete it.`,
                 )
@@ -1119,7 +1122,11 @@ export const createCommand = new Command('create')
                 } catch (error) {
                   // A refused stop left the server running: the delete
                   // rollback below must not remove its directory.
-                  if (error instanceof KvStopRefusedError) stopRefused = true
+                  if (error instanceof KvStopRefusedError) {
+                    stopRefused = true
+                    // logWarning writes to stderr, so --json stdout stays valid.
+                    logWarning(error.message)
+                  }
                 }
               },
             })

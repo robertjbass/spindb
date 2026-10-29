@@ -11,6 +11,9 @@ import {
   isAuthRejection,
   isKvPortProvenFree,
   attributeListeners,
+  configPathFromCommandLine,
+  normalizeForMatch,
+  parseNetstatListeners,
   classifyKvPort,
   listListenerCwds,
   kvProbeHosts,
@@ -467,6 +470,7 @@ describe('classifyKvPort', () => {
         dataDir: '/a/data',
         probe: open,
         listListeners: async () => ['/b/data'],
+        resolvePath: async (path: string) => path,
       }),
       'other',
       'port reused by another server',
@@ -498,8 +502,13 @@ describe('classifyKvPort', () => {
   it('identifies a real listener by its working directory', async () => {
     if (process.platform !== 'linux' && process.platform !== 'darwin') return
     const { spawn } = await import('child_process')
-    const mine = await mkdtemp(join(tmpdir(), 'kv-mine-'))
-    const other = await mkdtemp(join(tmpdir(), 'kv-other-'))
+    // The real layout: containers/<engine>/<name>/data, one dir per container.
+    const root = await mkdtemp(join(tmpdir(), 'kv-containers-'))
+    const mine = join(root, 'a', 'data')
+    const other = join(root, 'b', 'data')
+    const { mkdir } = await import('fs/promises')
+    await mkdir(mine, { recursive: true })
+    await mkdir(other, { recursive: true })
     const child = spawn(
       process.execPath,
       [
@@ -528,8 +537,7 @@ describe('classifyKvPort', () => {
       )
     } finally {
       child.kill()
-      await rm(mine, { recursive: true, force: true })
-      await rm(other, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true })
     }
   })
 })
@@ -570,5 +578,139 @@ describe('attributeListeners', () => {
       answeringHosts: ['127.0.0.1', '::1'],
     })
     assertDeepEqual(result, ['/a', '/b'], 'complete')
+  })
+})
+
+describe('Windows listener identification', () => {
+  it('parses netstat LISTENING rows for the port', () => {
+    const out = [
+      '  Proto  Local Address          Foreign Address        State           PID',
+      '  TCP    0.0.0.0:6379           0.0.0.0:0              LISTENING       4120',
+      '  TCP    127.0.0.1:6380         0.0.0.0:0              LISTENING       999',
+      '  TCP    127.0.0.1:6379         127.0.0.1:51000        ESTABLISHED     77',
+      '  TCP    [::1]:6379             [::]:0                 LISTENING       5000',
+      '  TCP    [::]:6379              [::]:0                 LISTENING       4120',
+    ].join('\r\n')
+    assertDeepEqual(
+      parseNetstatListeners(out, 6379),
+      [
+        { pid: '4120', host: '*' },
+        { pid: '5000', host: '::1' },
+        { pid: '4120', host: '*' },
+      ],
+      'listeners on 6379 only, LISTENING only',
+    )
+  })
+
+  it('extracts the config path from a command line', () => {
+    assertEqual(
+      configPathFromCommandLine(
+        '"C:\\Program Files\\redis\\redis-server.exe" /cygdrive/c/Users/Me/.spindb/containers/redis/a/redis.conf',
+      ),
+      'C:/Users/Me/.spindb/containers/redis/a/redis.conf',
+      'cygdrive argument',
+    )
+    assertEqual(
+      configPathFromCommandLine(
+        'valkey-server.exe "D:\\spin db\\containers\\valkey\\b\\valkey.conf"',
+      ),
+      'D:\\spin db\\containers\\valkey\\b\\valkey.conf',
+      'quoted path with a space',
+    )
+    assertEqual(
+      configPathFromCommandLine('redis-server.exe --port 6379'),
+      null,
+      'no config',
+    )
+  })
+
+  it('normalizes paths, case-folding only where the filesystem does', () => {
+    assertEqual(
+      normalizeForMatch('C:\\Users\\Me\\.spindb\\', 'win32'),
+      'c:/users/me/.spindb',
+      'windows',
+    )
+    assertEqual(
+      normalizeForMatch('/cygdrive/c/Users/Me', 'win32'),
+      'c:/users/me',
+      'cygdrive',
+    )
+    assertEqual(
+      normalizeForMatch('/srv/Data', 'linux'),
+      '/srv/Data',
+      'linux keeps case',
+    )
+  })
+
+  // A stubbed realpath: the .spindb directory is a junction to D:\spindb.
+  const junction = async (path: string) => {
+    const p = path.replace(/\\/g, '/')
+    if (/^C:\/Users\/Me\/\.spindb/i.test(p))
+      return p.replace(/^C:\/Users\/Me\/\.spindb/i, 'D:/spindb')
+    if (/^D:\/spindb/i.test(p)) return p
+    if (/^D:\/other/i.test(p)) return p
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+  }
+  const open: ConnectProbe = async () => 'open'
+
+  it('treats its own server behind a junction as its own (never "other")', async () => {
+    // Our dataDir arrives through the junction-resolved home; the server's
+    // command line still names the C: path.
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => [
+          'C:/Users/Me/.spindb/containers/redis/a/redis.conf',
+        ],
+      }),
+      'maybe',
+      'raw paths differ, resolved paths match',
+    )
+  })
+
+  it('never infers "other" from a listener path that cannot be resolved', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['E:/gone/containers/redis/z/redis.conf'],
+      }),
+      'maybe',
+      'unresolvable listener',
+    )
+  })
+
+  it('classifies a provably different server as other', async () => {
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['D:/other/containers/redis/b/redis.conf'],
+      }),
+      'other',
+      'resolved and different',
+    )
+    assertEqual(
+      await classifyKvPort({
+        port: 1,
+        dataDir: 'D:/spindb/containers/redis/a/data',
+        probe: open,
+        platform: 'win32',
+        resolvePath: junction,
+        listListeners: async () => ['D:/spindb/containers/redis/ab/redis.conf'],
+      }),
+      'other',
+      'a container whose name shares a prefix',
+    )
   })
 })
