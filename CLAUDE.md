@@ -183,6 +183,10 @@ If modifying an engine, also run `pnpm test:engine <engine>`.
 
 Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests. If the CLI surface changed (new command, flag, or output field), also update CHEATSHEET.md — it is the complete command reference the README defers to, and it silently goes stale otherwise.
 
+After a spindb release, bump the pinned version in layerbase-cloud (`ARG SPINDB_VERSION` in `images/Dockerfile.base`) AND layerbase-desktop (the `spindb` dependency in its `package.json`, with a desktop CHANGELOG entry and patch bump) in the same cascade; see `~/dev/layerbase-cloud/deploy/ENGINE-VERSION-UPDATE-RUNBOOK.md`.
+
+spindb releases (`dev -> main`, which publish to npm) are merged by Bob; open the release PR and stop. Feature PRs into `dev` follow the normal flow above.
+
 ## Development Gotchas
 
 **CLI startup is lazy on purpose; keep it that way.** `cli/index.ts` loads command modules on dispatch through `COMMAND_ENTRIES` (a new top-level command needs an entry there with its exact name and aliases; `tests/unit/cli-lazy-load.test.ts` fails otherwise). `core/container-manager.ts` and `cli/commands/list.ts` load engines through `loadEngine()` in `engines/loader.ts`, never through a static import of `engines/index.ts`, which pulls in all engines (about 200 modules). This is a measured exception to preferring static imports: Layerbase Cloud runs `spindb list --json` in every container each minute on 0.5 CPU, and the eager load made that probe cost over a second. Adding a static `engines/index.ts` import to either file, or anything `list` imports, undoes it; check with a module count of `spindb list --json` (21 for `--version`, 59 for `list --json` at 0.77.1).
