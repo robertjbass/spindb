@@ -142,4 +142,46 @@ describe('downloadArchiveToFile', () => {
     }
     assert.equal(requests(), 1)
   })
+  test('gives up with a stall error when the response headers never arrive', async () => {
+    const { url, requests, server } = await startServer([() => {}])
+    try {
+      await assert.rejects(
+        downloadArchiveToFile({
+          url,
+          destination: join(directory, 'no-headers.tar.gz'),
+          displayName: 'Fixture',
+          createNotFoundError: () => new Error('not found'),
+          stallTimeoutMs: 200,
+          retryDelaysMs: [0, 0],
+        }),
+        /stalled \(no data for 0.2s\) on all 2 attempts/,
+      )
+    } finally {
+      await closeServer(server)
+    }
+    assert.equal(requests(), 2)
+  })
+
+  test('the overall timeout is one deadline across retries', async () => {
+    const { url, requests, server } = await startServer([stallAfterPartialBody])
+    const started = Date.now()
+    try {
+      await assert.rejects(
+        downloadArchiveToFile({
+          url,
+          destination: join(directory, 'deadline.tar.gz'),
+          displayName: 'Fixture',
+          createNotFoundError: () => new Error('not found'),
+          stallTimeoutMs: 200,
+          totalTimeoutMs: 500,
+          retryDelaysMs: [0, 0, 0, 0, 0],
+        }),
+        /Download timed out/,
+      )
+    } finally {
+      await closeServer(server)
+    }
+    assert.ok(Date.now() - started < 1000)
+    assert.ok(requests() <= 3)
+  })
 })

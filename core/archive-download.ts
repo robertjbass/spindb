@@ -5,8 +5,9 @@
  * Without a watchdog that hangs the command until the overall timeout (or
  * forever, when the timeout only covers the response headers). The watchdog
  * aborts an attempt that receives no bytes for `stallTimeoutMs` and starts
- * the download again from scratch; the overall timeout still bounds each
- * attempt and is never retried.
+ * the download again from scratch. The overall timeout is one deadline for
+ * the whole download, across every attempt and retry delay, and is never
+ * retried.
  */
 
 import { createWriteStream } from 'fs'
@@ -68,6 +69,17 @@ function startDownloadAttempt(options: {
   }
 }
 
+function stalledError(options: {
+  displayName: string
+  stallTimeoutMs: number
+  maxAttempts: number
+}): Error {
+  return new Error(
+    `Download of ${options.displayName} binaries stalled (no data for ${options.stallTimeoutMs / 1000}s) on all ${options.maxAttempts} attempts. ` +
+      `Check your network connection and try again.`,
+  )
+}
+
 function timeoutError(totalTimeoutMs: number): Error {
   return new Error(
     `Download timed out after ${totalTimeoutMs / 1000 / 60} minutes. ` +
@@ -95,12 +107,17 @@ export async function downloadArchiveToFile(options: {
   const totalTimeoutMs = options.totalTimeoutMs ?? ARCHIVE_DOWNLOAD_TIMEOUT_MS
   const retryDelaysMs = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS
   const maxAttempts = retryDelaysMs.length
+  const deadline = Date.now() + totalTimeoutMs
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const delay = retryDelaysMs[attempt - 1]
+    if (delay >= deadline - Date.now()) throw timeoutError(totalTimeoutMs)
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
 
-    const download = startDownloadAttempt({ stallTimeoutMs, totalTimeoutMs })
+    const download = startDownloadAttempt({
+      stallTimeoutMs,
+      totalTimeoutMs: deadline - Date.now(),
+    })
     try {
       let response: Response
       try {
@@ -112,8 +129,13 @@ export async function downloadArchiveToFile(options: {
       } catch (error) {
         if (download.abortCause() === 'timeout')
           throw timeoutError(totalTimeoutMs)
-        if (download.abortCause() !== 'stalled' || attempt >= maxAttempts)
-          throw error
+        if (download.abortCause() !== 'stalled') throw error
+        if (attempt >= maxAttempts)
+          throw stalledError({
+            displayName: options.displayName,
+            stallTimeoutMs,
+            maxAttempts,
+          })
         options.onProgress?.({
           stage: 'downloading',
           message: `Download stalled, retrying (attempt ${attempt + 1}/${maxAttempts})...`,
@@ -146,10 +168,11 @@ export async function downloadArchiveToFile(options: {
         if (cause === 'timeout') throw timeoutError(totalTimeoutMs)
         if (attempt >= maxAttempts) {
           if (cause === 'stalled') {
-            throw new Error(
-              `Download of ${options.displayName} binaries stalled (no data for ${stallTimeoutMs / 1000}s) on all ${maxAttempts} attempts. ` +
-                `Check your network connection and try again.`,
-            )
+            throw stalledError({
+              displayName: options.displayName,
+              stallTimeoutMs,
+              maxAttempts,
+            })
           }
           throw error
         }
