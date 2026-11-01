@@ -16,15 +16,13 @@
  */
 
 import { randomUUID } from 'crypto'
-import { createWriteStream, existsSync } from 'fs'
+import { existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
-import { fetchWithRegistryFallback } from './hostdb-client'
+import { downloadArchiveToFile } from './archive-download'
 import { prereleaseVersionMatches } from './version-utils'
 import {
   BinaryVersionNotFoundError,
@@ -195,8 +193,6 @@ export abstract class BaseServerBinaryManager {
 
     let success = false
     let binPathCreated = false
-    const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
-
     try {
       // Download the archive
       onProgress?.({
@@ -204,54 +200,20 @@ export abstract class BaseServerBinaryManager {
         message: `Downloading ${this.config.displayName} binaries...`,
       })
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        DOWNLOAD_TIMEOUT_MS,
-      )
-
-      let response: Response
-      try {
-        response = await fetchWithRegistryFallback(url, {
-          signal: controller.signal,
-        })
-      } catch (error) {
-        const err = error as Error
-        if (err.name === 'AbortError') {
-          throw new Error(
-            `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
-              `Check your network connection and try again.`,
-          )
-        }
-        throw error
-      } finally {
-        clearTimeout(timeoutId)
-      }
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new BinaryVersionNotFoundError(
+      await downloadArchiveToFile({
+        url,
+        destination: archiveFile,
+        displayName: this.config.displayName,
+        onProgress,
+        createNotFoundError: () =>
+          new BinaryVersionNotFoundError(
             binariesNotFoundMessage({
               engine: this.config.engineName,
               displayName: this.config.displayName,
               version: fullVersion,
             }),
-          )
-        }
-        throw new Error(
-          `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
-        )
-      }
-
-      if (!response.body) {
-        throw new Error(
-          `Failed to download ${this.config.displayName} binaries: response body is empty`,
-        )
-      }
-
-      const fileStream = createWriteStream(archiveFile)
-      const nodeStream = Readable.fromWeb(response.body)
-      await pipeline(nodeStream, fileStream)
+          ),
+      })
 
       // Create binPath only after successful download (avoid empty dirs on early failure)
       await mkdir(binPath, { recursive: true })

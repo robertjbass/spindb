@@ -16,11 +16,9 @@
  * To extend this class, implement the abstract methods that define engine-specific behavior.
  */
 
-import { createWriteStream, existsSync } from 'fs'
+import { existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod, rename, cp } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync, extractWindowsArchive } from './spawn-utils'
 import { isRenameFallbackError } from './fs-error-utils'
@@ -29,7 +27,7 @@ import {
   BinaryVersionNotFoundError,
   binariesNotFoundMessage,
 } from './version-resolver'
-import { fetchWithRegistryFallback } from './hostdb-client'
+import { downloadArchiveToFile } from './archive-download'
 import {
   type Engine,
   Platform,
@@ -186,8 +184,6 @@ export abstract class BaseDocumentBinaryManager {
     await mkdir(binPath, { recursive: true })
 
     let success = false
-    const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
-
     try {
       // Download the archive
       onProgress?.({
@@ -195,61 +191,20 @@ export abstract class BaseDocumentBinaryManager {
         message: `Downloading ${this.config.displayName} binaries...`,
       })
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        DOWNLOAD_TIMEOUT_MS,
-      )
-
-      const timeoutErrorMessage =
-        `Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000 / 60} minutes. ` +
-        `Check your network connection and try again.`
-
-      let response: Response
-      let fileStream: ReturnType<typeof createWriteStream> | null = null
-      try {
-        response = await fetchWithRegistryFallback(url, {
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new BinaryVersionNotFoundError(
-              binariesNotFoundMessage({
-                engine: this.config.engineName,
-                displayName: this.config.displayName,
-                version: fullVersion,
-              }),
-            )
-          }
-          throw new Error(
-            `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
-          )
-        }
-
-        if (!response.body) {
-          throw new Error(
-            `Download failed: response has no body (status ${response.status})`,
-          )
-        }
-
-        fileStream = createWriteStream(archiveFile)
-        // Convert WHATWG ReadableStream to Node.js Readable (requires Node.js 18+)
-        const nodeStream = Readable.fromWeb(response.body)
-        await pipeline(nodeStream, fileStream)
-      } catch (error) {
-        const err = error as Error
-        if (err.name === 'AbortError') {
-          throw new Error(timeoutErrorMessage)
-        }
-        throw error
-      } finally {
-        clearTimeout(timeoutId)
-        // Ensure fileStream is destroyed on error
-        if (fileStream && !fileStream.writableEnded) {
-          fileStream.destroy()
-        }
-      }
+      await downloadArchiveToFile({
+        url,
+        destination: archiveFile,
+        displayName: this.config.displayName,
+        onProgress,
+        createNotFoundError: () =>
+          new BinaryVersionNotFoundError(
+            binariesNotFoundMessage({
+              engine: this.config.engineName,
+              displayName: this.config.displayName,
+              version: fullVersion,
+            }),
+          ),
+      })
 
       if (platform === Platform.Win32) {
         await this.extractWindowsBinaries(
