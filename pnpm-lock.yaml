@@ -15,8 +15,8 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       hostdb:
-        specifier: 0.47.0
-        version: 0.47.0
+        specifier: 0.48.0
+        version: 0.48.0
       inquirer:
         specifier: ^9.3.7
         version: 9.3.8(@types/node@20.19.41)
@@ -697,6 +697,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -876,8 +877,8 @@ packages:
     resolution: {integrity: sha512-ej4AhfhfL2Q2zpMmLo7U1Uv9+PyhIZpgQLGT1F9miIGmiCJIoCgSmczFdrc97mWT4kVY72KA+WnnhJ5pghSvSg==}
     engines: {node: '>= 0.4'}
 
-  hostdb@0.47.0:
-    resolution: {integrity: sha512-tJvkVxQcxzljktHBwZCTEngWBQNkmU7BlymrGxiRqY2drRzv6yW0dTNbkdkz87X+XH8PE/V+7OOGvEB9jfAltg==}
+  hostdb@0.48.0:
+    resolution: {integrity: sha512-KWziCdMFcYQvwjw0KXw2Uu6N58a+SNI4bcEMJocHY1MOXEiAbBs9pWaSK3NOIcfkEKO87ybhf3KB2Kg5QP83FQ==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2533,7 +2534,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hostdb@0.47.0: {}
+  hostdb@0.48.0: {}
 
   hosted-git-info@2.8.9: {}
 

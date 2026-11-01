@@ -6,6 +6,10 @@
 
 - **FerretDB v2 and DocumentDB explain Intel Mac support instead of failing a download.** hostdb stopped building Intel Mac (darwin-x64) PostgreSQL-DocumentDB on 2026-11-01. The published 17-0.107.0 Intel archive stays downloadable, so existing setups keep working, but for a backend version with no Intel archive spindb now says FerretDB v2 is not supported on Intel Macs and points at FerretDB v1 (`--db-version 1`), instead of attempting a download that 404s (`engines/ferretdb/binary-urls.ts`). Native DocumentDB on an Intel Mac now says Intel Macs are not supported.
 
+### Changed
+
+- **hostdb pin 0.47.0 to 0.48.0.** hostdb 0.48.0 records postgresql-documentdb 17-0.107.0's darwin-x64 archive under `retiredPlatforms` instead of `platforms`; the archive stays downloadable, which `isDocumentDBBuiltForPlatform` honors. No database versions change; hostdb 0.47.1, 0.47.2 and 0.48.0 otherwise change only hostdb's build and release tooling.
+
 ### Testing
 
 - `tests/unit/ferretdb-binary-urls.test.ts` covers a retired darwin-x64 archive staying downloadable, a version with no Intel archive being reported as not built with the Intel Mac message, a version-level platform list narrowing the engine list, unknown versions staying available, and the published 17-0.107.0 darwin-x64 URL still resolving.
