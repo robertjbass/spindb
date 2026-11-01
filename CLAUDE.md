@@ -19,7 +19,7 @@ SpinDB is the backbone of the Layerbase platform. **hostdb** builds database bin
 
 ## Project management
 
-- Work is tracked on the [Ecosystem tracker](https://github.com/orgs/Layerbase-LLC/projects/1); the tracker issue is the plan of record. Search open and closed issues before filing a new one.
+- Work is tracked on the [Ecosystem tracker](https://github.com/orgs/Layerbase-LLC/projects/1); the tracker issue for a piece of work is its plan of record. Search open and closed issues before filing a new one.
 - CLI concerns go in the PUBLIC `Layerbase-LLC/layerbase-cli` repo, limited to what a CLI user could see (commands, behavior, error output); server names, internal endpoints, infrastructure details and incident notes go in a private `Layerbase-LLC/layerbase-cloud` issue. No customer data or secrets.
 - Detailed plans live in `~/dev/layerbase-cloud/plans/` (start at `plans/README.md`).
 
