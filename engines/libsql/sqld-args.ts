@@ -24,6 +24,32 @@
  */
 export const SQLD_CHECKPOINT_INTERVAL_SECONDS = 60
 
+/**
+ * Largest single response sqld will send, in bytes of the serialized result.
+ *
+ * sqld's own default is 10 MB, so a `SELECT` returning more than that failed
+ * with "Response is too large". 50 MB matches the per-query result ceiling
+ * Cloudflare D1 enforces from 2026-11-04, so a query that works on D1 works
+ * here too. sqld parses "MB" as 1,000,000 bytes: measured on 0.24.32, a
+ * 49,997,255-byte JSON result passes and a 52 MB one fails.
+ */
+export const SQLD_MAX_RESPONSE_SIZE = '50MB'
+
+/**
+ * Bytes of response that may be in flight at once across ALL of this sqld's
+ * connections. sqld's default is about 32 MB, below the per-response limit
+ * above, so without raising it a single 50 MB result would still fail.
+ *
+ * sqld buffers each response in memory. Measured on 0.24.32: one 50 MB
+ * response peaks at about 190 MB RSS (baseline 26 MB, so ~3.3x the response),
+ * four at once at about 580 MB, eight at about 1.2 GB. 100 MB in flight
+ * (two maximum-size responses) peaks near 330 MB, which fits the smallest
+ * hosted memory budget (512 MB, Layerbase Cloud Free) with room for SQLite.
+ * When the total is exceeded every in-flight response over it fails with the
+ * same error rather than queueing, as with sqld's default.
+ */
+export const SQLD_MAX_TOTAL_RESPONSE_SIZE = '100MB'
+
 export function buildSqldArgs(options: {
   bindAddress: string
   port: number
@@ -37,6 +63,10 @@ export function buildSqldArgs(options: {
     options.dbPath,
     '--checkpoint-interval-s',
     String(SQLD_CHECKPOINT_INTERVAL_SECONDS),
+    '--max-response-size',
+    SQLD_MAX_RESPONSE_SIZE,
+    '--max-total-response-size',
+    SQLD_MAX_TOTAL_RESPONSE_SIZE,
   ]
   if (options.jwtKeyPath) {
     args.push('--auth-jwt-key-file', options.jwtKeyPath)
