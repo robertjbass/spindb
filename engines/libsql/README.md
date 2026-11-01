@@ -90,10 +90,10 @@ http://127.0.0.1:{port}
 ### Start Command
 
 ```bash
-sqld --http-listen-addr {bind}:{port} --db-path {dataDir}/data.db --checkpoint-interval-s 60 [--auth-jwt-key-file {containerDir}/jwt-key.pem]
+sqld --http-listen-addr {bind}:{port} --db-path {dataDir}/data.db --checkpoint-interval-s 60 --max-response-size 50MB --max-total-response-size 100MB [--auth-jwt-key-file {containerDir}/jwt-key.pem]
 ```
 
-Arguments are built in `sqld-args.ts`. See "Checkpoint interval" below for why `--checkpoint-interval-s` is always passed.
+Arguments are built in `sqld-args.ts`. See "Checkpoint interval" and "Response size limits" below for why those flags are always passed.
 
 ### Server Process Management
 
@@ -264,6 +264,12 @@ What to expect with it:
 - **WAL size is bounded by one interval of writes.** `dbs/default/data-wal` grows until the next checkpoint truncates it to zero, roughly 20 KB per single-row commit on an indexed table: about 150 MB for a minute at 125 commits/s. It counts toward disk usage and is copied by file-level backups and branches (SQLite replays it on open). An idle database checkpoints in microseconds.
 - **Writes can get `SQLITE_BUSY` during a checkpoint.** While the checkpoint holds the write lock, new writes fail at once with `SQLITE_BUSY` and queued writes with `SQLITE_BUSY_SNAPSHOT` (sqld sets no busy handler and rejects `PRAGMA busy_timeout`). Measured locally: about 0.2% of writes at 128 concurrent writers, a few per checkpoint at low concurrency. A client that keeps a read transaction open makes the checkpoint wait up to 5 s for it, and writes fail for that time. Retry `SQLITE_BUSY` in the client.
 - Clients cannot start a checkpoint themselves: sqld rejects `PRAGMA wal_checkpoint` and setting `wal_autocheckpoint`.
+
+### 8. Response Size Limits
+
+sqld refuses a response larger than `--max-response-size` (default 10 MB) and fails every in-flight response once their combined size passes `--max-total-response-size` (default about 32 MB), with `Response is too large`. spindb passes 50 MB and 100 MB. 50 MB matches the per-query result ceiling Cloudflare D1 enforces from 2026-11-04. The size counted is the serialized result (sqld reads "MB" as 1,000,000 bytes).
+
+sqld holds a response in memory while it sends it. Measured on 0.24.32 (macOS, Apple Silicon): one 50 MB response peaks at about 190 MB RSS from a 26 MB baseline, four concurrent ones at about 580 MB, eight at about 1.2 GB (with the total limit raised to allow them). The 100 MB total keeps one sqld near 330 MB at worst, inside the smallest Layerbase Cloud memory budget (512 MB). Results larger than 50 MB should be paged with `LIMIT` and a keyset `WHERE id > ?`.
 
 ## License
 

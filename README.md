@@ -484,7 +484,7 @@ See [TODO.md](TODO.md#contributing) for development setup, PR requirements, and 
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for project architecture details.
 
-See [CLAUDE.md](CLAUDE.md) for AI-assisted development context.
+See [AGENTS.md](AGENTS.md) for AI-assisted development context.
 
 See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 

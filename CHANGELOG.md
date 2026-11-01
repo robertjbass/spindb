@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.77.4] - 2026-11-01
+
+### Fixed
+
+- **libSQL serves query results up to 50 MB.** sqld's default limit is 10 MB per response and about 32 MB across all in-flight responses, so a `SELECT` returning more than 10 MB failed with `Response is too large`. spindb now starts sqld with `--max-response-size 50MB` and `--max-total-response-size 100MB` (`engines/libsql/sqld-args.ts`). 50 MB matches the per-query result ceiling Cloudflare D1 enforces from 2026-11-04. The total is sized from measurement: sqld buffers each response, peaking at about 3.3x its size in RSS, so 100 MB in flight stays near 330 MB. The new limits apply the next time a libSQL container starts.
+
+### Testing
+
+- `tests/unit/libsql-sqld-args.test.ts` checks both flags are passed on every start and that the total is never below the per-response limit.
+- Measured against sqld 0.24.32: a 49,997,255-byte result is served and a 52 MB one is refused; one 50 MB response peaks at about 190 MB RSS, four at about 580 MB, eight at about 1.2 GB.
+
 ## [0.77.3] - 2026-10-29
 
 ### Fixed
