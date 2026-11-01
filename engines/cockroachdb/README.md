@@ -86,7 +86,7 @@ proc.unref()
 
 Using `'pipe'` for stdout/stderr keeps file descriptors open that prevent Node.js from exiting, causing `spindb start` to hang indefinitely in Docker/CI environments.
 
-This is documented in CLAUDE.md as a major gotcha.
+This is documented in AGENTS.md as a major gotcha.
 
 ### Startup Command
 

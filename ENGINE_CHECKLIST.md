@@ -81,7 +81,7 @@ This comprehensive document provides both the specification for adding a new dat
 | `cli/commands/menu/container-handlers.ts` | Add/update "Create user" visibility |
 | `README.md` | Update documentation |
 | `ARCHITECTURE.md` | Update architecture |
-| `CLAUDE.md` | Update project docs |
+| `AGENTS.md` | Update project docs |
 | `CHANGELOG.md` | Add entry |
 | `package.json` | Add keyword, bump version |
 
@@ -2662,7 +2662,7 @@ Every engine must have a comprehensive README.md documenting implementation deta
 - [ ] Update Type System section
 - [ ] Update ContainerConfig type
 
-### CLAUDE.md
+### AGENTS.md
 
 - [ ] Add engine alias to Engine Aliases section
 - [ ] Add row to Supported Versions & Query Languages table
@@ -2731,7 +2731,7 @@ const binaryPath = join(binDir, `{engine}${ext}`)
 
 If your engine uses multiple ports (e.g., SQL + HTTP):
 - Allocate consecutive ports: SQL on N, HTTP on N+1
-- Document this in CLAUDE.md and ENGINE_CHECKLIST.md
+- Document this in docs/ENGINE_NOTES.md and ENGINE_CHECKLIST.md
 - Update `findConsecutiveFreePorts()` call in tests
 
 ### Connection String Compatibility
@@ -3140,7 +3140,7 @@ Use this consolidated checklist to track your progress. Check items off as you c
 - [ ] Added to Platform Support table
 - [ ] Updated Type System section
 - [ ] Updated ContainerConfig type
-- [ ] Added alias to Engine Aliases in `CLAUDE.md`
+- [ ] Added alias to Engine Aliases in `AGENTS.md`
 - [ ] Added to Supported Versions & Query Languages table
 - [ ] Added to Port Management section
 - [ ] Added entry to `CHANGELOG.md`
