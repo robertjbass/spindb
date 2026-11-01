@@ -13,6 +13,7 @@ This document describes the architecture of SpinDB, a CLI tool for running local
 - [Configuration & State](#configuration--state)
 - [Key Patterns](#key-patterns)
 - [Type System](#type-system)
+- [Agent Implementation Notes](#agent-implementation-notes)
 
 ---
 
@@ -842,3 +843,129 @@ Database binaries are downloaded from the **Layerbase registry** (`registry.laye
 - **Fallback**: [hostdb GitHub releases](https://github.com/robertjbass/hostdb) - Same binaries, fallback when Layerbase is unavailable (toggled by `ENABLE_GITHUB_FALLBACK`)
 - **Future**: [zonky.io](https://github.com/zonkyio/embedded-postgres-binaries) may be integrated for smaller embedded PostgreSQL binaries
 
+
+---
+
+## Agent Implementation Notes
+
+Area rules moved verbatim from the former `CLAUDE.md` (now [AGENTS.md](AGENTS.md)). Read the matching subsection before touching that area.
+
+### Engine categories and remote containers
+
+**Engine categories:**
+- **Server-based** (PostgreSQL, MySQL, MariaDB, MongoDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, LibSQL): data in `~/.spindb/containers/{engine}/{name}/`, port management, start/stop lifecycle
+- **File-based** (SQLite, DuckDB): data in CWD, no server process, `start()`/`stop()` are no-ops, tracked via registry in `~/.spindb/config.json`
+- **Remote/linked** (`spindb link`): linked databases use `status: 'linked'` plus the `remote` field in `ContainerConfig`. `remote.origin` is now first-class: `'external'` for third-party/manual remotes and `'layerbase-cloud'` for Layerbase-managed cloud links. `provider` remains display metadata, and `providerId` is the stable provider-side identifier when available. Credentials are stored via credential-manager with username `'remote'`. Supports `connect`, `url`, `info`, `list`, `delete`, `query`. Does NOT support `backup`, `run`, `restore`, `export`, `clone`, `start`, `stop`, `logs` (these block with clear error messages). See `core/remote-container.ts` for utilities. Query support loads credentials, parses the connection string, and passes `host`/`password`/`username`/`ssl` to engine `executeQuery` via `QueryOptions`.
+- **REST API** (Qdrant, Meilisearch, CouchDB, InfluxDB, LibSQL): server-based but HTTP API only, `spindb run` N/A, `spindb connect` opens web dashboard (LibSQL shows curl examples)
+
+Engines extend `BaseEngine`. Use `assertExhaustive(engine)` in switch statements.
+
+### spindb deploy (antiquated)
+
+**`spindb deploy` (antiquated):** The `deploy` command exists but is not used by layerbase-cloud or layerbase-desktop. Cloud deployments are handled by layerbase-cloud's own infrastructure (Docker containers running spindb on Hetzner), not by `spindb deploy`. The command may be worth re-evaluating for users who want to deploy local databases to external (non-Layerbase) cloud services, but it is not part of any current workflow.
+
+### Bind address and auth flags
+
+**Bind address (`--bind` flag):** `spindb start --bind <address>` sets `bindAddress` in `ContainerConfig`, persisted to `config.json`. All server engines read `container.bindAddress ?? '127.0.0.1'` (QuestDB defaults to `0.0.0.0`). Config-file engines (Redis, Valkey, CouchDB, Qdrant) patch existing configs on restart rather than regenerating them, preserving user modifications like credentials and API keys. ClickHouse patches `<listen_host>` in config.xml. TypeDB regenerates config.yml on every start (passes bindAddress via initDataDir options).
+
+**Authentication (`--auth` / `--no-auth` flags):** `spindb start --auth` sets `authEnabled: true` in `ContainerConfig`, persisted to `config.json`. `spindb start --no-auth` sets it to `false`. Only supported for MongoDB and FerretDB; warns and ignores for other engines. MongoDB: passes `--auth` to mongod when enabled. FerretDB v2: omits `--no-auth` flag when enabled (SCRAM authentication enforced). Default for both is auth disabled (backwards-compatible).
+
+**LibSQL JWT authentication:** LibSQL uses Ed25519 JWT tokens for authentication (same pattern as Meilisearch API keys). `createUser()` generates an Ed25519 key pair, signs a JWT, writes the public key to the container directory (`jwt-key.pem`), restarts sqld with `--auth-jwt-key-file`, and stores the JWT via credential-manager. Not controlled by `--auth`/`--no-auth` flags.
+
+### Deprecated version strategy
+
+**Deprecated version strategy:** Deprecated versions are hidden from discovery but fully supported at runtime. The principle: **don't advertise, but don't break.** Specifically:
+- **Version picker** (`promptVersion()` in `cli/ui/prompts.ts`): Hides major versions where all versions are deprecated (per `databases.json`). `spindb create --show-deprecated` reveals them. Individual deprecated versions within non-deprecated majors show with `[deprecated]` tag.
+- **Version picker preselection**: the major-version list is newest-first (newest keeps the `← latest` label), but the PRESELECTED entry is the engine's configured `defaultVersion` from `config/engine-defaults.ts` - spindb policy, which is not always the newest line (MySQL recommends the `8.4` LTS line over `9.x`). When the configured default is not the newest it also carries a `← default` label. Selection logic is the pure helper `cli/ui/version-picker-defaults.ts` (`resolveDefaultMajorVersion` / `getMajorVersionMarkers`); a prerelease-only line is never preselected, and an absent/unmatched configured default falls back to the newest selectable line.
+- **Direct CLI usage** (`--db-version`): Bypasses the filter entirely - users can always create containers with deprecated versions.
+- **Existing containers**: `spindb list`, `spindb start`, `spindb info`, etc. work normally regardless of deprecation status. No warnings, no filtering.
+- **Installed binaries**: `spindb engines list` shows all installed binaries, deprecated or not.
+- **Downloads**: `spindb engines download <engine> <version>` works for deprecated versions - no version picker involved.
+- Deprecation data comes from hostdb's `databases.json` (`deprecated: true` on version entries). Fetched at runtime by `getDeprecatedVersions()` in `core/hostdb-metadata.ts`.
+
+### Database capabilities
+
+**Database capabilities** (`core/database-capabilities.ts`): Static capability map for all 22 engines. Controls which engines support `databases create`, `databases rename`, and `databases drop`. PostgreSQL, ClickHouse, CockroachDB, and Meilisearch have native rename; 11 other engines use backup/restore; 7 engines (SQLite, DuckDB, Redis, Valkey, QuestDB, TigerBeetle, LibSQL) are unsupported with clear error messages. When adding a new engine, update `getDatabaseCapabilities()`. The map also carries `durableDatabaseExistence` (true only for PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse: a database is listed even when empty, so a listing that omits it proves it is gone). `engine.databaseExists()` (`core/database-presence.ts`) is built on it and returns `'unknown'`, never `false`, whenever the listing is not proof; `spindb start` (`primaryDatabase.state`, `--no-recreate-database`, `core/primary-database.ts`) and `spindb backup` (`code: 'database_not_found'`) rely on that. Never treat `'unknown'` as absent, and when an engine's `listDatabases()` system-database exclusions change, update `getListingHiddenDatabases()` to match.
+
+### Database branching
+
+**Database branching (`spindb branch`):** Neon/Vercel-style copy-on-write forks, local, for every engine. A branch duplicates a container's data dir via a filesystem reflink/clonefile (`core/cow-copy.ts`: `cp -cR` on macOS/APFS, `cp -R --reflink=always` on Linux Btrfs/XFS-reflink/ZFS, full `fs.cp` fallback on ext4/NTFS). `core/branch-manager.ts` orchestrates the lifecycle: running PostgreSQL sources use `pg_basebackup --wal-method=stream` without stopping (full copy, not a reflink); other running server sources are auto stop→snapshot→restart'ed for a consistent copy; file-based engines (SQLite/DuckDB) clone the backing file and register a new entry, and the clone is WAL-complete (SQLite via the online `.backup` API, DuckDB via a pre-clone CHECKPOINT with a copy-the-`.wal` fallback + `warning` when the source is locked by another process) - a bare file clone silently drops everything still in the write-ahead log. Lineage lives on `ContainerConfig.branchParent`/`branchedAt` (and `SQLite/DuckDBRegistryEntry` for file-based). `clone` and `branch` share `containerManager.copyContainerData({ strategy: 'copy' | 'cow', lineage, port? })`; the per-engine `prepareBranchedDataDir()` hook (in `base-engine.ts`) fixes identity baked into a copied data dir (ClickHouse regenerates `config.xml`; FerretDB clears the inherited `backendPort` so start() reallocates a free one; Weaviate self-heals RAFT on start; others no-op). The `--json` output mirrors `clone`/`create` (`{ success, source, name, port, method, branchParent, connectionString, started, warning? }`) so layerbase-desktop/cloud parse it the same way. **Git-driven branching** (`core/git-branch-sync.ts`): `spindb branch init --base <c>` writes `.spindb/branch.json` (`baseContainer`/`engine`/`stablePort`/`mainBranch`) + installs a chain-safe `post-checkout` hook; switching git branches runs `branch sync`, which swaps the matching DB branch onto the **stable port** (one live at a time; git→container mapping is deterministic - `main`→base, else `<base>__<sanitized>`). Subcommands: `init`/`sync`/`status`/`prune`/`hooks install|uninstall`. Server engines only. **Not yet:** time-travel/PITR, merge. Linked/remote containers cannot be branched. Interactive menu: a top-level **Branches** tree view (drill into any node to manage it), branch-aware **Delete** (cascade prompt), and a **Git branching** view (status/sync/prune/hooks) shown when the repo is configured; the tree renderer is shared via `cli/ui/branch-tree.ts`. Downstream integration playbook for desktop/cloud: [docs/BRANCHING-INTEGRATION.md](docs/BRANCHING-INTEGRATION.md). See [docs/BRANCHING.md](docs/BRANCHING.md).
+
+### Version lookups and resolution
+
+All engines use the factory in `core/hostdb-releases-factory.ts` (`createHostdbReleases()`) for version lookups. Each engine's `hostdb-releases.ts` is a ~25-line file that passes engine-specific config to the factory. See `engines/redis/hostdb-releases.ts` as the canonical template.
+
+The factory reads `databases.json` (via `core/hostdb-metadata.ts`) as the authoritative version source, with a three-tier fallback: **databases.json → locally installed binaries → hardcoded version map**. Do NOT write custom fetch/cache/fallback logic in engine files - use the factory.
+
+**Turning a user-supplied version string into a real one is `core/version-resolver.ts` (`resolveEngineVersion`), for every engine.** Every `engines/*/version-maps.ts` `normalizeVersion()` calls it, and `BaseEngine.resolveFullVersion()` overrides delegate to that. The ladder is: exact hostdb resolution, then newest available release matching the input as a version PREFIX (segment-boundary matching, so `3.1` never matches `3.10.5`), then null so the caller reports an unknown version. Prereleases are only considered when the request itself names a channel (it contains a `-`), which is what keeps `19` from resolving to `19.0.0-beta.3`. Do NOT add per-engine version-shape regexes or `${version}.0.0`-style guesses in an engine file: that is exactly the divergence that made `--db-version 18.6` download `18.6.0` and then look for `18.6` binaries (fixed in 0.67.0).
+
+**hostdb data files** are bundled inside the `hostdb` npm package. `core/hostdb-metadata.ts` reads them via `hostdb`'s `loadDatabasesJson()` / `loadDownloadsJson()` - no network call at runtime. The 5-minute cache + `registry.layerbase.host` / GitHub Raw fallback only kicks in if the bundled load throws (corrupt install, etc.). What's bundled:
+- `databases.json` - version listings, platform support, CLI tools per engine (used by factory for version lookups, defaults block, deprecation flags)
+- `downloads.json` - package manager install commands for tools
+- `releases.json` - flat version list with R2 URLs + sha256s (used by `getReleaseInfo()` in hostdb's resolver, by `core/hostdb-client.ts` for binary downloads, and by `tests/integration/hostdb-sync.test.ts` as the bundled-vs-live drift check)
+
+### hostdb npm package and pinning
+
+`hostdb` is the single source of truth for which versions exist, how to resolve shorthand inputs (`'17'` → `'17.10.0'`), and where to download binaries. Spindb's `package.json` should pin **exactly** - not `^` or `~` - because:
+
+- A patch-level hostdb release can add NEW VERSIONS (e.g., `hostdb@0.31.1` adds PostgreSQL 17.11.0). With `^0.31.0`, an end-user `pnpm install spindb@0.49.0` could pick up `hostdb@0.31.5` with versions spindb's tests never validated against.
+- The `tests/integration/hostdb-sync.test.ts` drift check passes against a specific hostdb snapshot. Allowing the snapshot to change under your feet defeats the test.
+- Spindb's `cli/ui/prompts.ts` displays version lists derived from hostdb. Users expect the same spindb version to show the same options.
+
+**Correct pin format:** `"hostdb": "0.31.0"` (no caret, no tilde). Bumping hostdb is an explicit spindb release.
+
+**Bump-hostdb workflow:**
+1. New hostdb published to npm (registry shows new version).
+2. Update `spindb/package.json`: change `hostdb` to exact new version.
+3. `pnpm install` regenerates lockfile.
+4. `pnpm test:hostdb-sync` confirms bundled snapshot matches live registry.
+5. `pnpm test:unit` passes (version maps auto-rebuild from new snapshot).
+6. Commit: `chore(deps): bump hostdb 0.31.0 → 0.32.0` describing new versions / deprecations.
+7. Standard feature → dev → main PR flow.
+8. Read the `Docker Linux ARM64` job's result on the bump PR. It is the sole automated linux-arm64 coverage, and a hostdb bump is exactly when arm64 binaries change, so it is the job to check first. **No manual dispatch any more:** it moved off QEMU emulation onto GitHub's hosted native arm64 runner (`ubuntu-24.04-arm`, free for public repos), so it now runs automatically on every PR to `main` and on the nightly cron, takes minutes instead of 30-45, and covers the full engine set including TigerBeetle, SurrealDB and ClickHouse (all three were unrunnable under emulation). It is inside the `CI Success` gate as of 0.70.2, so a red arm64 leg DOES fail the PR - but still read it by name on a hostdb bump rather than only trusting the overall green check. The old dispatch-only rule existed because the QEMU job was too slow for PRs, and it was useless in practice: QEMU implements no io_uring, so TigerBeetle failed every dispatch the job ever had, which is how a hostdb bump once shipped against a permanently red job.
+
+### Container version pinning
+
+Two layered guarantees prevent silent version drift on the user's data:
+
+1. **At create time** (`cli/commands/create.ts`): the major/major-minor shorthand the user passes (`spindb create postgresql 18`) is resolved to a full version through `dbEngine.resolveFullVersion()` BEFORE `containerManager.create()` writes container.json. New containers always persist `version: '18.4.0'`, never `'18'`.
+
+2. **At start time** (`cli/commands/start.ts`): if a container.json still has shorthand (legacy from an older spindb), `isShorthandVersion()` from `core/version-utils.ts` detects it. Spindb resolves through hostdb, writes the full version back to disk, prints a one-line `uiInfo` that the container is now pinned to `<full>`. From that point on the container is drift-immune. Skipped for file-based engines and remote/`'unknown'` containers.
+
+**DuckDB file pins:** newly created DuckDB registry entries retain the exact
+selected version. Connect, query, scripts, SQL backup/restore, and branch WAL
+checkpointing use that version; branches inherit it and reset follows the
+parent's pin. A missing pinned binary fails instead of using another cached
+version. Legacy/imported entries without a pin retain their previous behavior;
+the displayed default is not persisted as evidence of their original runtime.
+DuckDB 2.0 GA is an explicit selection (`--db-version 2`); the configured
+1.x default advances to 1.5.6; older exact file pins remain unchanged. The preservation drill
+runs both 1.x with 2.0 preferred and 2.0 with 1.x preferred.
+SQLite file pins and Cloud's separately embedded proxy runtimes remain separate
+work. Cloud engine versions and defaults need separate approval.
+
+Together these mean: new containers are immune from day one; legacy containers self-heal on their next start.
+
+### Binary sources and hostdb engine names
+
+Primary: Layerbase registry (`registry.layerbase.host`). Fallback: GitHub hostdb releases (toggled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). All download/fetch logic is centralized in `core/hostdb-client.ts` (`fetchWithRegistryFallback()`, `fetchHostdbReleases()`, `getReleasesUrls()`).
+
+Exceptions: PostgreSQL/Windows uses EDB-sourced binaries uploaded to hostdb (same download path as other platforms). ClickHouse is macOS/Linux only. LibSQL is macOS/Linux only. FerretDB v2 is macOS/Linux only; v1 supports all platforms including Windows.
+
+Most SpinDB engines map 1:1 to hostdb engine names. FerretDB v1 and v2 both use the single `ferretdb` hostdb engine name. The `tests/integration/hostdb-sync.test.ts` test verifies the combined `FERRETDB_VERSION_MAP` against the `ferretdb` entry in hostdb releases.json.
+
+### CLI startup, processes and menus
+
+**CLI startup is lazy on purpose; keep it that way.** `cli/index.ts` loads command modules on dispatch through `COMMAND_ENTRIES` (a new top-level command needs an entry there with its exact name and aliases; `tests/unit/cli-lazy-load.test.ts` fails otherwise). `core/container-manager.ts` and `cli/commands/list.ts` load engines through `loadEngine()` in `engines/loader.ts`, never through a static import of `engines/index.ts`, which pulls in all engines (about 200 modules). This is a measured exception to preferring static imports: Layerbase Cloud runs `spindb list --json` in every container each minute on 0.5 CPU, and the eager load made that probe cost over a second. Adding a static `engines/index.ts` import to either file, or anything `list` imports, undoes it; check with a module count of `spindb list --json` (21 for `--version`, 59 for `list --json` at 0.77.1).
+
+**`spindb start` checks the pinned binaries before `engine.start()` for every server engine.** `core/start-binaries.ts` (`ensureStartBinaries`) runs in both `cli/commands/start.ts` and the menu's `handleStartContainer`: it asks `engine.hasStartableBinaries(config.version)` and, when false, downloads the EXACT pinned version through `engine.ensureBinaries(config.version)` (10.11.15 is never substituted for 10.11.16). On a TTY without `--json`/`--force` it prompts first (`<Engine> <version> is not installed. Download now?`, default yes; no prints the `spindb engines download <engine> <version>` command and exits 0 without starting). With `--json`, `--force`, or a non-TTY stdin it downloads with no prompt - never call `promptConfirm` when stdin is not a TTY, it throws. `hasStartableBinaries` defaults to the exact-version `isBinaryInstalled()`; only PostgreSQL overrides it (same-major `hasCompatibleBinaries()`, because its `start()` self-heals onto same-major binaries and repins, which Layerbase Cloud's shared binary store relies on). Do NOT add engine-specific branches in the CLI for this; put engine semantics in the override. A failed download throws `<Engine> <version> not available: <reason>` plus the manual command (the `create` wording, which Layerbase Cloud's exact-version retry and the layerbase TUI's `missingEngineBinary()` both parse). File-based engines are skipped, and the `server binary not found` throw inside `engine.start()` stays as the backstop.
+
+**Spawning background server processes:** MUST use `stdio: ['ignore', 'ignore', 'ignore']` for detached processes. Using `'pipe'` keeps file descriptors open, preventing Node.js exit even after `proc.unref()`. Causes `spindb start` to hang in Docker/CI. All 19 server engines now follow this rule (FerretDB was the last to be fixed in 0.43.0).
+
+**Commander.js:** Use `await program.parseAsync()`, not `program.parse()` - the latter returns immediately without waiting for async actions.
+
+**Interactive menu redraws wipe ad-hoc console output:** `handleList()` clears and redraws the screen, so transient warnings or status messages for menu actions must be passed through the redraw path (for example via `inlineMessage`) instead of being printed with `console.log()` immediately before calling `handleList()` again. If a TUI message "flashes" and disappears, inspect the redraw flow before changing the action logic.
+
+### Docker: never pnpm for global installs
+
+**Never use pnpm to install global packages in a Dockerfile.** pnpm 10+ refuses `pnpm add -g` until `pnpm setup` has written `PNPM_HOME` into a shell profile, but Dockerfile `RUN` doesn't source profiles mid-step - so adding `pnpm setup && pnpm add -g X` in the same `RUN` doesn't actually fix anything. pnpm 11.x also has `@pnpm/exe` install bugs in clean containers. For a single global package, **always use `npm install -g X` in Dockerfiles**. This applies to `core/docker-exporter.ts` (the exported user container) and any future Docker work. The full context lives in `tests/docker/Dockerfile` - that one's safe because it pins pnpm 9 via `corepack` and uses `pnpm link --global`, not `add -g`. End-user behavior (`spindb update`) handles this by falling back to npm when pnpm errors with "global bin directory not in PATH" (see `core/update-manager.ts`).

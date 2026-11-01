@@ -250,3 +250,152 @@ the new database and a warning is shown.
 - **QuestDB**: Single-database model (`qdb`).
 - **TigerBeetle**: Single ledger per container.
 - **LibSQL**: Single database per instance ('main').
+
+---
+
+## Agent Implementation Notes
+
+Engine rules moved verbatim from the former `CLAUDE.md` (now [AGENTS.md](../AGENTS.md)). Read the matching subsection before touching that engine or path.
+
+### PostgreSQL client tools are bundled-only
+
+**PostgreSQL client tools are bundled-only:** `pg_dump`, `pg_restore`, `psql`, and `pg_basebackup` for a specific major version MUST be resolved through `core/pg-binary-resolver.ts` (`getBundledBinaryPath`, `findCompatibleVersion`) which only looks under `~/.spindb/bin/postgresql-<version>-<platform>-<arch>/bin/`. Never probe Homebrew (`/opt/homebrew/opt/postgresql@X`), APT (`/usr/lib/postgresql/X`), or any other system package manager. If a bundled binary is missing, surface `spindb engines download postgresql <major>` - do not tell users to `brew install postgresql@X`. This was historically violated in `core/homebrew-version-manager.ts` (removed); the version-mismatch path during `spindb pull` was silently requiring Homebrew's `postgresql@18` even when spindb's own pg 18 was already on disk. The regression test in `tests/unit/pg-binary-resolver.test.ts` enforces this.
+
+### MySQL family: data directory, remote dumps and definers
+
+**A MySQL-family start cross-checks the data directory before spawning the server.** `start()` picks the server binary from `container.json`'s `version` alone, and mariadbd/mysqld will open whatever data directory they are pointed at - a NEWER major upgrades it in place on first boot, and MariaDB has no cross-major downgrade, so a wrong `version` is a one-way trip. Both servers record the last server version that opened a data directory in a one-line file at its root (`data/mariadb_upgrade_info` on MariaDB 11+, `data/mysql_upgrade_info` on MariaDB 10.x and MySQL 5.7 and older; MySQL 8+ keeps that state in the data dictionary and writes no file). `core/mysql-family-datadir-version.ts` reads it and refuses the start when the two name different major.minor lines. Rules if you touch it: a newer PATCH on the same line must stay allowed (11.8.8 data under 11.8.9), a missing or unparsable file must start exactly as before, and a bare-major `version` compares majors only so an unknowable minor cannot produce a false refusal. It is a pure guard with no repair path on purpose: spindb cannot move a data directory across release lines, so the message points at backup plus restore into a new container.
+
+**A remote dump follows the SOURCE server, and for the MySQL family that means flavor as well as version.** `spindb restore --from-url` / `pull` / `create` pick their dump tool from the server on the other end of the connection string, not from the container being restored into. PostgreSQL has done this since `validateDumpCompatibility` (`engines/postgresql/version-validator.ts`), which swaps in a `pg_dump` that can read the remote major. MySQL and MariaDB share a wire protocol AND the `mysql://` scheme, so the URL does not say which server answers: `core/server-handshake.ts` (engine-agnostic, never writes to the socket, so it works against a TLS-required server) reads the greeting and classifies it, a MariaDB source is dumped with `mariadb-dump`, and the dump is converted for the MySQL target by `engines/mysql/dump-normalize.ts` (uca1400 collations -> MySQL `0900`, `NO_AUTO_CREATE_USER` stripped from `SET sql_mode`). This is NOT a MySQL special case to copy from - any engine family whose client tools are not interchangeable belongs on the same path. Which installed binary serves a given version is `core/mysql-family-binary-resolver.ts`, the MySQL-family twin of `core/pg-binary-resolver.ts`; `configManager.getBinaryPath(tool)` keeps ONE path per tool name with no version dimension, so it must never be the first thing a version-sensitive path asks.
+
+**Remote MySQL-family object owners:** `core/mysql-import-definers.ts` rewrites explicit `DEFINER=user@host` clauses in remote MySQL/MariaDB dumps to `CURRENT_USER` before restoration. Both engines call it from `dumpFromConnectionString`; local backups and restore streams retain their owners. Preserve literal bytes, version-comment wrappers, and `SQL SECURITY` semantics. Counts travel as `remoteSource.rewrites.definersRewritten`; temporary output is registered for signal cleanup. The real-engine drill is `tests/integration/mysql-import-definers.test.ts` (explicit disposable binary root).
+
+**A remote dump is compressed on the wire, a local backup is not, and the temp dump survives nothing.** The MySQL and MariaDB remote-dump argument builders pass protocol compression (`--compression-algorithms=zlib` for `mysqldump`, `--compress` for `mariadb-dump`) because a dump taken from a connection string crosses the internet, where row data compresses roughly 68x. Do NOT copy those flags into the local `backup()` path: over loopback it only burns CPU. Two constraints to keep: `mysqldump`'s deprecated `-C, --compress` must never come back (it warns on stderr, which the restore paths parse), and `mariadb-dump --compress` is passed ONLY for a source the greeting identifies as MariaDB, because against a MySQL server whose auth plugin the client cannot load it hangs forever instead of reporting the error. Separately, the temp dump that the `--from-url` flow writes is registered with `core/temp-dump-cleanup.ts`, which removes it and kills the dump client on SIGTERM/SIGINT/SIGHUP, then exits 128 + the signal. Any new code that writes a temp dump must register it there; a `finally` block alone is skipped by a signal, which is how a 450 MB partial dump was left inside a customer's container.
+
+### Local credentials and auth-backed backup/restore
+
+**Redis/Valkey local query auth:** `spindb query` for local server containers does **not** use ad-hoc env vars from the caller. In `cli/commands/query.ts`, the local-server path loads credentials from `credential-manager.loadCredentials(containerName, engineName, getDefaultUsername(engineName))`. For Redis/Valkey, that means the filename stays `.env.spindb`, but the file contents can still be `DB_USER=default` and `DB_PASSWORD=...`. If cloud or desktop query auth breaks, inspect the saved credential file path and contents before changing CLI flags.
+
+**Local backup/restore auth uses the same default credential file:** As of March 28, 2026, PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB local backup/restore paths load server credentials from `loadCredentials(containerName, engine, getDefaultUsername(engine))`. That feeds the engine-native auth mechanism instead of assuming localhost trust:
+- PostgreSQL: `PGPASSWORD` for `pg_dump` / `psql` / `pg_restore`
+- MySQL / MariaDB: `MYSQL_PWD` for dump, restore, readiness, shutdown, and local admin commands
+- MongoDB: `--uri mongodb://...?...authSource=...` for `mongodump`, `mongorestore`, and local `mongosh` query/admin paths
+- FerretDB: local `mongosh`, `mongodump`, and `mongorestore` now go through the MongoDB wire protocol with saved `.env.spindb` credentials; legacy PostgreSQL `.dump` / `.sql` restores are still supported as a fallback
+- Redis / Valkey: `REDISCLI_AUTH` for backup, text restore, readiness, and graceful shutdown
+- CouchDB: saved admin credentials for REST backup/restore and local admin API calls
+- SurrealDB: local query/backup/restore commands load `.env.spindb`, infer `authLevel` from the saved `DB_URL`, and pass `--auth-level` to `surreal sql` / `export` / `import`; server startup still uses stable bootstrap root creds instead of replaying saved client creds
+If a password-protected local backup or restart fails, inspect `.env.spindb` before changing engine flags.
+
+**Focused auth-backed backup/restore coverage now exists for the main password-protected engines:** PostgreSQL, MySQL, MariaDB, MongoDB, FerretDB, Redis, Valkey, CouchDB, and SurrealDB now have focused integration coverage that:
+- enables real local auth
+- writes `.env.spindb`
+- restarts the container through the normal engine lifecycle
+- verifies backup and restore against an auth-enabled target
+The focused March 28, 2026 auth sweep passed sequentially for all of the engines above. MariaDB still has unrelated broader-suite initialization flakiness on this machine, so treat that as a test-harness/platform issue rather than an auth backup/restore gap.
+
+**The auth-backed backup/restore sweep was extended on March 29, 2026 to the remaining major auth-sensitive server engines:** ClickHouse, QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, Qdrant, and LibSQL now have explicit auth-aware local backup/restore verification rather than relying on anonymous localhost assumptions. Verification status:
+- ClickHouse and Qdrant have focused auth-backed integration coverage in addition to their broader engine suites
+- QuestDB, TypeDB, InfluxDB, Meilisearch, Weaviate, and LibSQL now also have focused integration coverage for local auth-enabled backup/restore
+- InfluxDB local auth is now driven by a persisted `admin-token.json` file passed to `influxdb3 serve --admin-token-file`; the token file must contain JSON (`{"token":"...","name":"..."}`), not raw text
+- Meilisearch local auth is now driven by a persisted `master.key` file passed to `meilisearch --master-key`; `createUser()` currently configures that master key directly for local auth-backed backup/restore
+- Qdrant restore is special: restore writes a pending storage-snapshot marker and `start()` must consume it with `--storage-snapshot`; copying snapshot files alone is not deterministic enough once auth-backed restore is in play
+
+**CockroachDB local development now runs in secure mode:** local containers generate per-container Cockroach certs, start with `--certs-dir`, use root client-cert auth for internal admin flows, and return TLS connection strings for created users. Focused integration coverage now proves password-auth backup/restore against secure local CockroachDB. SQLite, DuckDB, and TigerBeetle remain explicit "not applicable" cases for username/password local backup semantics unless product scope changes.
+
+**SurrealDB auth nuance:** `surreal import` still needs root-level permissions. Namespace-scoped users can query and export, but the focused restore path only passed once the saved default credential file used root creds with `authLevel=root`. Keep that distinction in mind:
+- server start: bootstrap with stable root creds
+- client query/export/import: load `.env.spindb` and pass `--auth-level`
+- restore/import: do not assume namespace/database users are allowed to import
+
+**SurrealDB CLI JSON output is noisy:** `surreal sql --json` can emit prompt text before or after the JSON payload (for example `surrealdb_namespace/db>`). `parseSurrealDBResult()` now extracts the first complete JSON document instead of assuming stdout is pure JSON. If Surreal query parsing regresses, inspect raw stdout before blaming auth or query semantics.
+
+### Restore outcomes and restore modes
+
+**A restore that could not create every object is a SUCCESS with a `status`, not a failure.** `pg_restore` keeps going past an object it cannot create, so a dump referencing a missing extension or role can fail every dependent `CREATE TABLE`, skip every `COPY` into those tables, and still exit zero (this cost a customer 19 tables in a Supabase migration). `engines/postgresql/restore-diagnostics.ts` parses what the tool said and `core/restore-outcome.ts` (`classifyRestoreOutcome`) turns it into ONE verdict shared by `cli/commands/restore.ts`, `cli/commands/create.ts`, the menu restore handlers and `core/backup-restore.ts` - never re-derive it at a call site. The contract: `success: true` and exit 0 for a partial restore (the database exists and holds what landed; a rollback would throw that away), with `status: 'completed_with_errors'` plus `restoreErrorCount` / `restoreErrors` / `restoreWarningCount` / `restoreIgnoredErrors` / `restoreErrorsTruncated` in `--json`. A `FATAL`, or a non-zero exit with no object errors to explain it, is a real failure that throws and rolls back. `--pre-sql <file>` is the fix path (create the extension/roles first); it is gated to the engines whose `runScript` honors `quiet`, because `--json` owns stdout. Never let a restore path print to STDOUT in `--json` mode, and never use `(error as Error).message` in these commands - use `describeThrown` (`core/error-handler.ts`), or a non-Error rejection serializes to `{}`.
+
+**Restore has two modes (the destructive default vs `--into-existing`):** the default `spindb restore` DROPS + recreates the target database (the drop lives in `cli/commands/restore.ts`, NOT the per-engine `restore()`, which is mostly additive). On PostgreSQL the drop clears the target database's sessions - that lives INSIDE the engine's `dropDatabase`, so every caller inherits it and a restore over a database someone is still connected to no longer fails with `database "<name>" is being accessed by other users`. On 13+ it is `DROP DATABASE ... WITH (FORCE)` (`engines/postgresql/drop-database-sql.ts` holds the version gate and the pure SQL builders), which terminates inside the same statement and so cannot lose the reconnect race a separate terminate-then-drop leaves open for a pooler; pre-13 keeps the two-step plus one retry. A drop that fails anyway stops the restore before anything is destroyed and reports the server's own text, with `phase: 'drop-target'` in `--json`. `--into-existing` restores INTO the existing database without dropping it - it skips the CLI drop, the recreate, AND the drop-on-failure rollback (a failed in-place restore must never drop the caller's data), and passes object-level clean so the result REPLACES the backed-up objects. Two semantics to keep in mind: (1) it is "overlay the backup," not "reset to exactly the backup" - objects created AFTER the backup (a table/collection not in it) survive; (2) it is gated to an `INTO_EXISTING_ENGINES` allowlist (wire engines only: pg/mysql/mariadb/mongo/ferret/cockroach/clickhouse/questdb) so an engine whose restore can't replace-in-place errors instead of silently merging. Add an engine to the allowlist ONLY with clean-restore support + a real-engine integration round-trip test. **Mongo/Ferret backups are interchangeable** (both produce `mongodump` archives; either restores into the other) - guarded by `tests/integration/mongo-ferret-interop.test.ts`. The uncompressed mongodump archive magic is `6d e2 99 81` (= `0x8199e26d`); restore must NOT add `--gzip` for it (the `unknown`-format fallback no longer does - it once caused `gzip: invalid header` on every `archive-plain` restore).
+
+### Redis and Valkey auth
+
+**Redis `default` user vs `--user` flag:** Managed Redis/Valkey setups that use `requirepass` often expect the implicit default user and fail when `redis-cli --user default` is passed explicitly. The fix was to omit `--user` when the resolved username is literally `default`, while still passing `--user` for explicit ACL usernames. This logic must stay aligned in both Redis query paths:
+- remote connection-string query path (`dumpFromConnectionString`)
+- local/linked query execution path (`executeQuery`)
+
+**Heroku's legacy `h` username is not an ACL user:** the classic Redis add-on minted URLs shaped like `rediss://h:<password>@host:port`, where `h` is a dummy placeholder (modern Heroku Key-Value URLs leave the username empty). `AUTH h <password>` fails with `WRONGPASS` on those servers, and `redis-cli --user h` fails the same way. Both auth paths now handle it: `buildRespAuthArgs()` in `engines/redis/resp-client.ts` sends the one-argument `AUTH`, and `shouldPassRedisCliUsername()` in `engines/redis/cli-common.ts` omits `--user`. They share one source of truth, the exported `IMPLICIT_RESP_USERNAMES` set (`default` and `h`) in `resp-client.ts`, so a placeholder added to that set covers both paths at once. Matching is exact, never trimmed or lowercased, so a real ACL user like `hasura` is unaffected. `engines/redis/index.ts` re-exports the `cli-common.ts` helper rather than defining a second copy; keep it that way.
+
+**When debugging Redis/Valkey query auth, test both paths:** a change can fix remote URL queries and still break local container queries, or vice versa. The cloud incident on March 26-27, 2026 only became clear after checking both the cloud-managed local container path and the remote URL path.
+
+### Process, binary and platform quirks
+
+**LibSQL JWT auth via Ed25519:** LibSQL uses JWT tokens signed with Ed25519 keys for authentication. `createUser()` generates an Ed25519 key pair, signs a JWT with the private key, writes the public key to the container directory as `jwt-key.pem`, restarts sqld with `--auth-jwt-key-file`, and stores the JWT token via credential-manager. The same pattern as Meilisearch API keys - credential is a token, not a username/password pair.
+
+**Shell script / JRE engines (QuestDB pattern):** Shell scripts that fork Java processes give useless PIDs. After health check, find real PID via `platformService.findProcessByPort(port)` and write to PID file. Stop also uses port lookup first, PID file as fallback. See `engines/questdb/index.ts`.
+
+**Binary `--version` verification:** `BaseBinaryManager.verify()` runs `binary --version` after download. Some engines don't support this flag - CouchDB (Erlang app, tries to start) and Weaviate (some releases lack `--version` support). These engines override `verify()` in their `binary-manager.ts` to just check binary existence instead. See `engines/couchdb/binary-manager.ts` and `engines/weaviate/binary-manager.ts`. Consult hostdb's `databases.json` for currently supported Weaviate versions rather than embedding specific version numbers.
+
+**Weaviate internal cluster ports:** Weaviate binds 4 internal ports (gossip 7946, data 7947, raft 8300, raft RPC 8301) that MUST be unique per container. SpinDB derives them from the HTTP port: gossip=port+100, data=port+101, raft=port+200, raft_rpc=port+201. Also sets `CLUSTER_HOSTNAME=node-{port}`. Without unique ports, multiple containers silently conflict or fail to start.
+
+**Weaviate backup/restore:** Requires `ENABLE_MODULES=backup-filesystem` env var. Backups are directories (not single files). The directory name MUST match the internal backup ID in `backup_config.json` - `restore.ts` reads this file to use the correct name. When restoring to a container with a different `CLUSTER_HOSTNAME`, the restore API requires a `node_mapping` body parameter. See `engines/weaviate/README.md`.
+
+**Qdrant snapshot restore on Windows is not stable yet:** Qdrant 1.16.x full snapshot restore via startup-time recovery still panics on Win x64 with `Too many parts in snapshot mapping`. Keep Windows coverage for create/start/query, but treat clone/auth-backed snapshot restore as a known gap until the restore path is reworked or upstream behavior changes.
+
+**Dynamic library errors (MariaDB, Redis, Valkey):** hostdb binaries for these engines are dynamically linked against Homebrew's OpenSSL (`/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`). On Macs without `brew install openssl@3`, they fail with `dyld: Library not loaded` errors. `core/library-env.ts` provides two utilities: `getLibraryEnv(binPath)` returns `DYLD_FALLBACK_LIBRARY_PATH` (macOS) or `LD_LIBRARY_PATH` (Linux) pointing to `{binPath}/lib` - spread into spawn env options. `detectLibraryError(output, engineName)` scans stderr/logs for dyld, GLIBC, and shared-library patterns, returning an actionable error message or null. When adding new engines with dynamically-linked binaries, use these utilities in `start()` and `initDataDir()` spawn calls. See `engines/redis/index.ts` for the canonical integration pattern.
+
+### FerretDB v1 vs v2
+
+**FerretDB v1 vs v2:** FerretDB is a single engine (`Engine.FerretDB`) with version-branched behavior via `isV1(version)` in `engines/ferretdb/version-maps.ts`. Key differences:
+- **Backend:** v1 uses plain PostgreSQL (shared with standalone PG containers). v2 uses postgresql-documentdb (separate binary).
+- **Platforms:** v1 supports all 5 platforms including Windows. v2 is macOS/Linux only.
+- **Cascade delete:** v1 does NOT delete shared PostgreSQL binaries on engine delete. v2 cleans up postgresql-documentdb.
+- **Auth:** v1 has auth disabled by default (no `--no-auth` flag). v2 defaults to `--no-auth` (SCRAM disabled). `spindb start --auth` omits `--no-auth` to enable SCRAM; `spindb start --no-auth` restores the default. Persisted in `ContainerConfig.authEnabled`.
+- **SSL:** v1 needs `?sslmode=disable` on PostgreSQL URL. v2 omits it.
+- **DB creation:** v1 falls back to `postgres --single` if psql is unavailable. v2 uses psql.
+- See `docs/ENGINE_NOTES.md` FerretDB section for the full list.
+
+### PostgreSQL scheduled jobs (pg_cron)
+
+`engines/postgresql/cron-config.ts` acts only after the user explicitly includes
+pg_cron in the effective preload list. Artifact availability alone never enables
+it. pg_cron ships inside the standard hostdb builds (Linux x64); support is a
+capability check on the binary (`hasPgCron`), never a version-name check. The
+`-cron.N` revisions (`isCronBuildRevision`) are a compatibility shim only: never
+offered, never healed onto, and a container already pinned to one stays on it.
+Healing an opted-in container (`isPostgresCronOptedIn`) only picks binaries with
+pg_cron. `spindb engines download postgresql <v> --refresh` re-fetches a version
+hostdb rebuilt in place (cache is by directory; refused while a database on
+that version runs; local stores only: never on a store shared with other
+containers/hosts, since it renames and deletes the directory under them).
+Self-heal for an opted-in container falls back from its pinned version to the
+major default only on `BinaryVersionNotFoundError` (registry 404 / not built
+for the platform); any other download failure is rethrown with the pin kept. Do not create extension catalogs on start/wake. Never persist a merged preload
+on ordinary starts: this shadows future postgresql.conf edits. The sole recovery
+exception removes pg_cron from the effective list when its artifact is missing,
+then persists launch_active_jobs=off; keep all other libraries and catalog data.
+An opted-in, supported cluster gets `.spindb-pg-cron.json` in its data directory
+for Cloud's bounded history maintenance; remove that marker when not opted in. Branch/copy preparation
+persists cron.launch_active_jobs=off. Restore preparation pauses without a restart
+(ALTER SYSTEM + pg_reload_conf, a PGC_SIGHUP setting), confirms the pause and ends
+in-flight pg_cron workers, and keeps restored definitions paused. Temporary starts use --no-scheduled-jobs, a
+process-only override. Cloud must carry it through setup restarts. The opt-in
+real-binary tests are tests/integration/postgresql-cron.test.ts and
+postgresql-cron-cli.test.ts. Release through hostdb first; do not pin unpublished
+artifacts or package versions.
+
+### Standalone DocumentDB
+
+See `engines/documentdb/README.md`. The official native gateway and backend are one
+versioned HostDB bundle. Linux x64/ARM64 and macOS 14+ ARM64, loopback gateway with mandatory
+authentication, private peer-authenticated PostgreSQL socket. Do not reuse the
+FerretDB backend mapping or infer a runtime pin for existing data. Candidate
+qualification may explicitly link a HostDB checkout; published dependencies must
+remain exact pins and follow the normal HostDB-first release cascade.
+
+### History: E2E stabilization fixes (0.47.3 to 0.47.13)
+
+Key fixes from the E2E stabilization session:
+- **0.47.4:** CouchDB skip admin auth when no saved credentials, ClickHouse 240s timeout
+- **0.47.5/6:** DuckDB binary lookup + file path in cloud containers
+- **0.47.7:** Weaviate RAFT cleanup on bind change, SurrealDB skip --user/--pass on restart
+- **0.47.8/9:** Weaviate RAFT cluster identity + 120s timeout
+- **0.47.10:** SurrealDB reads saved credentials from credential file
+- **0.47.12:** `--namespace` flag for `spindb query`, type-safe `QueryOptions`
+- **0.47.13:** MongoDB `waitForReady` falls back to TCP when auth rejects mongosh

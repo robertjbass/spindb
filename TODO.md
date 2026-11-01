@@ -341,11 +341,41 @@ Container configs store a `databases` array that can get stale when databases ar
 
 ---
 
+## Planned Improvements
+
+Moved from the former `CLAUDE.md` (now [AGENTS.md](AGENTS.md)).
+
+### 1. Normalize `executeQuery` output across all engines
+
+**Current state:** Each engine's `executeQuery` returns a different shape. SQL engines return `{ columns, rows }`, MongoDB returns raw mongosh JSON, HTTP engines (CouchDB, Qdrant, Meilisearch, Weaviate) return raw API responses, Redis returns plain text/arrays.
+
+**Target:** All engines return `{ columns: string[], rows: Record<string, unknown>[], rowCount: number }`. Define edge cases: Redis scalar results → single-column row, Qdrant vector results → flattened payload, MongoDB documents → rows with `_id` column.
+
+**Impact:** Layerbase Cloud currently normalizes in `src/api/databases.ts` `handleQuery`. Layerbase Desktop would need the same normalization. Moving it into SpinDB means all consumers get consistent output.
+
+### 2. Accept credentials at `spindb create` time
+
+**Current state:** `spindb create` + `spindb start` are separate steps. Some engines (SurrealDB, InfluxDB, Weaviate, MongoDB, QuestDB) need config files (credential files, admin tokens, auth env) written BEFORE the first `start`. Layerbase Cloud's `setup-database.sh` fills this gap via `SETUP_FIRST_ENGINES`.
+
+**Target:** `spindb create --username X --password Y` writes all engine-specific config files during create (admin-token.json for InfluxDB, weaviate.env for Weaviate, `--user/--pass` persistence for SurrealDB, admin user for MongoDB). Then `spindb start` reads the config and works correctly from the first call.
+
+**Impact:** Eliminates `SETUP_FIRST_ENGINES` in Layerbase Cloud. Simplifies `setup-database.sh` to just `spindb create --username X --password Y --bind 127.0.0.1` + health check.
+
+### 3. (Deferred / FUTURE option) Native pgwire proxy for file-based engines - "Model B"
+
+**Current state:** File-based engines (SQLite, DuckDB) have no wire protocol. To serve them to remote clients, Layerbase Cloud runs external proxies in front of the file: pgsqlite (Rust) for SQLite and a duckgres fork (Go) for DuckDB. spindb has no proxy concept - its SQLite/DuckDB start/stop/status are no-ops on a bare file. A local spindb/desktop user just opens the file directly.
+
+**Target (not scheduled):** A native, pure-TS spindb pgwire proxy for file-based engines - `pg-gateway` plus Node's native SQLite/DuckDB bindings - that exposes a local file DB over the PostgreSQL wire protocol. This would let Layerbase Cloud drop both external binaries (including the maintained duckgres fork) and give desktop a "serve my local file DB over Postgres wire" feature.
+
+**Status:** Recorded as a deliberate FUTURE option from the 2026-06-15 C-033 spindb-convergence decision (`~/dev/layerbase-cloud/tracker.md`, `~/dev/layerbase-cloud/plans/active/spindb-convergence-c033.md`). The decision there was the opposite for now: the proxy/pooler lifecycle is **intentionally kept in Layerbase Cloud** (moving it would force spindb to bundle foreign Go/Rust binaries, violating "spindb ships only database binaries"), and the near-term fix for the fragile restore-restart dance is a cloud-internal supervisor module, not a spindb change. Revisit Model B only as a separate, larger product bet.
+
+---
+
 ## Contributing
 
 ### Development Setup
 
-See [CLAUDE.md](CLAUDE.md) for architecture documentation and development guidelines.
+See [AGENTS.md](AGENTS.md) for architecture documentation and development guidelines.
 
 ### Pull Request Requirements
 
