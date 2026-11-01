@@ -8,11 +8,9 @@
  * engine-specific behavior (engine name, binary names, version parsing, etc.).
  */
 
-import { createWriteStream, existsSync } from 'fs'
+import { existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
 import { paths } from '../config/paths'
 import { spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
@@ -21,7 +19,7 @@ import {
   BinaryVersionNotFoundError,
   binariesNotFoundMessage,
 } from './version-resolver'
-import { fetchWithRegistryFallback } from './hostdb-client'
+import { downloadArchiveToFile } from './archive-download'
 import {
   type Engine,
   Platform,
@@ -180,104 +178,24 @@ export abstract class BaseBinaryManager {
 
     let success = false
     try {
-      // Download the archive with timeout (5 minutes) + retry on stream
-      // failures. The fetch() call already retries internally on the
-      // initial connection (see fetchWithRetries in hostdb-client.ts);
-      // this outer loop covers stream-mid-flight failures (the body
-      // socket dies after fetch returned a Response but before the
-      // pipeline finishes consuming it). Common cause: brief network
-      // partition during a multi-second binary download. Retry budget
-      // here is short (max 3 attempts) because each attempt re-downloads
-      // the entire archive from scratch — fail-fast over hours of stuck
-      // retries.
       onProgress?.({
         stage: 'downloading',
         message: `Downloading ${this.config.displayName} binaries...`,
       })
-
-      const MAX_DOWNLOAD_ATTEMPTS = 3
-      const DOWNLOAD_RETRY_DELAYS_MS = [0, 1000, 3000]
-
-      let attempt = 0
-      let lastDownloadError: unknown = null
-      while (attempt < MAX_DOWNLOAD_ATTEMPTS) {
-        if (DOWNLOAD_RETRY_DELAYS_MS[attempt] > 0) {
-          await new Promise((r) =>
-            setTimeout(r, DOWNLOAD_RETRY_DELAYS_MS[attempt]),
-          )
-        }
-        attempt++
-
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
-
-        let response: Response
-        try {
-          response = await fetchWithRegistryFallback(url, {
-            signal: controller.signal,
-          })
-        } catch (error) {
-          clearTimeout(timeoutId)
-          const err = error as Error
-          if (err.name === 'AbortError') {
-            throw new Error('Download timed out after 5 minutes')
-          }
-          // Already retried internally; if we get here, propagate.
-          throw error
-        }
-
-        if (!response.ok) {
-          clearTimeout(timeoutId)
-          if (response.status === 404) {
-            throw new BinaryVersionNotFoundError(
-              binariesNotFoundMessage({
-                engine: this.config.engineName,
-                displayName: this.config.displayName,
-                version: fullVersion,
-              }),
-            )
-          }
-          throw new Error(
-            `Failed to download ${this.config.displayName} binaries: ${response.status} ${response.statusText}`,
-          )
-        }
-
-        if (!response.body) {
-          clearTimeout(timeoutId)
-          throw new Error(
-            `Download failed: response has no body (status ${response.status})`,
-          )
-        }
-
-        // Create file stream only after confirming response.body is present.
-        // Truncate any previous attempt's partial file.
-        const fileStream = createWriteStream(archiveFile)
-        try {
-          const nodeStream = Readable.fromWeb(response.body)
-          await pipeline(nodeStream, fileStream)
-          clearTimeout(timeoutId)
-          break // download succeeded — exit retry loop
-        } catch (pipelineError) {
-          clearTimeout(timeoutId)
-          fileStream.destroy()
-          lastDownloadError = pipelineError
-          if (attempt >= MAX_DOWNLOAD_ATTEMPTS) {
-            throw pipelineError
-          }
-          // Stream broke mid-flight (common transient: socket reset,
-          // brief partition). Retry the whole download from scratch.
-          onProgress?.({
-            stage: 'downloading',
-            message: `Download interrupted, retrying (attempt ${attempt + 1}/${MAX_DOWNLOAD_ATTEMPTS})...`,
-          })
-        }
-      }
-
-      // Defensive: if we somehow exit the loop without success and
-      // without throwing, surface the last error.
-      if (lastDownloadError && attempt >= MAX_DOWNLOAD_ATTEMPTS) {
-        throw lastDownloadError
-      }
+      await downloadArchiveToFile({
+        url,
+        destination: archiveFile,
+        displayName: this.config.displayName,
+        onProgress,
+        createNotFoundError: () =>
+          new BinaryVersionNotFoundError(
+            binariesNotFoundMessage({
+              engine: this.config.engineName,
+              displayName: this.config.displayName,
+              version: fullVersion,
+            }),
+          ),
+      })
 
       // Create binPath only after download succeeds (avoids leaving empty dirs on failure)
       await mkdir(binPath, { recursive: true })
