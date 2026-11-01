@@ -17,6 +17,12 @@ SpinDB is the backbone of the Layerbase platform. **hostdb** builds database bin
 
 **When updating spindb, check whether `~/dev/layerbase-cli` needs a matching docs update.** layerbase-cli's README/help present spindb's command surface as their own (`lbase create / ls / start / backup / branch ...`), and `scripts/check-spindb-collisions.ts` there validates layerbase's registered verbs against `spindb --help`. New spindb flags forward transparently, but a NEW top-level spindb command (or renamed/removed one) can collide with a layerbase verb or make its docs stale — review layerbase-cli's CLAUDE.md/README after any spindb CLI surface change.
 
+## Project management
+
+- Work is tracked on the [Ecosystem tracker](https://github.com/orgs/Layerbase-LLC/projects/1); the tracker issue is the plan of record. Search open and closed issues before filing a new one.
+- CLI concerns go in the PUBLIC `Layerbase-LLC/layerbase-cli` repo, limited to what a CLI user could see (commands, behavior, error output); server names, internal endpoints, infrastructure details and incident notes go in a private `Layerbase-LLC/layerbase-cloud` issue. No customer data or secrets.
+- Detailed plans live in `~/dev/layerbase-cloud/plans/` (start at `plans/README.md`).
+
 ## Overview
 
 SpinDB is a CLI tool for running local databases without Docker. Downloads pre-built binaries from the Layerbase registry (`registry.layerbase.host`), with GitHub ([hostdb](https://github.com/robertjbass/hostdb)) as a fallback (controlled by `ENABLE_GITHUB_FALLBACK` in `core/hostdb-client.ts`). 22 engines: DocumentDB, PostgreSQL, MySQL, MariaDB, SQLite, DuckDB, MongoDB, FerretDB, Redis, Valkey, ClickHouse, Qdrant, Meilisearch, CouchDB, CockroachDB, SurrealDB, QuestDB, TypeDB, InfluxDB, Weaviate, TigerBeetle, LibSQL.
@@ -183,7 +189,7 @@ If modifying an engine, also run `pnpm test:engine <engine>`.
 
 Update: CLAUDE.md, README.md, TODO.md, CHANGELOG.md, and add tests. If the CLI surface changed (new command, flag, or output field), also update CHEATSHEET.md — it is the complete command reference the README defers to, and it silently goes stale otherwise.
 
-After a spindb release, bump the pinned version in layerbase-cloud (`ARG SPINDB_VERSION` in `images/Dockerfile.base`) AND layerbase-desktop (the `spindb` dependency in its `package.json`, with a desktop CHANGELOG entry and patch bump) in the same cascade; see `~/dev/layerbase-cloud/deploy/ENGINE-VERSION-UPDATE-RUNBOOK.md`.
+**Every new feature or user-facing behavior change bumps the spindb version in the same PR** (minor for features, patch for fixes) with a `CHANGELOG.md` entry. After that version ships to npm, bump it in layerbase-cloud (`ARG SPINDB_VERSION` in `images/Dockerfile.base`) AND layerbase-desktop (the `spindb` dependency in its `package.json`, with a desktop CHANGELOG entry and patch bump); see `~/dev/layerbase-cloud/deploy/ENGINE-VERSION-UPDATE-RUNBOOK.md`.
 
 spindb releases (`dev -> main`, which publish to npm) are merged by Bob; open the release PR and stop. Feature PRs into `dev` follow the normal flow above.
 
