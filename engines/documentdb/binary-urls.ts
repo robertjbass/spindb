@@ -28,6 +28,11 @@ export function getBinaryUrl(
 ): string {
   const resolvedVersion = normalizeVersion(version)
   if (!supportsDocumentDBPlatform(platform, arch, resolvedVersion)) {
+    if (platform === 'darwin' && arch === 'x64') {
+      throw new Error(
+        'Native DocumentDB is not supported on Intel Macs; it requires an Apple Silicon Mac (macOS 14 or newer) or Linux x64/ARM64',
+      )
+    }
     throw new Error(
       `Native DocumentDB is not available for ${platform}-${arch}; requires Linux x64/ARM64 or macOS ARM64`,
     )

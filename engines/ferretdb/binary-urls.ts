@@ -16,6 +16,7 @@
  * v2 is macOS/Linux only (postgresql-documentdb has Windows startup issues).
  */
 
+import { getDatabaseEntry } from 'hostdb'
 import {
   normalizeVersion,
   normalizeDocumentDBVersion,
@@ -45,6 +46,59 @@ export const FERRETDB_V1_SUPPORTED_PLATFORMS = new Set([
 
 // Supported platforms for postgresql-documentdb backend (v2 only)
 export const DOCUMENTDB_SUPPORTED_PLATFORMS = FERRETDB_V2_SUPPORTED_PLATFORMS
+
+type DocumentDBEntry = ReturnType<typeof getDatabaseEntry>
+
+/**
+ * Whether hostdb has a postgresql-documentdb archive for this version and
+ * platform: listed in the version's (or else the engine's) platforms, or
+ * retired (a retired platform's published archive stays downloadable).
+ * Without an entry for the version, fall back to the platform set above.
+ *
+ * hostdb stopped building darwin-x64 (Intel Mac) DocumentDB on 2026-11-01,
+ * so a version released after that has no Intel archive at all.
+ */
+export function isDocumentDBBuiltForPlatform(
+  version: string,
+  platformKey: string,
+  entry: DocumentDBEntry = getDatabaseEntry('postgresql-documentdb'),
+): boolean {
+  const versionEntry = entry?.versions?.[version]
+  if (!entry || !versionEntry) return true
+  const config = typeof versionEntry === 'object' ? versionEntry : {}
+  const versionPlatforms = config.platforms
+    ? Array.isArray(config.platforms)
+      ? config.platforms
+      : Object.keys(config.platforms)
+    : []
+  const platforms: string[] =
+    versionPlatforms.length > 0 ? versionPlatforms : entry.platforms
+  return (
+    platforms.includes(platformKey) ||
+    Object.keys(config.retiredPlatforms ?? {}).includes(platformKey)
+  )
+}
+
+/**
+ * Throw an actionable error when hostdb has no postgresql-documentdb archive
+ * for this version and platform, instead of letting the download 404.
+ */
+export function assertDocumentDBBuiltForPlatform(
+  version: string,
+  platformKey: string,
+  entry: DocumentDBEntry = getDatabaseEntry('postgresql-documentdb'),
+): void {
+  if (isDocumentDBBuiltForPlatform(version, platformKey, entry)) return
+  if (platformKey === 'darwin-x64') {
+    throw new Error(
+      `FerretDB v2 is not supported on Intel Macs: its PostgreSQL-DocumentDB backend (${version}) is built for Apple Silicon (macOS 15 or newer) and Linux only. ` +
+        'Use FerretDB v1 (`--db-version 1`), which runs on plain PostgreSQL, or run FerretDB v2 on an Apple Silicon Mac or Linux.',
+    )
+  }
+  throw new Error(
+    `postgresql-documentdb ${version} (FerretDB v2 backend) is not built for ${platformKey}.`,
+  )
+}
 
 /**
  * Map Node.js platform/arch to hostdb platform key
@@ -128,6 +182,8 @@ export function getDocumentDBBinaryUrl(
       `Unsupported platform: ${platform}-${arch}. postgresql-documentdb (FerretDB v2 backend) is only supported on macOS and Linux.`,
     )
   }
+
+  assertDocumentDBBuiltForPlatform(fullVersion, key)
 
   const ext = platform === Platform.Win32 ? 'zip' : 'tar.gz'
 

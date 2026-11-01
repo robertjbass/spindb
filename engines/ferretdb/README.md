@@ -18,7 +18,7 @@ This is a **composite engine** with unique binary management requirements. The `
 
 | Platform | Architecture | v1 Status | v2 Status | Notes |
 |----------|--------------|-----------|-----------|-------|
-| darwin | x64 | Supported | Supported | Both backends available |
+| darwin | x64 | Supported | Existing backend only | hostdb no longer builds Intel Mac postgresql-documentdb (2026-11-01); 17-0.107.0 stays downloadable, later backend versions report "not supported on Intel Macs" |
 | darwin | arm64 | Supported | Supported | Both backends available (Apple Silicon) |
 | linux | x64 | Supported | Supported | Both backends available |
 | linux | arm64 | Supported | Supported | Both backends available |
