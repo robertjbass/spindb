@@ -30,7 +30,7 @@ permissions:
 #                    never pass (QEMU implements no io_uring, so TigerBeetle
 #                    failed every single run). Part of the ci-success gate.
 #   - darwin-x64:    macos-15-intel, SMOKE SET ONLY (see below)
-#   - darwin-arm64:  macos-14 (Apple Silicon)
+#   - darwin-arm64:  macos-15 (Apple Silicon; macos-14 images retire 2026-11-02)
 #   - win32-x64:     windows-latest
 #
 # Note: macos-14 and macos-15 are BOTH ARM64 runners. To test darwin-x64
@@ -48,7 +48,7 @@ permissions:
 # stops shipping darwin-x64, whichever comes first - coordinate with hostdb
 # builds and layerbase-desktop's Intel build when that happens.
 #
-# All engines (4 runners): ubuntu-22.04, ubuntu-24.04, macos-14, windows-latest
+# All engines (4 runners): ubuntu-22.04, ubuntu-24.04, macos-15, windows-latest
 #   (+ macos-15-intel on the PostgreSQL and Redis smoke jobs only)
 #
 # Exceptions:
@@ -69,7 +69,7 @@ permissions:
 # caught a real data-correctness bug the day before this split (C-142), which
 # is precisely what the blocking Windows lane is for. Do not widen the split.
 #
-# Unit tests: 3 runners (ubuntu-24.04, macos-14, windows-latest)
+# Unit tests: 3 runners (ubuntu-24.04, macos-15, windows-latest)
 #
 # This workflow runs the full matrix on PRs to main; trigger it manually on any
 # branch from the Actions tab (workflow_dispatch).
@@ -95,7 +95,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -192,7 +192,7 @@ jobs:
           - os: macos-15-intel
             icon: 🍏
             label: macOS x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -253,7 +253,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -312,7 +312,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -403,7 +403,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -467,7 +467,7 @@ jobs:
           - os: macos-15-intel
             icon: 🍎
             label: macOS Intel
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -530,7 +530,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -590,7 +590,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -691,7 +691,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -785,7 +785,7 @@ jobs:
           - os: macos-15-intel
             icon: 🍏
             label: macOS x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -844,7 +844,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -904,7 +904,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -977,7 +977,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1053,7 +1053,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1126,7 +1126,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1205,7 +1205,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1293,7 +1293,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1385,7 +1385,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -1480,7 +1480,7 @@ jobs:
           - os: macos-15-intel
             icon: 🍏
             label: macOS Intel
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1566,7 +1566,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1651,7 +1651,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1736,7 +1736,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -1826,7 +1826,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64 24.04
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -1889,7 +1889,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
     steps:
@@ -2236,7 +2236,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -2320,7 +2320,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
@@ -2418,7 +2418,7 @@ jobs:
           - os: ubuntu-24.04
             icon: 🐧
             label: Linux x64
-          - os: macos-14
+          - os: macos-15
             icon: 🍏
             label: macOS ARM64
           - os: windows-latest
