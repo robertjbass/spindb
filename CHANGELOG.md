@@ -4,11 +4,11 @@
 
 ### Fixed
 
-- **A binary download that stops receiving data is retried instead of hanging.** The engine binary managers waited for a stalled registry download until their 5 minute timeout (the server-style and embedded managers stopped timing the download once the response headers arrived, so a stalled body could hang forever). All four base binary managers now share `core/archive-download.ts`: an attempt that receives no bytes for 30 s is aborted and the archive is downloaded again from scratch, up to 3 attempts; a body that breaks mid-flight is retried the same way. HTTP errors (including the 404 that means the version is not published) and the overall 5 minute timeout are never retried. This was the cause of an intermittent `engines download mongodb 8` hang on macOS CI.
+- **A binary download that stops receiving data is retried instead of hanging.** The engine binary managers waited for a stalled registry download until their 5 minute timeout (the server-style and embedded managers stopped timing the download once the response headers arrived, so a stalled body could hang forever). All four base binary managers now share `core/archive-download.ts`: an attempt that receives no bytes for 30 s is aborted and the archive is downloaded again from scratch, up to 3 attempts; a body that breaks mid-flight is retried the same way. HTTP errors (including the 404 that means the version is not published) are never retried, and the 5 minute timeout is one deadline for the whole download across every attempt. When every attempt stalls, including before the response headers arrive, the error says the download stalled. This was the cause of an intermittent `engines download mongodb 8` hang on macOS CI.
 
 ### Testing
 
-- `tests/unit/archive-download.test.ts` serves archives from a local HTTP server: a body that stalls is retried and the fresh archive replaces the partial one, every attempt stalling gives up with a stall error, a 404 is not retried, and the overall timeout is final while bytes are still arriving.
+- `tests/unit/archive-download.test.ts` serves archives from a local HTTP server: a body that stalls is retried and the fresh archive replaces the partial one, every attempt stalling gives up with a stall error, a 404 is not retried, the overall timeout is final while bytes are still arriving, a server that never sends headers ends with the stall error, and the overall timeout bounds the retries together.
 
 ## [0.77.4] - 2026-11-01
 
