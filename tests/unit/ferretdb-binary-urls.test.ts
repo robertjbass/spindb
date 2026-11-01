@@ -11,6 +11,9 @@ import {
   getBinaryUrls,
   FERRETDB_V1_SUPPORTED_PLATFORMS,
   FERRETDB_V2_SUPPORTED_PLATFORMS,
+  assertDocumentDBBuiltForPlatform,
+  getDocumentDBBinaryUrl,
+  isDocumentDBBuiltForPlatform,
 } from '../../engines/ferretdb/binary-urls'
 import { Arch, Platform } from '../../types'
 
@@ -151,6 +154,102 @@ describe('FerretDB Binary URLs', () => {
         threw = true
       }
       assert(!threw, 'Should not throw for v1 on Windows')
+    })
+  })
+
+  describe('postgresql-documentdb on Intel Macs', () => {
+    type Entry = Parameters<typeof isDocumentDBBuiltForPlatform>[2]
+    const entryWith = (
+      versions: Record<string, unknown>,
+      platforms: string[],
+    ): Entry => ({ versions, platforms }) as unknown as Entry
+
+    it('treats a retired darwin-x64 archive as still downloadable', () => {
+      const entry = entryWith(
+        {
+          '17-0.107.0': {
+            retiredPlatforms: { 'darwin-x64': 'Intel Macs dropped' },
+          },
+        },
+        ['linux-x64', 'linux-arm64', 'darwin-arm64'],
+      )
+      assert(
+        isDocumentDBBuiltForPlatform('17-0.107.0', 'darwin-x64', entry),
+        'retired darwin-x64 archive should stay downloadable',
+      )
+    })
+
+    it('reports a version with no darwin-x64 archive as not built', () => {
+      const entry = entryWith({ '17-0.200.0': true }, [
+        'linux-x64',
+        'linux-arm64',
+        'darwin-arm64',
+      ])
+      assert(
+        !isDocumentDBBuiltForPlatform('17-0.200.0', 'darwin-x64', entry),
+        'a version released after the Intel retirement has no darwin-x64 archive',
+      )
+      assert(
+        isDocumentDBBuiltForPlatform('17-0.200.0', 'darwin-arm64', entry),
+        'darwin-arm64 is still built',
+      )
+    })
+
+    it('explains Intel Mac support instead of a download 404', () => {
+      const entry = entryWith({ '17-0.200.0': true }, [
+        'linux-x64',
+        'linux-arm64',
+        'darwin-arm64',
+      ])
+      let message = ''
+      try {
+        assertDocumentDBBuiltForPlatform('17-0.200.0', 'darwin-x64', entry)
+      } catch (error) {
+        message = (error as Error).message
+      }
+      assert(
+        message.includes('not supported on Intel Macs'),
+        `expected an Intel Mac message, got: ${message}`,
+      )
+      assert(
+        message.includes('--db-version 1'),
+        'message should point at FerretDB v1',
+      )
+    })
+
+    it('honors a version-level platform list over the engine list', () => {
+      const entry = entryWith({ '17-0.200.0': { platforms: ['linux-x64'] } }, [
+        'linux-x64',
+        'linux-arm64',
+        'darwin-arm64',
+      ])
+      assert(
+        !isDocumentDBBuiltForPlatform('17-0.200.0', 'darwin-arm64', entry),
+        'version-level list narrows the engine platforms',
+      )
+    })
+
+    it('treats an unknown version as available', () => {
+      assert(
+        isDocumentDBBuiltForPlatform(
+          '17-9.9.9',
+          'darwin-x64',
+          entryWith({}, ['linux-x64']),
+        ),
+        'unknown versions fall back to the hardcoded platform set',
+      )
+    })
+
+    it('still resolves the published 17-0.107.0 darwin-x64 archive', () => {
+      const url = getDocumentDBBinaryUrl(
+        '17-0.107.0',
+        Platform.Darwin,
+        Arch.X64,
+      )
+      assert(
+        url.endsWith('postgresql-documentdb-17-0.107.0-darwin-x64.tar.gz'),
+        `unexpected URL: ${url}`,
+      )
     })
   })
 })
