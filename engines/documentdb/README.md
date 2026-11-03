@@ -19,6 +19,16 @@ Unix socket. It has no TCP listener. The bundle's exact component versions are
 verified before startup and recorded in the data directory, so branch/reset and
 rename preserve them. Unknown data and mismatched or missing pins are refused.
 
+DocumentDB runs its own background work as pg_cron jobs in the `postgres`
+database: TTL expiry, background index builds (every `createIndexes` on a
+non-empty collection, including each `mongorestore`) and cursor cleanup. SpinDB
+runs them as background workers (`cron.use_background_workers = on`) because the
+backend has no TCP listener, and keeps them active. Customer roles cannot use the
+`cron` schema, so these are the only jobs. `max_worker_processes = 11` and
+`max_parallel_workers = 4` leave a slot for each job; the arithmetic is in
+`runtime-config.ts`. `postgresql.conf` is rewritten on every start, so existing
+databases pick up these settings on their next start.
+
 Use the existing MongoDB client tools (`mongosh`, `mongodump`, `mongorestore`),
 installed with `spindb engines download mongodb 8`, then:
 

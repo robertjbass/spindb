@@ -44,8 +44,25 @@ export function buildPostgresConfig(options: {
     'unix_socket_permissions = 0700',
     `documentdb.localhost_connection_string = ${pgLiteral("host='" + options.socketDirectory.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'")}`,
     "shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb,pg_documentdb_extended_rum'",
+    // DocumentDB schedules its own work as pg_cron jobs: TTL expiry, two
+    // background index builders (every createIndexes on a non-empty
+    // collection, including each mongorestore) and cursor cleanup. With jobs
+    // paused, those builds queue forever and the client hangs. Customer roles
+    // have no access to the cron schema, so these are the only jobs.
     "cron.database_name = 'postgres'",
-    'cron.launch_active_jobs = off',
+    'cron.launch_active_jobs = on',
+    // TCP is disabled, so jobs cannot open a libpq connection to localhost.
+    // Background workers need no connection or authentication.
+    'cron.use_background_workers = on',
+    // Worker slots: 3 always-on workers (pg_cron launcher, DocumentDB
+    // bg_worker_leader, logical replication launcher) + 4 cron jobs that
+    // can run at once (TTL, 2 index builders, cursor cleanup) + 4 parallel
+    // workers (2 concurrent builds x max_parallel_maintenance_workers 2)
+    // = 11. Capping parallel workers at 4 keeps queries from taking the cron
+    // slots. Idle slots cost only a few KB of shared memory each.
+    'cron.max_running_jobs = 4',
+    'max_worker_processes = 11',
+    'max_parallel_workers = 4',
     "log_statement = 'none'",
     "log_min_error_statement = 'panic'",
     '',
