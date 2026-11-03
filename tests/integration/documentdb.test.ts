@@ -188,6 +188,35 @@ test(
         Date.now() - indexStarted < 60000,
         'background index build did not finish within 60s',
       )
+      // TTL expiry is a DocumentDB pg_cron job that runs about once a minute.
+      await cli(
+        'query',
+        'source',
+        'db.ttl.createIndex({at: 1}, {expireAfterSeconds: 0})',
+      )
+      await cli(
+        'query',
+        'source',
+        'db.ttl.insertOne({_id: "expired", at: new Date(Date.now() - 3600000)})',
+      )
+      const ttlStarted = Date.now()
+      let ttlRemaining = 1
+      while (Date.now() - ttlStarted < 120000) {
+        const ttlRows = await cli(
+          'query',
+          'source',
+          'db.ttl.find({_id: "expired"}).toArray()',
+        )
+        ttlRemaining = (ttlRows.rows as unknown[]).length
+        if (ttlRemaining === 0) break
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+      }
+      console.log(`TTL expiry wait: ${Date.now() - ttlStarted}ms`)
+      assert.equal(
+        ttlRemaining,
+        0,
+        'TTL job did not delete the expired document within 120s',
+      )
       // The GA gateway cannot create PostgreSQL roles. The owner-authorized
       // users command must provision and update an admin through its private socket.
       const administratorArgs = [
