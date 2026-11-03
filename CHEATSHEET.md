@@ -881,8 +881,9 @@ builds keep using them; those builds are no longer offered.
 
 Native DocumentDB (`--engine documentdb`) runs TTL expiry and background index
 builds itself; there is nothing to enable. A `createIndex` on a populated
-collection, or a `mongorestore` of a collection with secondary indexes, finishes
-in the background within seconds. `--no-scheduled-jobs` is PostgreSQL only.
+collection, or a `mongorestore` of a collection with secondary indexes, builds
+in the background and takes longer as collections grow. TTL expiry runs about
+once a minute. `--no-scheduled-jobs` is PostgreSQL only.
 
 ## Network & Authentication
 
