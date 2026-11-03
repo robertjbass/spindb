@@ -175,6 +175,19 @@ test(
       )
       await assertRow('source')
       await assertPin('source')
+      // An index on a non-empty collection is built by a DocumentDB pg_cron
+      // job. With jobs paused or unable to connect, this call never returns.
+      await cli(
+        'query',
+        'source',
+        'db.bulk.insertMany(Array.from({length: 2000}, (_, i) => ({k: i % 97})))',
+      )
+      const indexStarted = Date.now()
+      await cli('query', 'source', 'db.bulk.createIndex({k: 1})')
+      assert.ok(
+        Date.now() - indexStarted < 60000,
+        'background index build did not finish within 60s',
+      )
       // The GA gateway cannot create PostgreSQL roles. The owner-authorized
       // users command must provision and update an admin through its private socket.
       const administratorArgs = [
