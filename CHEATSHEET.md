@@ -877,6 +877,13 @@ Copies, branches and restores keep jobs paused until you run
 Databases created on the earlier `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`
 builds keep using them; those builds are no longer offered.
 
+### DocumentDB background jobs
+
+Native DocumentDB (`--engine documentdb`) runs TTL expiry and background index
+builds itself; there is nothing to enable. A `createIndex` on a populated
+collection, or a `mongorestore` of a collection with secondary indexes, finishes
+in the background within seconds. `--no-scheduled-jobs` is PostgreSQL only.
+
 ## Network & Authentication
 
 ```bash

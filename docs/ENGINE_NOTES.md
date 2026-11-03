@@ -389,6 +389,13 @@ FerretDB backend mapping or infer a runtime pin for existing data. Candidate
 qualification may explicitly link a HostDB checkout; published dependencies must
 remain exact pins and follow the normal HostDB-first release cascade.
 
+DocumentDB's own pg_cron jobs (TTL expiry, background index builds, cursor
+cleanup) must stay active and run as background workers: with
+`cron.launch_active_jobs = off` a `createIndexes` on a non-empty collection
+(every `mongorestore`) waits forever, and libpq jobs cannot connect because TCP
+is off. The PostgreSQL engine's paused-copies rule and `--no-scheduled-jobs`
+do not apply here.
+
 ### History: E2E stabilization fixes (0.47.3 to 0.47.13)
 
 Key fixes from the E2E stabilization session:

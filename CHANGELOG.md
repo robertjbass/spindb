@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.77.7] - 2026-11-03
+
+### Fixed
+
+- **DocumentDB background index builds and TTL expiry now run; restores of collections with secondary indexes no longer hang.** DocumentDB does its own background work as pg_cron jobs: TTL expiry (`delete_expired_rows`), two background index builders (`build_index_concurrently`, used by every `createIndexes` on a non-empty collection, which is what `mongorestore` does after loading data) and cursor cleanup. SpinDB wrote `cron.launch_active_jobs = off` into the DocumentDB `postgresql.conf`, so none of them ever ran: a `createIndex` on a populated collection, or a `mongorestore` of a collection with a secondary index, queued a build that never started and the client waited forever, and documents under a TTL index never expired. Turning jobs on alone is not enough, because pg_cron connects over TCP to localhost by default and the DocumentDB backend listens only on its private Unix socket. The backend now runs with `cron.launch_active_jobs = on` and `cron.use_background_workers = on`, so jobs run as background workers with no connection or authentication (`engines/documentdb/runtime-config.ts`). The setting was copied from the PostgreSQL engine, where it keeps copied or restored user schedules paused; that does not apply to DocumentDB, whose customer roles cannot use the `cron` schema, so the only jobs are DocumentDB's own. `--no-scheduled-jobs` stays PostgreSQL only. `postgresql.conf` is rewritten on every start, so existing DocumentDB databases are fixed on their next start with this version.
+
+### Changed
+
+- **DocumentDB reserves a worker slot for each of its jobs.** `max_worker_processes = 11`: 3 always-on workers (pg_cron launcher, DocumentDB `bg_worker_leader`, logical replication launcher), plus the 4 DocumentDB jobs that can run at once (`cron.max_running_jobs = 4`), plus 4 parallel workers (2 concurrent index builds times `max_parallel_maintenance_workers` 2). `max_parallel_workers = 4` keeps parallel queries from taking the job slots. An idle slot costs only a few KB of shared memory.
+
+### Testing
+
+- `tests/unit/documentdb-runtime-config.test.ts` asserts jobs are on, run as background workers, and the worker, parallel and running-job limits.
+- `tests/integration/documentdb.test.ts` creates an index on a populated collection through the CLI and requires it to finish within 60s.
+- End to end on macOS ARM64 with DocumentDB 1.0.0, in an isolated `SPINDB_HOME`, using `mongosh`, `mongodump` and `mongorestore`. Published 0.77.6: after inserting 20,000 documents, `createIndex({k: 1})` never returned (killed at 90s) with the build left in `documentdb_index_queue` and no row in `cron.job_run_details`; `mongorestore --drop` of that collection loaded every document and then hung on its `k_1` index for 11 minutes until killed; 100 documents under a 1 second TTL index were all still present after 150s. This branch: `createIndex` finished in 3s, `mongodump` and `mongorestore --drop` finished in 1s with 20,000 documents and both indexes, and all TTL documents were gone within 39s; every `cron.job_run_details` row succeeded. The database created by 0.77.6, stopped and started with this branch, built its stuck queued index and expired its TTL documents with no other action. `tests/integration/documentdb.test.ts` passed locally.
+
 ## [0.77.6] - 2026-11-01
 
 ### Fixed
