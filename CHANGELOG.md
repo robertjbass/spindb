@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.8] - 2026-11-12
+
+### Added
+
+- PostgreSQL 18.7.0 on all five platforms and opt-in PostgreSQL 19.0.0-rc.2 on Linux and macOS x64/ARM64 through the hostdb 0.48.2 registry. PostgreSQL 19 RC2 Linux x64 includes PostGIS 3.7.0 and pg_cron. Windows RC2 is unavailable.
+- The PostgreSQL `18` default remains 18.6.0; existing databases retain their exact version pins. Request `18.7.0` or `19.0.0-rc.2` explicitly to use these releases.
+
 ## [0.77.7] - 2026-11-03
 
 ### Fixed
