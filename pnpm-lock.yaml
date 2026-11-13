@@ -15,8 +15,8 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       hostdb:
-        specifier: 0.48.0
-        version: 0.48.0
+        specifier: 0.48.2
+        version: 0.48.2
       inquirer:
         specifier: ^9.3.7
         version: 9.3.8(@types/node@20.19.41)
@@ -877,8 +877,8 @@ packages:
     resolution: {integrity: sha512-ej4AhfhfL2Q2zpMmLo7U1Uv9+PyhIZpgQLGT1F9miIGmiCJIoCgSmczFdrc97mWT4kVY72KA+WnnhJ5pghSvSg==}
     engines: {node: '>= 0.4'}
 
-  hostdb@0.48.0:
-    resolution: {integrity: sha512-KWziCdMFcYQvwjw0KXw2Uu6N58a+SNI4bcEMJocHY1MOXEiAbBs9pWaSK3NOIcfkEKO87ybhf3KB2Kg5QP83FQ==}
+  hostdb@0.48.2:
+    resolution: {integrity: sha512-pGL6Pvp5BgMVwmSqbpZCr+C6DnDDxHLsy5m2/WIW7UrFNdChBD8syhWaWHJqNImOfs/Tk+aQk+VKk9wF7MS3Ow==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2534,7 +2534,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hostdb@0.48.0: {}
+  hostdb@0.48.2: {}
 
   hosted-git-info@2.8.9: {}
 
