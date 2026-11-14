@@ -34,8 +34,8 @@ describe('parsePgRestoreDiagnostics', () => {
     assertEqual(d.restoreErrorCount, 9, 'every error line is counted')
     assertEqual(
       d.restoreErrors.length,
-      6,
-      'repeated lines collapse to one entry',
+      7,
+      'errors on different tables remain distinct',
     )
     assert(
       d.restoreErrors.some((l) => l.includes('extension "uuid-ossp"')),
@@ -259,5 +259,32 @@ describe('classifyRestoreOutcome', () => {
     const lines = restoreErrorReportLines(d, 3)
     assertEqual(lines.length, 4, 'three lines plus the tail')
     assert(lines[3].includes('more'), 'the tail says there is more')
+  })
+})
+
+describe('failed table context', () => {
+  it('keeps vector table failures distinct without copying SQL values', () => {
+    const result = parsePgRestoreDiagnostics(
+      [
+        'pg_restore: error: could not execute query: ERROR: type "extensions.vector" does not exist',
+        'Command was: CREATE TABLE public.documents (',
+        "secret text DEFAULT 'do-not-log', embedding extensions.vector(1536));",
+        'pg_restore: error: could not execute query: ERROR: type "extensions.vector" does not exist',
+        'Command was: CREATE TABLE "public"."members" (',
+        'embedding extensions.vector(1536));',
+      ].join('\n'),
+    )
+    assertEqual(
+      result.restoreErrors.length,
+      2,
+      'both failed tables survive deduplication',
+    )
+    assert(
+      result.restoreErrors[0].includes(
+        '[failed CREATE TABLE public.documents]',
+      ),
+      'table identity retained',
+    )
+    assert(!JSON.stringify(result).includes('do-not-log'), 'SQL values omitted')
   })
 })

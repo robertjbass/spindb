@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Preserve failed PostgreSQL table identities in restore diagnostics without including column defaults or row values. Errors on different tables no longer collapse when they share a missing extension type.
+
 ## [0.77.8] - 2026-11-12
 
 ### Added
