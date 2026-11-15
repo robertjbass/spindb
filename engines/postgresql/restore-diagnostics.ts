@@ -51,6 +51,14 @@ export function parsePgRestoreDiagnostics(
   let restoreIgnoredErrors: number | null = null
   let errorsDropped = false
   let warningsDropped = false
+  let pendingError: string | null = null
+
+  function flushError() {
+    if (pendingError === null) return
+    if (errors.size < cap) errors.add(pendingError)
+    else if (!errors.has(pendingError)) errorsDropped = true
+    pendingError = null
+  }
 
   for (const rawLine of stderr.split('\n')) {
     const line = rawLine.replace(/\r$/, '').trim()
@@ -58,6 +66,7 @@ export function parsePgRestoreDiagnostics(
 
     const summary = line.match(IGNORED_ERRORS_SUMMARY)
     if (summary) {
+      flushError()
       restoreIgnoredErrors = Number(summary[1])
       continue
     }
@@ -68,13 +77,22 @@ export function parsePgRestoreDiagnostics(
       BARE_ERROR.test(line)
     ) {
       restoreErrorCount++
-      if (errors.size < cap) {
-        errors.add(line)
-      } else if (!errors.has(line)) {
-        errorsDropped = true
-      }
+      flushError()
+      pendingError = line
       continue
     }
+
+    // Retain only the identifier, never column defaults, literals or COPY data.
+    const table =
+      /^Command was: CREATE (?:UNLOGGED )?TABLE ((?:"(?:[^"]|"")+"|[a-zA-Z_][a-zA-Z0-9_$]*)\.(?:"(?:[^"]|"")+"|[a-zA-Z_][a-zA-Z0-9_$]*))\s*\(/.exec(
+        line,
+      )
+    if (pendingError && table) {
+      pendingError += ` [failed CREATE TABLE ${table[1]}]`
+      flushError()
+    }
+    if (line.startsWith('pg_restore:') && !PG_RESTORE_ERROR.test(line))
+      flushError()
 
     if (PG_RESTORE_WARNING.test(line)) {
       restoreWarningCount++
@@ -86,6 +104,7 @@ export function parsePgRestoreDiagnostics(
     }
   }
 
+  flushError()
   return {
     restoreErrors: [...errors],
     restoreErrorCount,
