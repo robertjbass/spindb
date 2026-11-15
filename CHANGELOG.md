@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## [0.77.9] - 2026-11-15
+
+### Changed
+
+- hostdb 0.48.4: the PostgreSQL 18.7.0 and 19.0.0-rc.2 Linux x64 archives now include pgvector 0.8.7 (`CREATE EXTENSION vector`, no preload). These are in-place rebuilds under the same version, so an existing local copy keeps its old contents until `spindb engines download postgresql <version> --refresh` (local stores only).
+
+### Fixed
 
 - Preserve failed PostgreSQL table identities in restore diagnostics without including column defaults or row values. Errors on different tables no longer collapse when they share a missing extension type.
 
