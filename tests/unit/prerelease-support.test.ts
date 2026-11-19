@@ -31,17 +31,17 @@ describe('prerelease wrapper inclusion (PostgreSQL)', () => {
     )
   })
 
-  it('SUPPORTED_MAJOR_VERSIONS excludes the prerelease major 19', () => {
+  it('lists major 19 after its stable release', () => {
     assert(
-      !PG_MAJORS.includes('19'),
-      "SUPPORTED_MAJOR_VERSIONS should not include '19' (prerelease-only major)",
+      PG_MAJORS.includes('19'),
+      "SUPPORTED_MAJOR_VERSIONS should include stable major 19",
     )
   })
 
-  it('no bare-major key is created for the prerelease', () => {
+  it('the bare major resolves to stable', () => {
     assert(
-      POSTGRESQL_VERSION_MAP['19'] === undefined,
-      "MAP should not gain a bare '19' key from the prerelease",
+      POSTGRESQL_VERSION_MAP['19'] === '19.0.0',
+      "major 19 should resolve to 19.0.0",
     )
   })
 })
@@ -66,10 +66,10 @@ describe('migration guard decision inputs', () => {
     assert(isPrereleaseVersion(PG_BETA) === true, 'beta token is a prerelease')
   })
 
-  it('the prerelease major is not a supported migration major', () => {
+  it('the beta and stable releases share major 19', () => {
     assert(
-      getMajorVersion(Engine.PostgreSQL, PG_BETA) === null,
-      'beta major 19 is not a supported migration target major',
+      getMajorVersion(Engine.PostgreSQL, PG_BETA) === '19',
+      'beta token belongs to major 19',
     )
   })
 
@@ -80,10 +80,10 @@ describe('migration guard decision inputs', () => {
     )
   })
 
-  it('no GA target exists for the prerelease major', () => {
+  it('major 19 has a stable target', () => {
     assert(
-      getTargetVersion(Engine.PostgreSQL, '19') === null,
-      "there is no GA target for major '19'",
+      getTargetVersion(Engine.PostgreSQL, '19') === '19.0.0',
+      "the stable target is 19.0.0",
     )
   })
 })

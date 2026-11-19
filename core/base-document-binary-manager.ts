@@ -318,7 +318,6 @@ export abstract class BaseDocumentBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract ZIP using PowerShell Expand-Archive
     await extractWindowsArchive(zipFile, tempDir)
 
     await this.moveExtractedEntries(tempDir, binPath)

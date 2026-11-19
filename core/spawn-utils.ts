@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'child_process'
+import { join } from 'path'
 
 export type SpawnOptions = {
   cwd?: string
@@ -90,33 +91,15 @@ export function spawnAsync(
   })
 }
 
-/**
- * Escape a string for use in a PowerShell single-quoted string.
- * PowerShell escapes single quotes by doubling them: ' becomes ''
- */
-function escapeForPowerShell(s: string): string {
-  return s.replace(/'/g, "''")
-}
-
-/**
- * Extract a ZIP archive using PowerShell Expand-Archive (Windows)
- *
- * @param zipFile - Path to the ZIP file
- * @param destDir - Destination directory for extraction
- * @throws Error if extraction fails
- */
+/** Extract a ZIP with the libarchive tar shipped with Windows. */
 export async function extractWindowsArchive(
   zipFile: string,
   destDir: string,
 ): Promise<void> {
-  // Escape paths to prevent command injection via single quotes
-  // Use -LiteralPath to treat the path literally (no wildcard expansion)
-  const safeZipFile = escapeForPowerShell(zipFile)
-  const safeDestDir = escapeForPowerShell(destDir)
-
-  await spawnAsync('powershell', [
-    '-NoProfile',
-    '-Command',
-    `Expand-Archive -LiteralPath '${safeZipFile}' -DestinationPath '${safeDestDir}' -Force`,
-  ])
+  const tar = join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'tar.exe',
+  )
+  await spawnAsync(tar, ['-xf', zipFile, '-C', destDir])
 }
