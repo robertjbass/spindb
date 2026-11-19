@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.78.0] - 2026-11-19
+
+### Changed
+
+- New PostgreSQL databases default to PostgreSQL 19.0 stable on all five platforms through hostdb 0.49.0. Existing databases keep their pinned versions. Explicit older releases and prereleases remain available locally.
+
 ## [0.77.9] - 2026-11-15
 
 ### Changed

@@ -70,7 +70,7 @@ export type EngineDefaults = {
 
 export const engineDefaults: Record<Engine, EngineDefaults> = {
   [Engine.PostgreSQL]: {
-    defaultVersion: '18',
+    defaultVersion: '19',
     defaultPort: 5432,
     portRange: { start: 5432, end: 5500 },
     superuser: 'postgres',

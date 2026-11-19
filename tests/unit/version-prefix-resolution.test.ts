@@ -225,12 +225,10 @@ describe('resolveEngineVersion (against the bundled hostdb registry)', () => {
   })
 
   it('keeps prereleases opt-in', () => {
-    // '19' has no GA release; the beta must not be picked up implicitly.
-    const resolved = resolveEngineVersion('postgresql', '19')
-    const ga = listAvailableVersions('postgresql')
-    assert(
-      resolved === null || ga.includes(resolved),
-      `'19' resolved to ${resolved}, which is a prerelease`,
+    assertEqual(
+      resolveEngineVersion('postgresql', '19'),
+      '19.0.0',
+      'major 19 selects GA',
     )
   })
 
