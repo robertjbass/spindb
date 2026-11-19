@@ -276,7 +276,6 @@ export abstract class BaseServerBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract ZIP using PowerShell Expand-Archive
     await extractWindowsArchive(zipFile, tempDir)
 
     await this.moveExtractedEntries(tempDir, binPath)

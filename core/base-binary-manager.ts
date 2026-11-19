@@ -12,7 +12,7 @@ import { existsSync } from 'fs'
 import { mkdir, readdir, rm, chmod } from 'fs/promises'
 import { join } from 'path'
 import { paths } from '../config/paths'
-import { spawnAsync } from './spawn-utils'
+import { extractWindowsArchive, spawnAsync } from './spawn-utils'
 import { moveEntry } from './fs-error-utils'
 import { logDebug } from './error-handler'
 import {
@@ -279,25 +279,10 @@ export abstract class BaseBinaryManager {
       message: 'Extracting binaries...',
     })
 
-    // Extract zip to temp directory first using PowerShell
     const extractDir = join(tempDir, 'extract')
     await mkdir(extractDir, { recursive: true })
 
-    // Escape single quotes for PowerShell (double them)
-    const escapeForPowerShell = (s: string) => s.replace(/'/g, "''")
-
-    // Build the PowerShell command
-    const command = `Expand-Archive -LiteralPath '${escapeForPowerShell(zipFile)}' -DestinationPath '${escapeForPowerShell(extractDir)}' -Force`
-
-    // Use -EncodedCommand to avoid shell parsing issues with special characters
-    // (e.g., $ in usernames like C:\Users\John$Doe would be interpreted as variables)
-    const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
-
-    await spawnAsync('powershell', [
-      '-NoProfile',
-      '-EncodedCommand',
-      encodedCommand,
-    ])
+    await extractWindowsArchive(zipFile, extractDir)
 
     await this.moveExtractedEntries(extractDir, binPath)
   }
