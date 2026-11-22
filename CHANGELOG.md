@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.78.1] - 2026-11-22
+
+### Changed
+
+- Redesigned the README: a banner, a plain summary and Quick Start at the top, with long reference sections collapsed. Corrected engine counts and the Node.js requirement, and updated the package description. No CLI behavior changes.
+
 ## [0.78.0] - 2026-11-19
 
 ### Changed
