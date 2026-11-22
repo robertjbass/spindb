@@ -1,9 +1,8 @@
 # SpinDB
 
 <p align="center">
-  <a href="https://layerbase.com">
-    <img src="assets/layerbase-icon.svg" alt="Layerbase" width="20" height="20" align="top" />
-    Sponsored by <strong>Layerbase</strong>
+  <a href="https://layerbase.com/docs/cli">
+    <img src="https://raw.githubusercontent.com/robertjbass/spindb/main/assets/social-preview.png" alt="SpinDB: 22 database engines, one CLI, no Docker" width="100%" />
   </a>
 </p>
 
@@ -12,24 +11,35 @@
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 [![Platform: macOS | Linux | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#supported-engines--platforms)
 
-**One CLI for all your local databases.**
+**Run 22 database engines locally, without Docker.**
 
-SpinDB is a universal database management tool that combines a package manager, a unified API, and native client tooling for 22 different database engines, all from a single command-line interface. No Docker, no VMs, no platform-specific installers. Just databases, running natively on your machine.
+Every database has its own installer, config and tools, and running two versions side by side is worse. SpinDB replaces all of that with one CLI that runs each database as a native process on your machine.
+
+- **22 engines, one set of commands:** PostgreSQL, MySQL, MongoDB, Redis, DuckDB, Qdrant and more
+- **No Docker or VMs:** native binaries, downloaded when you need them
+- **Versions side by side:** each database keeps its exact version and its own data directory
+- **Branch like code:** fork a database, change it, then reset or delete it (instant on copy-on-write filesystems)
+- **Backup, restore and clone:** built in, along with connection strings and client shells
+- **Made for scripts and agents:** JSON output with `--json`
+
+[Quick start](#quick-start) | [Engines](#supported-engines--platforms) | [Branching](#branching-copy-on-write) | [Why SpinDB?](#why-spindb) | [All commands](CHEATSHEET.md) | [License](#license)
+
+## Quick Start
 
 ```bash
 npm install -g spindb
 
-# PostgreSQL for your API
-spindb create api-db
+# Create, start and open a PostgreSQL database
+spindb create myapp --start --connect
 
-# MongoDB for analytics
-spindb create analytics --engine mongodb
-
-# Redis for caching
-spindb create cache --engine redis
-
-# All running side-by-side, all managed the same way
+# Run other engines next to it
+spindb create cache --engine redis --start
+spindb create vectors --engine qdrant --start
 ```
+
+Data persists in `~/.spindb/containers/`. SpinDB requires Node.js 22 or newer. To install with pnpm 10+, run `pnpm setup` first, then `pnpm add -g spindb`.
+
+SpinDB is free for noncommercial use; [commercial use requires a license](#license). It is built and sponsored by [Layerbase](https://layerbase.com).
 
 ---
 
@@ -62,27 +72,9 @@ SpinDB supports **22 database engines** across **5 platform architectures**, all
 | 🐯 **TigerBeetle** | Financial Ledger | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 📚 **LibSQL** | Embedded SQL Server | ✅ | ✅ | ✅ | ✅ | ❌ |
 
-**101+ supported combinations. One CLI. Zero configuration.**
-
 > DocumentDB supports Linux x64/ARM64 and macOS 14+ ARM64, with an authenticated loopback listener by default. Explicit external binding is available for trusted networks behind a TLS terminator. See [its engine notes](engines/documentdb/README.md) for connection and platform details.
 
 > ClickHouse and LibSQL are available on Windows via WSL. FerretDB v1 is natively supported on Windows (uses plain PostgreSQL backend); v2 requires macOS/Linux.
-
----
-
-## Quick Start
-
-```bash
-# Install
-npm install -g spindb
-# Or with pnpm (requires `pnpm setup` first on pnpm 10+):
-# pnpm setup && pnpm add -g spindb
-
-# Create and start a PostgreSQL database
-spindb create myapp --start --connect
-```
-
-That's it! Your PostgreSQL database is running on `localhost:5432`, and data persists in `~/.spindb/containers/postgresql/myapp/`.
 
 ---
 
@@ -101,6 +93,9 @@ spindb url myapp --copy                          # Copy connection string
 spindb restore myapp dump.sql --pre-sql shims.sql # Create missing extensions/roles first
 spindb restore myapp dump.dump --with-privileges # Replay the dump's GRANTs (dropped by default)
 ```
+
+<details>
+<summary><strong>Scheduled jobs with pg_cron</strong></summary>
 
 pg_cron is opt-in. A binary that contains it does not enable it.
 hostdb includes pg_cron in the standard Linux x64 builds of PostgreSQL 18.6.0
@@ -131,6 +126,15 @@ way (`ALTER SYSTEM` plus a configuration reload, no restart), waits until the pa
 is in effect and ends any job still running before replacing data, so other
 connections to the server stay open. For a temporary export, start with
 `spindb start myapp --no-scheduled-jobs`, then stop it when finished.
+
+Logical dumps from databases with pg_cron include `CREATE EXTENSION pg_cron`.
+Before restoring such a dump elsewhere, install a compatible pg_cron build,
+configure its preload and restart the target. Enable the extension in the target
+cron catalog database first; otherwise extension creation and cron objects can
+fail during restore. Review restore diagnostics rather than assuming every
+object was copied.
+
+</details>
 
 ### MongoDB
 
@@ -226,7 +230,7 @@ Every engine works the same way. Learn one, use them all.
 
 ### Branching (copy-on-write)
 
-Fork a database instantly, the way Neon/Vercel do — but locally and for **every engine**:
+Fork a database instantly, the way Neon/Vercel do, but locally and for **every engine**:
 
 ```bash
 spindb branch myapp myapp-feature   # instant copy-on-write fork (auto stop/restart if running)
@@ -243,7 +247,7 @@ On copy-on-write filesystems (APFS on macOS; Btrfs / XFS-reflink / ZFS on Linux)
 
 ### The Problem with Current Tools
 
-**Docker** is powerful but heavy—requires a daemon, runs containers in a VM (on macOS/Windows), and adds complexity for simple local databases.
+**Docker** is powerful but heavy: it requires a daemon, runs containers in a VM (on macOS/Windows), and adds complexity for simple local databases.
 
 **GUI tools** like DBngin and Postgres.app are great but platform-specific, don't support scripting, and lack a unified interface across engines.
 
@@ -260,13 +264,16 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 - **Multi-version support** - Run PostgreSQL 14 and 18 side-by-side
 - **Unified interface** - Manage PostgreSQL, MongoDB, and Redis the same way
 
+<details>
+<summary><strong>Compare SpinDB with GUI tools, Docker and package managers</strong></summary>
+
 ### Comparison: Database GUI Tools
 
 *For developers who prefer visual interfaces or use macOS-native tools.*
 
 | Feature | SpinDB | DBngin | Postgres.app | Laragon |
 |---------|--------|--------|--------------|---------|
-| **Engines supported** | 21 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
+| **Engines supported** | 22 | 3 (PG/MySQL/Redis) | 1 (PostgreSQL) | 4 (PG/MySQL/MariaDB/MongoDB) |
 | CLI-first | ✅ | ❌ GUI-only | ❌ GUI-only | ⚠️ Limited CLI |
 | Multi-version support | ✅ | ✅ | ✅ | ✅ |
 | Built-in backup/restore | ✅ | ✅ | ❌ | ⚠️ Manual |
@@ -282,7 +289,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Docker Desktop | Podman | OrbStack |
 |---------|--------|----------------|--------|----------|
-| **Engines supported** | 21 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
+| **Engines supported** | 22 unified | Any (manual setup) | Any (manual setup) | Any (manual setup) |
 | Daemon required | ❌ | ✅ | ❌ (rootless) | ✅ |
 | Resource overhead | Native | VM + containers | VM + containers | VM + containers |
 | Built-in backup/restore | ✅ | ❌ Manual | ❌ Manual | ❌ Manual |
@@ -298,7 +305,7 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 
 | Feature | SpinDB | Homebrew | apt/winget | asdf-vm |
 |---------|--------|----------|------------|---------|
-| **Engines supported** | 21 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
+| **Engines supported** | 22 unified | Many (separate formulas) | Many (separate packages) | Many (plugins) |
 | Multi-version side-by-side | ✅ | ⚠️ Complex | ❌ | ✅ |
 | Isolated data directories | ✅ | ❌ System-wide | ❌ System-wide | ❌ |
 | Built-in backup/restore | ✅ | ❌ | ❌ | ❌ |
@@ -309,20 +316,22 @@ SpinDB runs databases as **native processes** with **isolated data directories**
 | Windows | ✅ | ❌ | ✅ (winget) | ⚠️ WSL |
 | Free for commercial use | ❌ | ✅ | ✅ | ✅ |
 
+</details>
+
 > **Note on licensing:** SpinDB requires a commercial license for business use. For personal projects, education, research, nonprofits, and government use, SpinDB is free. See [License](#license) for details.
 
 ---
 
 ## How It Works
 
-SpinDB uses "container" terminology loosely—there's no Docker involved. When you create a container, SpinDB:
+SpinDB uses "container" terminology loosely: there's no Docker involved. When you create a container, SpinDB:
 
-1. **Resolves the version** via the [`hostdb` npm package](https://www.npmjs.com/package/hostdb), which is pinned as a SpinDB dependency. `hostdb` bundles a registry snapshot (`databases.json` + `releases.json`) at publish time, so the resolution is offline and deterministic — `spindb create postgresql 18` always picks the exact same patch for a given SpinDB release.
+1. **Resolves the version** via the [`hostdb` npm package](https://www.npmjs.com/package/hostdb), which is pinned as a SpinDB dependency. `hostdb` bundles a registry snapshot (`databases.json` + `releases.json`) at publish time, so the resolution is offline and deterministic: `spindb create postgresql 18` always picks the exact same patch for a given SpinDB release.
 2. **Downloads database binaries** from `registry.layerbase.host` (Cloudflare R2 mirror of [hostdb](https://github.com/robertjbass/hostdb)). When a new database version is published to hostdb, SpinDB picks it up on the next release (we bump the `hostdb` dep and republish SpinDB).
 3. **Creates isolated data directories** at `~/.spindb/containers/{engine}/{name}/`
 4. **Runs databases as native processes** on your machine
 
-The container config persists the **full resolved version** (e.g. `18.4.0`), not the shorthand (`18`). This means a future SpinDB upgrade will not silently switch your existing data to a different patch — the binary you originally built against is what your container keeps running on. Use `spindb doctor --dry-run` to see version drift; `spindb doctor` (interactive) or `spindb doctor --fix` to migrate older containers created before this guarantee was in place.
+The container config persists the **full resolved version** (e.g. `18.4.0`), not the shorthand (`18`). This means a future SpinDB upgrade will not silently switch your existing data to a different patch: the binary you originally built against is what your container keeps running on. Use `spindb doctor --dry-run` to see version drift; `spindb doctor` (interactive) or `spindb doctor --fix` to migrate older containers created before this guarantee was in place.
 
 ### Storage Layout
 
@@ -474,7 +483,7 @@ SpinDB can serve as the database layer for larger systems:
 
 We welcome contributions! SpinDB is built with:
 
-- **Runtime:** Node.js 18+ with TypeScript
+- **Runtime:** Node.js 22+ with TypeScript
 - **Execution:** `tsx` for direct TypeScript execution
 - **Package Manager:** pnpm (strictly enforced)
 - **CLI Framework:** Commander.js
@@ -494,7 +503,7 @@ See [ENGINE_CHECKLIST.md](ENGINE_CHECKLIST.md) for adding new database engines.
 
 SpinDB is powered by:
 
-- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 22 engines across all major platforms. Makes Docker-free multi-version database support possible.
+- **[hostdb](https://github.com/robertjbass/hostdb)** - Pre-compiled database binaries for 22 engines on macOS, Linux and Windows. Makes Docker-free multi-version database support possible.
 
 ---
 
@@ -525,11 +534,3 @@ SpinDB is **free** for:
 **Questions? Found a bug? Have a feature request?**
 
 Open an issue: [github.com/robertjbass/spindb/issues](https://github.com/robertjbass/spindb/issues)
-
-
-Logical dumps from databases with pg_cron include `CREATE EXTENSION pg_cron`.
-Before restoring such a dump elsewhere, install a compatible pg_cron build,
-configure its preload and restart the target. Enable the extension in the target
-cron catalog database first; otherwise extension creation and cron objects can
-fail during restore. Review restore diagnostics rather than assuming every
-object was copied.
