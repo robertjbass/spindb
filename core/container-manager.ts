@@ -927,8 +927,14 @@ export class ContainerManager {
    * @returns The updated list of databases
    * @throws Error if the container is not running or doesn't support listing databases
    */
-  async syncDatabases(containerName: string): Promise<string[]> {
-    const { databases } = await this.syncDatabasesWithStatus(containerName)
+  async syncDatabases(
+    containerName: string,
+    options?: SyncDatabasesOptions,
+  ): Promise<string[]> {
+    const { databases } = await this.syncDatabasesWithStatus(
+      containerName,
+      options,
+    )
     return databases
   }
 
@@ -941,6 +947,7 @@ export class ContainerManager {
    */
   async syncDatabasesWithStatus(
     containerName: string,
+    options?: SyncDatabasesOptions,
   ): Promise<SyncDatabasesResult> {
     const config = await this.getConfig(containerName)
     if (!config) {
@@ -973,12 +980,16 @@ export class ContainerManager {
       )
     }
 
-    const engine = await loadEngine(config.engine)
-
-    // Query the actual database server for all databases
+    // Query the actual database server for all databases, unless the caller
+    // just listed them in the same session that ensured the primary
     let actualDatabases: string[]
     try {
-      actualDatabases = await engine.listDatabases(config)
+      if (options?.listed) {
+        actualDatabases = options.listed
+      } else {
+        const engine = await loadEngine(config.engine)
+        actualDatabases = await engine.listDatabases(config)
+      }
     } catch (error) {
       // If the engine doesn't support listDatabases, return current registry
       if (error instanceof UnsupportedOperationError) {
@@ -1016,6 +1027,11 @@ export class ContainerManager {
 }
 
 export const containerManager = new ContainerManager()
+
+export type SyncDatabasesOptions = {
+  // A listing the caller already took from the running server
+  listed?: string[]
+}
 
 export type SyncDatabasesResult = {
   databases: string[]

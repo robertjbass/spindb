@@ -4,6 +4,7 @@ import {
   canDetectMissingDatabase,
 } from './database-capabilities'
 import type { DatabasePresence } from './database-presence'
+import type { CreateDatabaseAndListResult } from '../engines/base-engine'
 
 /**
  * What start found (and did) for the container's primary database:
@@ -41,11 +42,18 @@ type PrimaryDatabaseEngine = {
     name: string,
   ): Promise<DatabasePresence>
   createDatabase(container: ContainerConfig, database: string): Promise<void>
+  createDatabaseAndList?(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<CreateDatabaseAndListResult>
 }
 
 type EnsurePrimaryDatabaseResult = {
   primaryDatabase: PrimaryDatabaseReport
   ensure: EnsureOutcome
+  // The server's database list, when the ensure step listed it in the same
+  // client session (createDatabaseAndList); null means sync must list itself
+  listedDatabases: string[] | null
 }
 
 /**
@@ -83,6 +91,7 @@ async function ensurePrimaryDatabase(options: {
   const leaveMissing = detectable && !recreate && !firstStart
 
   let ensure: EnsureOutcome
+  let listedDatabases: string[] | null = null
   if (!ensureApplicable) {
     ensure = { kind: 'not-applicable' }
   } else if (leaveMissing && presence === false) {
@@ -92,7 +101,13 @@ async function ensurePrimaryDatabase(options: {
   } else {
     onEnsureStart?.()
     try {
-      await engine.createDatabase(config, name)
+      if (engine.createDatabaseAndList) {
+        const result = await engine.createDatabaseAndList(config, name)
+        listedDatabases = result.databases
+        if (result.createError) throw result.createError
+      } else {
+        await engine.createDatabase(config, name)
+      }
       ensure = { kind: 'ready', alreadyExisted: false }
     } catch (error) {
       const message = (error as Error)?.message ?? ''
@@ -108,6 +123,7 @@ async function ensurePrimaryDatabase(options: {
       state: resolvePrimaryDatabaseState({ presence, ensure, firstStart }),
     },
     ensure,
+    listedDatabases,
   }
 }
 

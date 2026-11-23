@@ -378,14 +378,15 @@ export const startCommand = new Command('start')
         const dbSpinner = options.json
           ? null
           : createSpinner(`Ensuring database "${config.database}" exists...`)
-        const { primaryDatabase, ensure } = await ensurePrimaryDatabase({
-          engine,
-          config,
-          superuser: engineDefaults.superuser,
-          recreate: options.recreateDatabase !== false,
-          firstStart,
-          onEnsureStart: () => dbSpinner?.start(),
-        })
+        const { primaryDatabase, ensure, listedDatabases } =
+          await ensurePrimaryDatabase({
+            engine,
+            config,
+            superuser: engineDefaults.superuser,
+            recreate: options.recreateDatabase !== false,
+            firstStart,
+            onEnsureStart: () => dbSpinner?.start(),
+          })
         if (ensure.kind === 'ready') {
           dbSpinner?.succeed(`Database "${config.database}" ready`)
         } else if (ensure.kind === 'failed') {
@@ -412,7 +413,9 @@ export const startCommand = new Command('start')
         // Sync database registry with actual server state (silent, non-blocking)
         if (!isFileBasedEngine(config.engine)) {
           try {
-            await containerManager.syncDatabases(containerName)
+            await containerManager.syncDatabases(containerName, {
+              listed: listedDatabases ?? undefined,
+            })
           } catch (syncError) {
             // Don't fail start if sync fails - just log for debugging
             logDebug(
