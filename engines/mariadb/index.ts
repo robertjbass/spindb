@@ -64,8 +64,11 @@ import { pollUntilReady } from '../../core/readiness-poll'
 
 const ENGINE = 'mariadb'
 const engineDef = getEngineDefaults(ENGINE)
-// The former budget: a fixed 1 s wait, then 60 pings 0.5 s apart
-const START_READY_TIMEOUT_MS = 31_000
+// Wall-clock deadline that covers the former budget, which counted 60
+// pings 0.5 s apart plus each ping's own time (36 s or more), so a slow cold
+// start that used to succeed still does. It only matters on a start that is
+// not answering.
+const START_READY_TIMEOUT_MS = 60_000
 
 type LocalMariaDbAuth = {
   user: string
