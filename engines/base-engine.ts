@@ -21,6 +21,11 @@ import {
 import { stopPgweb } from '../core/pgweb-utils'
 import type { ReleaseType } from 'hostdb'
 
+export type CreateDatabaseAndListResult = {
+  createError: Error | null
+  databases: string[] | null
+}
+
 /**
  * Options for listDatabases. `signal` aborts the listing: engines that honor
  * it kill the client process and reject. Engines that do not honor it ignore
@@ -219,6 +224,18 @@ export abstract class BaseEngine {
     container: ContainerConfig,
     database: string,
   ): Promise<void>
+
+  /**
+   * Optional: create a database and list the server's databases (same
+   * filtering as listDatabases) in one client session. Engines whose client
+   * launch dominates start implement it so start pays one launch for its
+   * ensure and sync steps. A failed create is returned as `createError`, a
+   * failed listing as `databases: null`; a failed session throws.
+   */
+  createDatabaseAndList?(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<CreateDatabaseAndListResult>
 
   // Drop a database within the container
   abstract dropDatabase(

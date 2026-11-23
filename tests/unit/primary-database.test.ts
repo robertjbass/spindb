@@ -13,6 +13,7 @@ import {
   resolvePrimaryDatabaseState,
 } from '../../core/primary-database'
 import { buildSyncedDatabaseList } from '../../core/container-manager'
+import { parseCreateDatabaseAndListOutput } from '../../engines/documentdb'
 import { checkBackupTarget } from '../../cli/commands/backup'
 import { startCommand } from '../../cli/commands/start'
 import { getEngine } from '../../engines'
@@ -474,6 +475,94 @@ describe('ensurePrimaryDatabase', () => {
         `create called (recreate=${recreate})`,
       )
     }
+  })
+
+  it('uses one create-and-list session when the engine offers it', async () => {
+    const config = makeConfig({ engine: Engine.DocumentDB })
+    const cases = [
+      {
+        result: { createError: null, databases: ['app', 'other'] },
+        kind: 'ready',
+        listed: ['app', 'other'],
+      },
+      {
+        result: { createError: new Error('Unauthorized'), databases: ['app'] },
+        kind: 'failed',
+        listed: ['app'],
+      },
+      {
+        result: { createError: null, databases: null },
+        kind: 'ready',
+        listed: null,
+      },
+    ]
+    for (const testCase of cases) {
+      let combined = 0
+      let plainCreate = 0
+      const result = await ensurePrimaryDatabase({
+        engine: {
+          databaseExists: async () => 'unknown',
+          createDatabase: async () => {
+            plainCreate++
+          },
+          createDatabaseAndList: async () => {
+            combined++
+            return testCase.result
+          },
+        },
+        config,
+        superuser,
+        recreate: true,
+        firstStart: false,
+      })
+      assertEqual(result.ensure.kind, testCase.kind, 'ensure')
+      assertEqual(
+        JSON.stringify(result.listedDatabases),
+        JSON.stringify(testCase.listed),
+        'listed',
+      )
+      assertEqual(combined, 1, 'one combined session')
+      assertEqual(plainCreate, 0, 'no separate create')
+    }
+  })
+
+  it('reports a failed create-and-list session as a failed create with no listing', async () => {
+    const result = await ensurePrimaryDatabase({
+      engine: {
+        databaseExists: async () => 'unknown',
+        createDatabase: async () => {},
+        createDatabaseAndList: async () => {
+          throw new Error('mongosh exited with code 1')
+        },
+      },
+      config: makeConfig({ engine: Engine.DocumentDB }),
+      superuser,
+      recreate: true,
+      firstStart: false,
+    })
+    assertEqual(result.ensure.kind, 'failed', 'ensure')
+    assertEqual(result.listedDatabases, null, 'sync lists on its own')
+  })
+
+  it('parses the DocumentDB create-and-list output like listDatabases', () => {
+    const parsed = parseCreateDatabaseAndListOutput(
+      'noise\n{"createError":null,"databases":["admin","app","config","local","other"]}\n',
+    )
+    assertEqual(parsed.createError, null, 'no create error')
+    assertEqual(
+      JSON.stringify(parsed.databases),
+      JSON.stringify(['app', 'other']),
+      'system databases filtered',
+    )
+    const failed = parseCreateDatabaseAndListOutput(
+      '{"createError":"MongoServerError: denied","databases":null}',
+    )
+    assertEqual(
+      failed.createError?.message,
+      'MongoServerError: denied',
+      'create error',
+    )
+    assertEqual(failed.databases, null, 'listing failed')
   })
 
   it('skips engines without database creation exactly as before', async () => {
