@@ -1,11 +1,14 @@
 import { join } from 'path'
 import { randomBytes } from 'crypto'
-import { setTimeout as delay } from 'timers/promises'
 import { MongoDBEngine } from '../mongodb'
+import { normalizeMongoHost } from '../mongo-uri'
 import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
 import { saveCredentials } from '../../core/credential-manager'
 import { spawnAsync } from '../../core/spawn-utils'
+import { assertValidDatabaseName } from '../../core/error-handler'
+import type { CreateDatabaseAndListResult } from '../base-engine'
+import { isTcpPortAccepting, pollUntilReady } from '../../core/readiness-poll'
 import {
   Engine,
   type ContainerConfig,
@@ -155,19 +158,34 @@ export class DocumentDBEngine extends MongoDBEngine {
     const runtime = this.runtime(container)
     await runtime.start()
     try {
+      // A mongosh launch costs far more than a TCP probe, so wait for the
+      // gateway's listener first and spend mongosh only on the authenticated
+      // ping that decides readiness. Both share one 30 s budget.
       const deadline = Date.now() + 30000
-      while (Date.now() < deadline) {
-        try {
-          await this.runLocalMongosh(container, 'admin', {
-            eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
-            timeoutMs: 5000,
-          })
-          return {
+      const listening = await pollUntilReady(
+        () =>
+          isTcpPortAccepting({
             port: container.port,
-            connectionString: this.getConnectionString(container),
-          }
-        } catch {
-          await delay(500)
+            host: normalizeMongoHost(container.bindAddress),
+          }),
+        { timeoutMs: 30000 },
+      )
+      const ready =
+        listening &&
+        (await pollUntilReady(
+          async () => {
+            await this.runLocalMongosh(container, 'admin', {
+              eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
+              timeoutMs: 5000,
+            })
+            return true
+          },
+          { timeoutMs: Math.max(0, deadline - Date.now()) },
+        ))
+      if (ready) {
+        return {
+          port: container.port,
+          connectionString: this.getConnectionString(container),
         }
       }
       throw new Error(
@@ -178,6 +196,42 @@ export class DocumentDBEngine extends MongoDBEngine {
       throw error
     }
   }
+  /**
+   * createDatabase and listDatabases in one mongosh session, so start pays
+   * one launch and one authentication instead of two. The create and the
+   * listing are the same commands those methods run, each caught on its own
+   * so a failure in one still reports the other.
+   */
+  override async createDatabaseAndList(
+    container: ContainerConfig,
+    database: string,
+  ): Promise<CreateDatabaseAndListResult> {
+    assertValidDatabaseName(database)
+    const script = `
+      const describe = (e) => (e && e.name ? e.name + ': ' + e.message : String(e))
+      let createError = null
+      try {
+        const target = db.getSiblingDB(${JSON.stringify(database)})
+        try { target.getCollection("_spindb_init").drop() } catch (e) {}
+        target.createCollection("_spindb_init")
+        target.getCollection("_spindb_init").drop()
+      } catch (e) {
+        createError = describe(e)
+      }
+      let databases = null
+      try {
+        databases = db.adminCommand({ listDatabases: 1 }).databases.map((d) => d.name)
+      } catch (e) {}
+      print(JSON.stringify({ createError, databases }))
+    `
+    const { stdout } = await this.runLocalMongosh(container, 'admin', {
+      eval: script,
+      quiet: true,
+      timeoutMs: 20000,
+    })
+    return parseCreateDatabaseAndListOutput(stdout)
+  }
+
   override async stop(container: ContainerConfig): Promise<void> {
     await this.runtime(container).stop()
   }
@@ -221,4 +275,31 @@ export class DocumentDBEngine extends MongoDBEngine {
     })
   }
 }
+const MONGO_SYSTEM_DATABASES = ['admin', 'config', 'local']
+
+export function parseCreateDatabaseAndListOutput(
+  stdout: string,
+): CreateDatabaseAndListResult {
+  const line = stdout
+    .trim()
+    .split('\n')
+    .reverse()
+    .find((candidate) => candidate.trim().startsWith('{'))
+  if (!line) {
+    throw new Error('mongosh returned no create-and-list result')
+  }
+  const parsed = JSON.parse(line) as {
+    createError: string | null
+    databases: string[] | null
+  }
+  return {
+    createError: parsed.createError ? new Error(parsed.createError) : null,
+    databases: Array.isArray(parsed.databases)
+      ? parsed.databases.filter(
+          (name) => !MONGO_SYSTEM_DATABASES.includes(name),
+        )
+      : null,
+  }
+}
+
 export const documentdbEngine = new DocumentDBEngine()

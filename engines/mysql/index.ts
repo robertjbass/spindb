@@ -60,6 +60,7 @@ import {
 } from '../../core/server-handshake'
 import { resolveBundledMysqlFamilyBinary } from '../../core/mysql-family-binary-resolver'
 import { assertDataDirVersionMatches } from '../../core/mysql-family-datadir-version'
+import { pollUntilReady } from '../../core/readiness-poll'
 import {
   Engine,
   Platform,
@@ -84,6 +85,11 @@ const execFileAsync = promisify(execFile)
 
 const ENGINE = 'mysql'
 const engineDef = getEngineDefaults(ENGINE)
+// Wall-clock deadline that covers the former budget, which counted 60
+// pings 0.5 s apart plus each ping's own time (36 s or more), so a slow cold
+// start that used to succeed still does. It only matters on a start that is
+// not answering.
+const START_READY_TIMEOUT_MS = 60_000
 
 type LocalMySqlAuth = {
   user: string
@@ -695,7 +701,7 @@ export class MySQLEngine extends BaseEngine {
         proc.on('error', errorHandler)
       }
 
-      setTimeout(async () => {
+      void (async () => {
         if (proc && proc.pid) {
           try {
             await writeFile(pidFile, String(proc.pid))
@@ -704,42 +710,27 @@ export class MySQLEngine extends BaseEngine {
           }
         }
 
-        // Wait for MySQL to be ready
-        let attempts = 0
-        const maxAttempts = 60
-        const checkInterval = 500
-
-        const checkReady = async () => {
-          if (settled) return
-          attempts++
-          try {
+        const ready = await pollUntilReady(
+          async () => {
             await this.pingLocalAdmin(container.name, port)
-            if (settled) return
-            settled = true
-            if (proc) {
-              proc.removeListener('error', errorHandler)
-            }
-            resolve({
-              port,
-              connectionString: this.getConnectionString(container),
-            })
-          } catch {
-            if (settled) return
-            if (attempts < maxAttempts) {
-              setTimeout(checkReady, checkInterval)
-            } else {
-              if (settled) return
-              settled = true
-              if (proc) {
-                proc.removeListener('error', errorHandler)
-              }
-              reject(new Error('MySQL failed to start within timeout'))
-            }
-          }
+            return true
+          },
+          { timeoutMs: START_READY_TIMEOUT_MS, shouldStop: () => settled },
+        )
+        if (settled) return
+        settled = true
+        if (proc) {
+          proc.removeListener('error', errorHandler)
         }
-
-        checkReady()
-      }, 1000)
+        if (ready) {
+          resolve({
+            port,
+            connectionString: this.getConnectionString(container),
+          })
+        } else {
+          reject(new Error('MySQL failed to start within timeout'))
+        }
+      })()
     })
   }
 
