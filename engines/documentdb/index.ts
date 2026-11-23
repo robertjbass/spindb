@@ -1,11 +1,12 @@
 import { join } from 'path'
 import { randomBytes } from 'crypto'
-import { setTimeout as delay } from 'timers/promises'
 import { MongoDBEngine } from '../mongodb'
+import { normalizeMongoHost } from '../mongo-uri'
 import { paths } from '../../config/paths'
 import { platformService } from '../../core/platform-service'
 import { saveCredentials } from '../../core/credential-manager'
 import { spawnAsync } from '../../core/spawn-utils'
+import { isTcpPortAccepting, pollUntilReady } from '../../core/readiness-poll'
 import {
   Engine,
   type ContainerConfig,
@@ -155,19 +156,34 @@ export class DocumentDBEngine extends MongoDBEngine {
     const runtime = this.runtime(container)
     await runtime.start()
     try {
+      // A mongosh launch costs far more than a TCP probe, so wait for the
+      // gateway's listener first and spend mongosh only on the authenticated
+      // ping that decides readiness. Both share one 30 s budget.
       const deadline = Date.now() + 30000
-      while (Date.now() < deadline) {
-        try {
-          await this.runLocalMongosh(container, 'admin', {
-            eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
-            timeoutMs: 5000,
-          })
-          return {
+      const listening = await pollUntilReady(
+        () =>
+          isTcpPortAccepting({
             port: container.port,
-            connectionString: this.getConnectionString(container),
-          }
-        } catch {
-          await delay(500)
+            host: normalizeMongoHost(container.bindAddress),
+          }),
+        { timeoutMs: 30000 },
+      )
+      const ready =
+        listening &&
+        (await pollUntilReady(
+          async () => {
+            await this.runLocalMongosh(container, 'admin', {
+              eval: 'if (db.runCommand({ping: 1}).ok !== 1) quit(1)',
+              timeoutMs: 5000,
+            })
+            return true
+          },
+          { timeoutMs: Math.max(0, deadline - Date.now()) },
+        ))
+      if (ready) {
+        return {
+          port: container.port,
+          connectionString: this.getConnectionString(container),
         }
       }
       throw new Error(

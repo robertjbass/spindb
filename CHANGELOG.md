@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.78.2] - 2026-11-23
+
+### Changed
+
+- **MySQL and MariaDB `spindb start` report ready about 0.6 s sooner.** Start waited a fixed 1 s after launching the server before its first ping, then pinged every 0.5 s. It now pings at once and retries after 50 ms, doubling to at most 250 ms (`core/readiness-poll.ts`). The readiness check is unchanged (MySQL: an authenticated `SELECT 1`; MariaDB: `mysqladmin ping`), and so is the overall budget (31 s, the old 1 s plus 60 polls of 0.5 s). Locally on macOS ARM64 (MySQL 9.7.2, MariaDB 12.3.3, 8 starts each), the median `spindb start` went from 1.69 s to 1.08 s for MySQL and from 1.74 s to 1.10 s for MariaDB; the time from the server accepting TCP connections to start returning went from about 0.75 s to 0.15 s.
+- **DocumentDB start waits for the gateway's TCP listener before its authenticated ping.** Each readiness attempt launched `mongosh` and slept 0.5 s after a failure. Start now probes the gateway port with the same 50-250 ms backoff and launches `mongosh` only once the port accepts connections, then retries the authenticated ping with the same backoff, all inside the existing 30 s budget. Readiness still requires an authenticated `ping` to succeed. Locally the first ping already succeeded, so the measured start time is unchanged (median 2.10 s before, 1.99 s after); the time after the gateway accepts connections is three sequential `mongosh` launches: the readiness ping, the primary-database ensure step and the database registry sync.
+
+### Testing
+
+- `tests/unit/readiness-poll.test.ts` covers the immediate first check, the backoff steps, the deadline and early stop.
+
 ## [0.78.1] - 2026-11-22
 
 ### Changed

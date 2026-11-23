@@ -60,9 +60,12 @@ import {
 import { parseTSVToQueryResult } from '../../core/query-parser'
 import { getLibraryEnv, detectLibraryError } from '../../core/library-env'
 import { assertDataDirVersionMatches } from '../../core/mysql-family-datadir-version'
+import { pollUntilReady } from '../../core/readiness-poll'
 
 const ENGINE = 'mariadb'
 const engineDef = getEngineDefaults(ENGINE)
+// The former budget: a fixed 1 s wait, then 60 pings 0.5 s apart
+const START_READY_TIMEOUT_MS = 31_000
 
 type LocalMariaDbAuth = {
   user: string
@@ -567,7 +570,7 @@ export class MariaDBEngine extends BaseEngine {
         proc.on('error', errorHandler)
       }
 
-      setTimeout(async () => {
+      void (async () => {
         if (proc && proc.pid) {
           try {
             await writeFile(pidFile, String(proc.pid))
@@ -576,15 +579,8 @@ export class MariaDBEngine extends BaseEngine {
           }
         }
 
-        // Wait for MariaDB to be ready
-        let attempts = 0
-        const maxAttempts = 60
-        const checkInterval = 500
-
-        const checkReady = async () => {
-          if (settled) return
-          attempts++
-          try {
+        const ready = await pollUntilReady(
+          async () => {
             const mysqladmin = await this.getMysqladminPath()
             const auth = await this.getLocalAdminAuth(container.name)
             await runMariaDbBinary(
@@ -594,44 +590,34 @@ export class MariaDBEngine extends BaseEngine {
                 password: auth.password,
               },
             )
-            if (settled) return
-            settled = true
-            if (proc) {
-              proc.removeListener('error', errorHandler)
-            }
-            resolve({
-              port,
-              connectionString: this.getConnectionString(container),
-            })
-          } catch {
-            if (settled) return
-            if (attempts < maxAttempts) {
-              setTimeout(checkReady, checkInterval)
-            } else {
-              if (settled) return
-              settled = true
-              if (proc) {
-                proc.removeListener('error', errorHandler)
-              }
-
-              // Check log file for library errors
-              let libError: string | null = null
-              try {
-                const logContent = await readFile(logFile, 'utf-8')
-                libError = detectLibraryError(logContent, 'MariaDB')
-              } catch {
-                // Log file might not exist
-              }
-
-              reject(
-                new Error(libError || 'MariaDB failed to start within timeout'),
-              )
-            }
-          }
+            return true
+          },
+          { timeoutMs: START_READY_TIMEOUT_MS, shouldStop: () => settled },
+        )
+        if (settled) return
+        settled = true
+        if (proc) {
+          proc.removeListener('error', errorHandler)
+        }
+        if (ready) {
+          resolve({
+            port,
+            connectionString: this.getConnectionString(container),
+          })
+          return
         }
 
-        checkReady()
-      }, 1000)
+        // Check log file for library errors
+        let libError: string | null = null
+        try {
+          const logContent = await readFile(logFile, 'utf-8')
+          libError = detectLibraryError(logContent, 'MariaDB')
+        } catch {
+          // Log file might not exist
+        }
+
+        reject(new Error(libError || 'MariaDB failed to start within timeout'))
+      })()
     })
   }
 
