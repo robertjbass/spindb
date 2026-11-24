@@ -13,6 +13,7 @@ import { BaseEngine, type ListDatabasesOptions } from '../base-engine'
 import { paths } from '../../config/paths'
 import { getEngineDefaults } from '../../config/defaults'
 import { memoryBudgetArgs } from '../../core/memory-budget'
+import { prepareSecureFilePrivArg } from '../../core/mysql-family-secure-file-priv'
 import {
   platformService,
   isWindows,
@@ -657,6 +658,12 @@ export class MySQLEngine extends BaseEngine {
     // Engine-agnostic memory budget (persisted on the container, set via
     // `spindb create --memory-budget-mb`). No-op when unset.
     args.push(...memoryBudgetArgs(container.engine, container.memoryBudgetMb))
+
+    args.push(
+      await prepareSecureFilePrivArg(
+        paths.getContainerPath(name, { engine: ENGINE }),
+      ),
+    )
 
     if (platform !== Platform.Win32) {
       const socketFile = join(

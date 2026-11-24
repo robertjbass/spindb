@@ -1,6 +1,6 @@
 {
   "name": "spindb",
-  "version": "0.78.2",
+  "version": "0.78.3",
   "author": "Bob Bass <bob@bbass.co>",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Run 22 database engines locally without Docker. One CLI to create, branch, back up and clone PostgreSQL, MySQL, MongoDB, Redis and more on macOS, Linux and Windows.",

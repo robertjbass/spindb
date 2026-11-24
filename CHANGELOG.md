@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.78.3] - 2026-11-24
+
+### Security
+
+- **MySQL and MariaDB confine server-side file access to a per-container directory.** `spindb start` now passes `--secure-file-priv=<container>/secure-files` (created on every start, beside the data directory, never inside it). `LOAD_FILE`, `SELECT ... INTO OUTFILE/DUMPFILE` and `LOAD DATA INFILE` work only on files in that directory. MariaDB previously ran with no restriction, so any account with the FILE privilege could read or write any file the server's OS user could reach; MySQL's bundled builds already defaulted to `NULL` (all three refused; measured on the macOS ARM64 builds of 8.4, 9.6 and 9.7), and now get the same sanctioned directory instead. `LOAD DATA LOCAL INFILE`, which reads the file on the client, is unchanged. Existing containers pick the flag up on their next start; nothing is restarted.
+- **Redis and Valkey configs pin `enable-protected-configs no`, `enable-module-command no` and `enable-debug-command no`.** These equal the defaults of Redis 7.0+ and every Valkey release, so behavior does not change: `CONFIG SET dir`/`dbfilename`, `MODULE LOAD` and `DEBUG` stay refused for every client. Writing them makes that explicit and survives a future default change. New configs carry them; an existing config gets any missing directive appended on its next start, and a directive already present keeps its value.
+
+### Testing
+
+- `tests/unit/redis-config.test.ts` covers appending the directives to an older config, idempotence across restarts and keeping an operator-set value.
+
 ## [0.78.2] - 2026-11-23
 
 ### Changed
