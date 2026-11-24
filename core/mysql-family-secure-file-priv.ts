@@ -1,7 +1,7 @@
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
 
-// Server-side file access (LOAD_FILE, SELECT ... INTO OUTFILE/DUMPFILE, LOAD
+// MariaDB server-side file access (LOAD_FILE, SELECT ... INTO OUTFILE/DUMPFILE, LOAD
 // DATA INFILE) is confined to this per-container directory. It sits beside the
 // data directory, never inside it, so those statements can neither read nor
 // overwrite table files, the binaries or anything else the server user owns.
