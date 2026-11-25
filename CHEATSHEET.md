@@ -5,7 +5,7 @@ Quick reference for all SpinDB commands.
 ## Container Lifecycle
 
 ```bash
-spindb create mydb                      # Create PostgreSQL (default)
+spindb create mydb                      # Create PostgreSQL (default engine, PostgreSQL 19)
 spindb create mydb -e mysql             # Create MySQL
 spindb create mydb -e mysql --memory-budget-mb 256  # Lean MySQL (perf_schema off + small buffer pool)
 spindb create mydb -e mariadb           # Create MariaDB
@@ -15,6 +15,8 @@ spindb create mydb -e mongodb           # Create MongoDB
 spindb create mydb -e ferretdb          # Create FerretDB (v2 on macOS/Linux, v1 on Windows)
 spindb create mydb -e ferretdb --db-version 1  # FerretDB v1 (plain PG backend, all platforms)
 spindb create mydb -e ferretdb --db-version 2  # FerretDB v2 (DocumentDB backend, macOS/Linux only)
+spindb create mydb -e documentdb        # Create standalone DocumentDB (Linux x64/ARM64, Apple Silicon macOS 14+)
+spindb create mydb -e documentdb --database app  # DocumentDB with a named primary database
 spindb create mydb -e redis             # Create Redis
 spindb create mydb -e valkey            # Create Valkey
 spindb create mydb -e clickhouse        # Create ClickHouse
@@ -24,13 +26,17 @@ spindb create mydb -e couchdb           # Create CouchDB
 spindb create mydb -e cockroachdb       # Create CockroachDB
 spindb create mydb -e surrealdb         # Create SurrealDB
 spindb create mydb -e questdb           # Create QuestDB
-spindb create mydb -e typedb            # Create TypeDB
+spindb create mydb -e typedb            # Create TypeDB (default 3.14.1)
 spindb create mydb -e influxdb          # Create InfluxDB
 spindb create mydb -e weaviate          # Create Weaviate
 spindb create mydb -e tigerbeetle       # Create TigerBeetle
 spindb create mydb -e libsql            # Create LibSQL (macOS/Linux only)
 spindb create mydb --db-version 17      # Specific version (any prefix works)
 spindb create mydb --start              # Create and start
+spindb create mydb --no-start           # Create without starting (skip prompt)
+spindb create mydb --connect            # Create, start and open a shell
+spindb create mydb -p 5440 --strict-port  # Fail if the port is taken instead of moving to a free one
+spindb create mydb -e sqlite --path ./data/app.sqlite  # File location for SQLite/DuckDB
 spindb create mydb --from backup.sql    # Create from backup
 spindb create mydb --show-deprecated    # Show deprecated versions in picker
 
@@ -42,6 +48,7 @@ spindb start mydb --auth                # Enable auth: MongoDB --auth, FerretDB 
 spindb start mydb --no-auth             # Disable auth: restore default no-auth mode (persisted)
 spindb start mydb --memory-budget-mb 256  # Run lean within a 256MB budget (0 clears it, persisted)
 spindb start mydb --no-recreate-database  # Leave a dropped primary database missing (default recreates it)
+spindb start mydb --strict-port         # Fail if the configured port is in use instead of moving
 spindb stop mydb                        # Stop container
 spindb stop --all                       # Stop all containers
 spindb delete mydb -f                   # Force delete (stops if running, skips prompt)
@@ -87,23 +94,27 @@ recreating a dropped database.
 ### Version selection (`--db-version`)
 
 `--db-version` accepts a full version or any prefix of one, for every engine.
-A prefix resolves to the newest available release that matches it, and the
-container stores the resolved full version so later spindb upgrades never move
-it onto a different binary.
+A major version resolves to the release hostdb pins as that line's default,
+which is not always the newest one (PostgreSQL `18` stays on 18.6.0 while
+18.7.0 is opt-in). Any other prefix resolves to the newest available release
+that matches it. The container stores the resolved full version so later spindb
+upgrades never move it onto a different binary.
 
 ```bash
-spindb create mydb -e postgresql --db-version 18       # newest 18.x  -> 18.6.0
-spindb create mydb -e postgresql --db-version 18.6     # newest 18.6.x -> 18.6.0
+spindb create mydb -e postgresql --db-version 19       # 19 default     -> 19.0.0 (stable)
+spindb create mydb -e postgresql --db-version 18       # 18 default     -> 18.6.0
+spindb create mydb -e postgresql --db-version 18.7     # newest 18.7.x  -> 18.7.0
 spindb create mydb -e postgresql --db-version 18.4.0   # exact version, pinned as-is
-spindb create mydb -e influxdb --db-version 3.10       # newest 3.10.x -> 3.10.5
-spindb create mydb -e clickhouse --db-version 25.12    # 4-part scheme -> 25.12.3.21
+spindb create mydb -e influxdb --db-version 3.10       # newest 3.10.x  -> 3.10.5
+spindb create mydb -e clickhouse --db-version 25.12    # 4-part scheme  -> 25.12.3.21
 ```
 
 Matching happens on version-segment boundaries, never as a substring: `3.1`
 does not match `3.10.5`, it is simply an unknown version. Prereleases stay
-opt-in, so `19` never resolves to `19.0.0-beta.3`; ask for the channel
-(`--db-version 19.0.0-beta`) or the exact token to get one. A prefix that
-matches nothing reports the versions that do exist.
+opt-in, so `19` resolves to the stable 19.0.0, never to a release candidate;
+ask for the channel (`--db-version 19.0.0-rc` resolves to `19.0.0-rc.2`) or the
+exact token to get one. A prefix that matches nothing reports the versions that
+do exist.
 
 Run `spindb engines download <engine>` with no version to browse the versions
 an engine offers.
@@ -152,7 +163,7 @@ spindb query myferret "users.find({}).sort({id: 1})"    # MongoDB/FerretDB query
 spindb query myferret "users.find({age: {\$gt: 25}})" --json  # FerretDB JSON output
 ```
 
-> **`run` vs `query`:** Use `run` for executing scripts and fire-and-forget commands (migrations, seeds, DDL). Use `query` when you need structured results back — it outputs a formatted table by default, or JSON with `--json`.
+> **`run` vs `query`:** Use `run` for executing scripts and fire-and-forget commands (migrations, seeds, DDL). Use `query` when you need structured results back: it outputs a formatted table by default, or JSON with `--json`.
 >
 > **REST API Engines:** Qdrant, Meilisearch, CouchDB, InfluxDB, Weaviate, and LibSQL use REST APIs instead of CLI shells.
 > `spindb connect` shows REST API info (LibSQL shows curl examples). Qdrant, Meilisearch, CouchDB, and Weaviate have web dashboards. InfluxDB and LibSQL are API-only (no web UI). `spindb run` is not available for these engines via the interactive menu.
@@ -543,7 +554,7 @@ spindb start mydb-copy                  # Start on new port
 
 ## Branch (copy-on-write)
 
-Instant, near-zero-space forks (reflink on APFS / Btrfs / XFS-reflink / ZFS; full-copy fallback on ext4 / NTFS). A running source is auto stop → snapshot → restart'ed — no need to stop it first.
+Instant, near-zero-space forks (reflink on APFS / Btrfs / XFS-reflink / ZFS; full-copy fallback on ext4 / NTFS). A running source is auto stop → snapshot → restart'ed, so there is no need to stop it first.
 
 ```bash
 spindb branch mydb mydb-exp             # Fork mydb -> mydb-exp (auto-starts it)
@@ -561,7 +572,7 @@ spindb branch delete mydb --cascade     # Delete a branch and its whole subtree
 
 ### Git-driven branching (Neon/Vercel-style)
 
-Your git branch drives your database branch on a **stable port** — your `DATABASE_URL` never changes. Server engines only.
+Your git branch drives your database branch on a **stable port**, so your `DATABASE_URL` never changes. Server engines only.
 
 ```bash
 spindb branch init --base mydb          # Wire this repo: writes .spindb/branch.json + post-checkout hook
@@ -606,12 +617,12 @@ spindb pull mydb --from-env PROD_DB_URL --post-script ./sync-creds.ts
 
 # Skip tables/collections (repeatable). --exclude-table omits the table
 # entirely; --exclude-table-data keeps its schema but skips the rows
-# (PostgreSQL only) — ideal for analytics/event tables that dominate the bytes
+# (PostgreSQL only), ideal for analytics/event tables that dominate the bytes
 spindb pull mydb --from-env PROD_DB_URL --exclude-table debug_log
 spindb pull mydb --from-env PROD_DB_URL --exclude-table-data 'traffic_*'
 
 # Parallel dump/restore (PostgreSQL only, 1-8 workers). Splits tables across
-# N connections — big speedup on latency-bound remotes. Requires the DIRECT
+# N connections, a big speedup on latency-bound remotes. Requires the DIRECT
 # endpoint: connection poolers (Neon -pooler hosts, pgbouncer) are refused
 spindb pull mydb --from-env PROD_DB_URL --jobs 4
 
@@ -622,7 +633,7 @@ spindb pull mydb --from-env PROD_DB_URL --exclude-table-data 'traffic_*' --jobs 
 spindb pull mydb --from-env PROD_DB_URL --json
 ```
 
-**Table exclusion engine support:** `--exclude-table` works on PostgreSQL, MySQL, MariaDB (bare names auto-qualified as `db.table`), MongoDB, and FerretDB (collections). `--exclude-table-data` and `--jobs` are PostgreSQL only. Unsupported engines fail with a clear error before anything is dumped or dropped. Exclusions apply only to the remote dump — the local pre-pull backup stays complete. `--jobs` parallelizes across tables (one large table still rides a single connection), so it pairs best with exclusions.
+**Table exclusion engine support:** `--exclude-table` works on PostgreSQL, MySQL, MariaDB (bare names auto-qualified as `db.table`), MongoDB, and FerretDB (collections). `--exclude-table-data` and `--jobs` are PostgreSQL only. Unsupported engines fail with a clear error before anything is dumped or dropped. Exclusions apply only to the remote dump; the local pre-pull backup stays complete. `--jobs` parallelizes across tables (one large table still rides a single connection), so it pairs best with exclusions.
 
 **JSON output includes connection URLs for scripting:**
 ```json
@@ -803,6 +814,11 @@ spindb run myapp -d "$DB" -c "SELECT * FROM users"
 spindb users create mydb                # Create user (default: "spindb")
 spindb users create mydb devuser        # Create user with specific name
 spindb users create mydb --password p   # Use specific password
+printf '%s\n' "$PW" | spindb users create mydb devuser --password-stdin  # Read the password from piped stdin
+                                        # (kept out of process arguments; one line, at most 4096 bytes;
+                                        # cannot be combined with --password)
+spindb users create mydb devuser -d analytics  # Target database for the grants (default: container's database)
+spindb users create mydocs admin2 --database admin --password-stdin  # DocumentDB: administrator user
 spindb users create mydb --copy         # Copy connection string to clipboard
 spindb users create mydb --json         # JSON output for scripting
 spindb users create mydb --no-save      # Don't save credential file
@@ -812,7 +828,9 @@ spindb users list mydb                  # List saved credentials
 spindb users list mydb --json           # JSON output
 ```
 
-> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant, LibSQL. Not supported: SQLite, DuckDB, QuestDB, TypeDB, InfluxDB.
+> **Supported engines:** PostgreSQL, MySQL, MariaDB, CockroachDB, ClickHouse, MongoDB, FerretDB, DocumentDB, Redis, Valkey, SurrealDB, CouchDB, Meilisearch, Qdrant, TypeDB, InfluxDB, Weaviate, LibSQL. Not supported: SQLite, DuckDB, QuestDB, TigerBeetle.
+>
+> **DocumentDB** requires `--database admin` and creates a full administrator; database-scoped grants are not supported. The connection string it returns is `mongodb://<user>:<password>@127.0.0.1:<port>/admin?authSource=admin`.
 >
 > **Credentials** are saved as `.env.{username}` files in `~/.spindb/containers/{engine}/{name}/credentials/`.
 >
@@ -829,6 +847,32 @@ spindb edit mydb --set-config max_connections=500  # PostgreSQL config
 spindb edit mydb --relocate ./data/     # Move database file
 ```
 
+## File-Based Databases (SQLite, DuckDB)
+
+Register database files that already exist so the rest of SpinDB (connect,
+query, backup, branch) can manage them. The engine is detected from the
+extension (`.sqlite`, `.db`, `.sqlite3`, `.duckdb`, `.ddb`).
+
+```bash
+spindb attach ./data/app.sqlite         # Register an existing file (name defaults to the filename)
+spindb attach ./data/app.sqlite -n app  # Register under a specific name
+spindb attach ./warehouse.duckdb --json # JSON output
+spindb detach app                       # Unregister (the file stays on disk; prompts)
+spindb detach app -f                    # Unregister without confirmation
+
+# Engine-specific helpers (same for `spindb duckdb ...`)
+spindb sqlite scan                      # List unregistered SQLite files in the current directory
+spindb sqlite scan -p ./data            # Scan another directory
+spindb sqlite ignore ./fixtures         # Skip a folder when scanning the current directory
+spindb sqlite unignore ./fixtures       # Stop skipping it
+spindb sqlite ignored                   # List ignored folders
+spindb sqlite attach ./app.sqlite -n app  # Alias for `spindb attach`
+spindb sqlite detach app -f             # Alias for `spindb detach`
+```
+
+`scan`, `ignore`, `unignore` and `ignored` all take `--json`. A folder argument
+to `ignore`/`unignore` defaults to the current directory.
+
 ## Logs
 
 ```bash
@@ -843,8 +887,10 @@ spindb logs mydb --editor               # Open in $EDITOR
 ```bash
 spindb engines                          # List downloaded engines
 spindb engines --json                   # List engines as JSON
+spindb engines list                     # Same as `spindb engines`
+spindb engines supported                # List every engine SpinDB supports (--all adds pending/planned)
 spindb engines download postgresql 18   # Download specific version
-spindb engines download postgresql 18.6.0 --refresh  # Replace a cached copy with the current build
+spindb engines download postgresql 18.7.0 --refresh  # PostgreSQL only: replace a cached copy with the current build
 spindb engines delete postgresql 17     # Delete engine version (prompts)
 spindb engines delete postgresql 17 -y  # Delete engine version (skip prompt)
 spindb deps check                       # Check required tools
@@ -853,12 +899,13 @@ spindb deps install                     # Install missing tools
 
 ### PostgreSQL pg_cron (opt-in)
 
-hostdb includes pg_cron in its standard Linux x64 builds of PostgreSQL 18.6.0
-and 19.0.0-beta.3. SpinDB checks the installed binary for pg_cron, never the
-version name, and does nothing until you opt in:
+hostdb includes pg_cron in its standard Linux x64 builds of PostgreSQL 18 and
+newer (18.6.0, 18.7.0, 19.0.0 and the 19 prereleases). SpinDB checks the
+installed binary for pg_cron, never the version name, and does nothing until
+you opt in:
 
 ```bash
-spindb engines download postgresql 18.6.0 --refresh   # Only if the cached copy predates pg_cron
+spindb engines download postgresql 19.0.0 --refresh   # Only if the cached copy predates pg_cron
                                                       # (prints "pg_cron: included" when it has it)
 spindb run mydb -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_cron'"  # Keep any other libraries in the list
 spindb stop mydb && spindb start mydb
@@ -877,6 +924,27 @@ Copies, branches and restores keep jobs paused until you run
 Databases created on the earlier `18.6.0-cron.1` / `19.0.0-beta.3-cron.1`
 builds keep using them; those builds are no longer offered.
 
+### PostgreSQL pgvector (Linux x64)
+
+The Linux x64 builds of PostgreSQL 18.7.0, 19.0.0 and 19.0.0-rc.2 include
+pgvector 0.8.7. It needs no preload; enable it per database:
+
+```bash
+spindb run mydb -c "CREATE EXTENSION vector"
+```
+
+PostgreSQL 18.6.0 (the `18` default) does not include it: use
+`--db-version 18.7` or 19. The 18.7.0 and 19.0.0-rc.2 archives were rebuilt in
+place to add pgvector under the same version, so a copy downloaded before that
+keeps its old contents. Stop the databases on that version, then replace the
+cached copy:
+
+```bash
+spindb engines download postgresql 18.7.0 --refresh
+```
+
+The same local-store-only warning as for pg_cron applies to `--refresh`.
+
 ### DocumentDB background jobs
 
 Native DocumentDB (`--engine documentdb`) runs TTL expiry and background index
@@ -888,18 +956,21 @@ once a minute. `--no-scheduled-jobs` is PostgreSQL only.
 ## Network & Authentication
 
 ```bash
-# Bind address — expose database beyond localhost (e.g., for Docker, LAN access)
+# Bind address: expose database beyond localhost (e.g., for Docker, LAN access)
 spindb start mydb --bind 0.0.0.0        # Listen on all interfaces
 spindb start mydb --bind 192.168.1.50   # Listen on specific IP
 # Default is 127.0.0.1 (localhost only). Persisted across restarts.
 
-# Authentication — MongoDB and FerretDB v2 only
+# Authentication flags: MongoDB and FerretDB v2 (DocumentDB auth is always on)
 spindb start mymongo --auth             # Require credentials (passes --auth to mongod)
 spindb start myferret --auth            # Enable SCRAM auth (FerretDB v2)
 spindb start myferret --no-auth         # Disable SCRAM auth (default)
 # Persisted across restarts. Other engines ignore --auth/--no-auth with a warning.
+# DocumentDB always requires SCRAM auth: --no-auth is refused, and --bind accepts
+# only 127.0.0.1 or 0.0.0.0. Its generated admin credential is saved as
+# credentials/.env.spindb in the container directory.
 
-# LibSQL JWT auth — generate Ed25519 token (restarts sqld with --auth-jwt-key-file)
+# LibSQL JWT auth: generate Ed25519 token (restarts sqld with --auth-jwt-key-file)
 spindb users create mylibsql auth_token # Generate JWT for LibSQL
 ```
 
@@ -943,6 +1014,18 @@ spindb doctor --json                    # JSON output for scripting
 - Outdated container versions (updates config, removes unused binaries)
 - Orphaned test container directories
 
+## Version & Updates
+
+```bash
+spindb version                          # Print the installed version
+spindb version --check                  # Also check npm for a newer release
+spindb version --check --json           # {"current": "...", "latest": "...", "updateAvailable": false}
+spindb self-update                      # Update spindb to the latest version (alias: spindb update)
+spindb self-update -y                   # Skip the confirmation prompt
+spindb self-update -f                   # Reinstall even when already on the latest version
+spindb menu                             # Open the interactive menu (also: plain `spindb`)
+```
+
 ## Default Ports
 
 | Engine      | Default | Range         | Notes |
@@ -950,8 +1033,9 @@ spindb doctor --json                    # JSON output for scripting
 | PostgreSQL  | 5432    | 5432-5500     | |
 | MySQL       | 3306    | 3306-3400     | |
 | MariaDB     | 3307    | 3307-3400     | |
-| MongoDB     | 27017   | 27017-27100   | Shared with FerretDB |
-| FerretDB    | 27017   | 27017-27100   | Shared with MongoDB |
+| MongoDB     | 27017   | 27017-27100   | Shared with FerretDB, DocumentDB |
+| FerretDB    | 27017   | 27017-27100   | Shared with MongoDB, DocumentDB |
+| DocumentDB  | 27017   | 27017-27100   | Shared with MongoDB, FerretDB |
 | Redis       | 6379    | 6379-6400     | Shared with Valkey |
 | Valkey      | 6379    | 6379-6479     | Shared with Redis |
 | ClickHouse  | 9000    | 9000-9100     | HTTP UI on 8123 |
@@ -969,7 +1053,7 @@ spindb doctor --json                    # JSON output for scripting
 | SQLite      | N/A     | File-based    | |
 | DuckDB      | N/A     | File-based    | |
 
-> **Port Conflicts:** FerretDB/MongoDB and Redis/Valkey share default ports. LibSQL and Weaviate share default port 8080. Use different ports if running both concurrently.
+> **Port Conflicts:** MongoDB/FerretDB/DocumentDB and Redis/Valkey share default ports. LibSQL and Weaviate share default port 8080. Use different ports if running both concurrently.
 
 ## Connection String Formats
 
@@ -979,6 +1063,7 @@ MySQL:       mysql://root@127.0.0.1:3306/mydb
 MariaDB:     mysql://root@127.0.0.1:3307/mydb
 MongoDB:     mongodb://127.0.0.1:27017/mydb
 FerretDB:    mongodb://127.0.0.1:27017/mydb
+DocumentDB:  mongodb://spindb:<password>@127.0.0.1:27017/?authSource=admin
 Redis:       redis://127.0.0.1:6379/0
 Valkey:      redis://127.0.0.1:6379/0
 ClickHouse:  clickhouse://default@127.0.0.1:9000/default
@@ -997,6 +1082,7 @@ SQLite:      sqlite:///path/to/file.sqlite
 DuckDB:      duckdb:///path/to/file.duckdb
 ```
 
+> **DocumentDB:** MongoDB wire protocol with mandatory SCRAM auth. The password is generated at create and saved with the full URI in the container's `credentials/.env.spindb`; `spindb url` prints the host, port and database without credentials. Use the MongoDB client tools (`spindb engines download mongodb 8` provides `mongosh`, `mongodump` and `mongorestore`).
 > **CockroachDB:** Uses PostgreSQL wire protocol. Add `?sslmode=disable` for local insecure connections.
 > **SurrealDB:** Format is `ws://user:pass@host:port/namespace/database`. Defaults: root/root, test/test.
 > **CouchDB:** Default credentials are admin/admin.
@@ -1004,7 +1090,7 @@ DuckDB:      duckdb:///path/to/file.duckdb
 > **TypeDB:** Uses gRPC protocol. Default credentials: admin/password.
 > **InfluxDB:** REST API only. Databases created implicitly on first write. No authentication in local dev mode.
 > **Weaviate:** REST/GraphQL API on HTTP port, gRPC on port+1. No authentication in local dev mode.
-> **LibSQL:** HTTP API (Hrana protocol). Single database per instance ('main'). JWT auth via `spindb users create`. macOS/Linux only. sqld runs with `--checkpoint-interval-s 60` (WAL truncated every minute; writes may get `SQLITE_BUSY` while a checkpoint runs, so retry it).
+> **LibSQL:** HTTP API (Hrana protocol). Single database per instance ('main'). JWT auth via `spindb users create`. macOS/Linux only. Query results up to 50 MB per response (100 MB across in-flight responses; sqld's own default is 10 MB). sqld runs with `--checkpoint-interval-s 60` (WAL truncated every minute; writes may get `SQLITE_BUSY` while a checkpoint runs, so retry it).
 > **TigerBeetle:** Custom binary protocol (no URI scheme). Single binary serves as both server and REPL client.
 
 ## Export to Docker
@@ -1047,6 +1133,8 @@ psql "postgresql://$SPINDB_USER:$SPINDB_PASSWORD@localhost:$PORT/$DATABASE"
 ```
 
 > **Default output path:** For server-based engines (PostgreSQL, MySQL, etc.), exports go to `~/.spindb/containers/{engine}/{name}/docker/`. For file-based engines (**SQLite** and **DuckDB**), data lives in your project directory (CWD), so use `-o` to specify where to export.
+>
+> **DocumentDB:** Docker export is not available yet; `spindb export docker` refuses DocumentDB containers.
 >
 > **Port behavior:** Docker exports default to the engine's standard port (5432 for PostgreSQL, 3306 for MySQL, etc.). If your local container uses a different port, you'll be prompted to choose.
 
@@ -1226,7 +1314,7 @@ export class TestDatabase {
 }
 ```
 
-Use in tests — each test file gets its own isolated database:
+Use in tests. Each test file gets its own isolated database:
 
 ```javascript
 import { describe, it, before, after } from 'node:test'
