@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.78.3] - 2026-11-24
+
+### Security
+
+- **MariaDB confines server-side file access to a per-container directory.** `spindb start` now passes `--secure-file-priv=<container>/secure-files` to mariadbd (created on every start, beside the data directory, never inside it). `LOAD_FILE`, `SELECT ... INTO OUTFILE/DUMPFILE` and `LOAD DATA INFILE` work only on files in that directory. Without the flag MariaDB reports `@@secure_file_priv` as NULL, which on MariaDB means no restriction (unlike MySQL, where NULL disables these statements): any account with the FILE privilege could read or write any file the server's OS user could reach. MariaDB has no value that disables them: `--secure-file-priv=NULL` makes mariadbd exit at startup (measured on 10.11.19 and 13.0.2), so a directory is the only restriction available. `LOAD DATA LOCAL INFILE`, which reads the file on the client, is unchanged. Existing containers pick the flag up on their next start; nothing is restarted. MySQL is unchanged: its builds already restrict these statements by their compiled default, and pinning a path would change that default's behavior.
+- **Redis and Valkey configs pin `enable-protected-configs no`, `enable-module-command no` and `enable-debug-command no`.** These equal the defaults of Redis 7.0+ and every Valkey release, so behavior does not change: `CONFIG SET dir`/`dbfilename`, `MODULE LOAD` and `DEBUG` stay refused for every client. Writing them makes that explicit and survives a future default change. New configs carry them; an existing config gets any missing directive appended on its next start, and a directive already present keeps its value.
+
+### Testing
+
+- `tests/unit/redis-config.test.ts` covers appending the directives to an older config, idempotence across restarts and keeping an operator-set value.
+
 ## [0.78.2] - 2026-11-23
 
 ### Changed

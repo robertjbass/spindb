@@ -5,6 +5,10 @@ import { mkdir, writeFile, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { BaseEngine } from '../base-engine'
 import { paths } from '../../config/paths'
+import {
+  HARDENING_DIRECTIVES_BLOCK,
+  appendMissingHardeningDirectives,
+} from '../../core/resp-hardening'
 import { getEngineDefaults } from '../../config/defaults'
 import { platformService, isWindows } from '../../core/platform-service'
 import { configManager } from '../../core/config-manager'
@@ -270,7 +274,8 @@ appendonly no
 # Redis refuses to start on ARM64 with THP enabled unless this is set.
 # Safe for local development (SpinDB's use case).
 ignore-warnings ARM64-COW-BUG
-`
+
+${HARDENING_DIRECTIVES_BLOCK}`
 }
 
 function patchRedisConfig(
@@ -308,7 +313,7 @@ function patchRedisConfig(
       `daemonize ${options.daemonize ? 'yes' : 'no'}`,
     )
   }
-  return config
+  return appendMissingHardeningDirectives(config)
 }
 
 export class RedisEngine extends BaseEngine {

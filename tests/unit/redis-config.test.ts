@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test'
+import strict from 'node:assert/strict'
 import { assert } from '../utils/assertions'
+import { appendMissingHardeningDirectives } from '../../core/resp-hardening'
 
 /**
  * Test the generateRedisConfig function for cross-platform compatibility.
@@ -197,5 +199,30 @@ describe('Redis Config Generation', () => {
 
       assert(config.includes('port 6399'), 'Should include the specified port')
     })
+  })
+})
+
+describe('appendMissingHardeningDirectives (existing configs on restart)', () => {
+  const HARDENING_LINE =
+    /^enable-(protected-configs|module-command|debug-command) /gm
+
+  it('appends all three directives to a config written before they existed', () => {
+    const patched = appendMissingHardeningDirectives(
+      'port 6379\nbind 0.0.0.0\n',
+    )
+    strict.ok(patched.includes('enable-protected-configs no\n'))
+    strict.ok(patched.includes('enable-module-command no\n'))
+    strict.ok(patched.includes('enable-debug-command no\n'))
+    strict.ok(patched.startsWith('port 6379\nbind 0.0.0.0\n'))
+  })
+
+  it('is idempotent across restarts and keeps an operator value', () => {
+    const operatorSet = 'port 6379\nenable-debug-command local'
+    const once = appendMissingHardeningDirectives(operatorSet)
+    const twice = appendMissingHardeningDirectives(once)
+    strict.equal(twice, once)
+    strict.equal(once.match(HARDENING_LINE)?.length, 3)
+    strict.ok(once.includes('enable-debug-command local\n'))
+    strict.ok(!once.includes('enable-debug-command no'))
   })
 })
